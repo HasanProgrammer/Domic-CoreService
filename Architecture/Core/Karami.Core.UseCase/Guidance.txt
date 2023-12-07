@@ -1,0 +1,5 @@
+Publish Package ( Github Package )
+
+1 . Current directory ( CMD ) -> dotnet pack --configuration Release
+
+2 . Current directory ( CMD ) -> dotnet nuget push "bin/Release/{Package FullName}" --source "https://nuget.pkg.github.com/{Github Username}/index.json"  --api-key "{Github Token}"

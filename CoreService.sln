@@ -1,0 +1,80 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Architecture", "Architecture", "{9AB7EC79-9248-4233-98B4-C1F2A8D49418}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Core", "Core", "{EDD14BE9-FDCC-44D1-A311-E901C6CDFFE5}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Karami.Core.Domain", "Architecture\Core\Karami.Core.Domain\Karami.Core.Domain.csproj", "{D7E96AF4-22A6-4563-B147-BCB8A96D4CA8}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Karami.Core.UseCase", "Architecture\Core\Karami.Core.UseCase\Karami.Core.UseCase.csproj", "{AF7AE816-969E-4D84-9D0C-C5436E4F2F54}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Infrastructure", "Infrastructure", "{6185012F-955C-43D0-B526-916688D91183}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Karami.Core.Infrastructure", "Architecture\Infrastructure\Karami.Core.Infrastructure\Karami.Core.Infrastructure.csproj", "{AC54D119-1B07-4342-A4D8-439F201EE99B}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Karami.Core.Persistence", "Architecture\Infrastructure\Karami.Core.Persistence\Karami.Core.Persistence.csproj", "{0ABDE1D9-1E32-48A7-B225-2906A9E356B2}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Presentation", "Presentation", "{CDB990DD-CCBA-4E35-AA61-25600ED8CC3B}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Karami.Core.WebAPI", "Architecture\Presentation\Karami.Core.WebAPI\Karami.Core.WebAPI.csproj", "{3A4AA736-3F58-4A6F-8CDA-6929D21494D7}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Commons", "Commons", "{06D57A52-1543-43F8-A1E2-AC258266EF32}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Karami.Core.Common", "Commons\Karami.Core.Common\Karami.Core.Common.csproj", "{A0ABD2CE-ED0E-43BA-AC01-04A4A8A98F70}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Karami.Core.Package", "Commons\Karami.Core.Package\Karami.Core.Package.csproj", "{3540BA34-AA9B-4520-8859-B53D8384857C}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{D7E96AF4-22A6-4563-B147-BCB8A96D4CA8}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D7E96AF4-22A6-4563-B147-BCB8A96D4CA8}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D7E96AF4-22A6-4563-B147-BCB8A96D4CA8}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D7E96AF4-22A6-4563-B147-BCB8A96D4CA8}.Release|Any CPU.Build.0 = Release|Any CPU
+		{AF7AE816-969E-4D84-9D0C-C5436E4F2F54}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{AF7AE816-969E-4D84-9D0C-C5436E4F2F54}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{AF7AE816-969E-4D84-9D0C-C5436E4F2F54}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{AF7AE816-969E-4D84-9D0C-C5436E4F2F54}.Release|Any CPU.Build.0 = Release|Any CPU
+		{AC54D119-1B07-4342-A4D8-439F201EE99B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{AC54D119-1B07-4342-A4D8-439F201EE99B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{AC54D119-1B07-4342-A4D8-439F201EE99B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{AC54D119-1B07-4342-A4D8-439F201EE99B}.Release|Any CPU.Build.0 = Release|Any CPU
+		{0ABDE1D9-1E32-48A7-B225-2906A9E356B2}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{0ABDE1D9-1E32-48A7-B225-2906A9E356B2}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{0ABDE1D9-1E32-48A7-B225-2906A9E356B2}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{0ABDE1D9-1E32-48A7-B225-2906A9E356B2}.Release|Any CPU.Build.0 = Release|Any CPU
+		{3A4AA736-3F58-4A6F-8CDA-6929D21494D7}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{3A4AA736-3F58-4A6F-8CDA-6929D21494D7}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{3A4AA736-3F58-4A6F-8CDA-6929D21494D7}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{3A4AA736-3F58-4A6F-8CDA-6929D21494D7}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A0ABD2CE-ED0E-43BA-AC01-04A4A8A98F70}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A0ABD2CE-ED0E-43BA-AC01-04A4A8A98F70}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A0ABD2CE-ED0E-43BA-AC01-04A4A8A98F70}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A0ABD2CE-ED0E-43BA-AC01-04A4A8A98F70}.Release|Any CPU.Build.0 = Release|Any CPU
+		{3540BA34-AA9B-4520-8859-B53D8384857C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{3540BA34-AA9B-4520-8859-B53D8384857C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{3540BA34-AA9B-4520-8859-B53D8384857C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{3540BA34-AA9B-4520-8859-B53D8384857C}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{EDD14BE9-FDCC-44D1-A311-E901C6CDFFE5} = {9AB7EC79-9248-4233-98B4-C1F2A8D49418}
+		{D7E96AF4-22A6-4563-B147-BCB8A96D4CA8} = {EDD14BE9-FDCC-44D1-A311-E901C6CDFFE5}
+		{AF7AE816-969E-4D84-9D0C-C5436E4F2F54} = {EDD14BE9-FDCC-44D1-A311-E901C6CDFFE5}
+		{6185012F-955C-43D0-B526-916688D91183} = {9AB7EC79-9248-4233-98B4-C1F2A8D49418}
+		{AC54D119-1B07-4342-A4D8-439F201EE99B} = {6185012F-955C-43D0-B526-916688D91183}
+		{0ABDE1D9-1E32-48A7-B225-2906A9E356B2} = {6185012F-955C-43D0-B526-916688D91183}
+		{CDB990DD-CCBA-4E35-AA61-25600ED8CC3B} = {9AB7EC79-9248-4233-98B4-C1F2A8D49418}
+		{3A4AA736-3F58-4A6F-8CDA-6929D21494D7} = {CDB990DD-CCBA-4E35-AA61-25600ED8CC3B}
+		{A0ABD2CE-ED0E-43BA-AC01-04A4A8A98F70} = {06D57A52-1543-43F8-A1E2-AC258266EF32}
+		{3540BA34-AA9B-4520-8859-B53D8384857C} = {06D57A52-1543-43F8-A1E2-AC258266EF32}
+	EndGlobalSection
+EndGlobal
