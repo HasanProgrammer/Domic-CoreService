@@ -18,26 +18,26 @@ public abstract partial class Entity<TIdentity> : BaseEntity<TIdentity>
 
 public abstract partial class Entity<TIdentity>
 {
-    private readonly List<IDomainEvent> _Events;
+    private readonly List<IDomainEvent> _events;
 
     /// <summary>
     /// 
     /// </summary>
-    protected Entity() => _Events = new();
+    protected Entity() => _events = new();
 
     /// <summary>
     /// 
     /// </summary>
     /// <param name="event"></param>
-    protected void AddEvent(IDomainEvent @event) => _Events.Add(@event);
+    protected void AddEvent(IDomainEvent @event) => _events.Add(@event);
 
     /// <summary>
     /// 
     /// </summary>
-    public ReadOnlyCollection<IDomainEvent> GetEvents => _Events.AsReadOnly();
+    public ReadOnlyCollection<IDomainEvent> GetEvents => _events.AsReadOnly();
 
     /// <summary>
     /// 
     /// </summary>
-    public void ClearEvents() => _Events.Clear();
+    public void ClearEvents() => _events.Clear();
 }

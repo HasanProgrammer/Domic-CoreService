@@ -15,12 +15,15 @@ public class BaseEntityConfig<TEntity, TKey> : IEntityTypeConfiguration<TEntity>
         builder.HasKey(entity => entity.Id);
         
         builder.Property(entity => entity.IsActive)
-               .HasConversion(new EnumToNumberConverter<IsActive , byte>())
+               .HasConversion(new EnumToNumberConverter<IsActive, byte>())
                .IsRequired();
         
         builder.Property(entity => entity.IsDeleted)
-               .HasConversion(new EnumToNumberConverter<IsDeleted , byte>())
+               .HasConversion(new EnumToNumberConverter<IsDeleted, byte>())
                .IsRequired();
+        
+        //Optimestic solution for concurrency
+        builder.Property(entity => entity.Version).IsConcurrencyToken().IsRequired();
         
         builder.OwnsOne(entity => entity.CreatedAt, createdAt => {
             createdAt.Property(vo => vo.EnglishDate).IsRequired().HasColumnName("CreatedAt_EnglishDate");
