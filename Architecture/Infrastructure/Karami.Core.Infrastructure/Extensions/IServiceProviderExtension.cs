@@ -13,17 +13,20 @@ public static class IServiceProviderExtension
     public static void AutoMigration<TContext>(this IServiceProvider serviceProvider, Action<TContext> seeder = null) 
         where TContext : DbContext
     {
-        //Trigger
-        using IServiceScope scope = serviceProvider.CreateScope();
-        
-        var context = scope.ServiceProvider.GetRequiredService<TContext>();
-
-        if (context.Database.GetPendingMigrations().Any())
+        if (!Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT").Equals(Common.ClassConsts.Environment.Testing))
         {
-            context.Database.Migrate();
+            //Trigger
+            using IServiceScope scope = serviceProvider.CreateScope();
+        
+            var context = scope.ServiceProvider.GetRequiredService<TContext>();
+
+            if (context.Database.GetPendingMigrations().Any())
+            {
+                context.Database.Migrate();
             
-            //Seeder data
-            seeder?.Invoke(context);
+                //Seeder data
+                seeder?.Invoke(context);
+            }
         }
     }
 }
