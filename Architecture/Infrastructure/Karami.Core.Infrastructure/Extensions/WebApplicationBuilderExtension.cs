@@ -19,12 +19,11 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
 using Microsoft.IdentityModel.Tokens;
 using MongoDB.Driver;
 using StackExchange.Redis;
+
 using Environment = System.Environment;
-using Service = Karami.Core.Grpc.Service.Service;
 
 namespace Karami.Core.Infrastructure.Extensions;
 
@@ -48,11 +47,12 @@ public static class WebApplicationBuilderExtension
     /// <typeparam name="TContext"></typeparam>
     public static void RegisterCommandSqlServer<TContext>(this WebApplicationBuilder builder) where TContext : DbContext
     {
-        builder.Services.AddDbContext<TContext>(config => 
-            config.UseSqlServer(
-                builder.Configuration.GetCommandSqlServerConnectionString()
-            )
-        );
+        if(builder.Environment.EnvironmentName.Equals(Karami.Core.Common.ClassConsts.Environment.Testing))
+            builder.Services.AddDbContext<TContext>(config => config.UseInMemoryDatabase("Testing-CommandDatabase"));
+        else
+            builder.Services.AddDbContext<TContext>(config => 
+                config.UseSqlServer(builder.Configuration.GetCommandSqlServerConnectionString())
+            );
     }
     
     /// <summary>
@@ -61,12 +61,13 @@ public static class WebApplicationBuilderExtension
     /// <param name="builder"></param>
     /// <typeparam name="TContext"></typeparam>
     public static void RegisterQuerySqlServer<TContext>(this WebApplicationBuilder builder) where TContext : DbContext
-    { 
-        builder.Services.AddDbContext<TContext>(config =>
-            config.UseSqlServer(
-                builder.Configuration.GetQuerySqlServerConnectionString()
-            )
-        );
+    {
+        if(builder.Environment.EnvironmentName.Equals(Karami.Core.Common.ClassConsts.Environment.Testing))
+            builder.Services.AddDbContext<TContext>(config => config.UseInMemoryDatabase("Testing-QueryDatabase"));
+        else
+            builder.Services.AddDbContext<TContext>(config =>
+                config.UseSqlServer(builder.Configuration.GetQuerySqlServerConnectionString())
+            );
     }
     
     /// <summary>
