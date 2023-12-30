@@ -17,6 +17,8 @@ using Newtonsoft.Json;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 
+using Environment = Karami.Core.Common.ClassConsts.Environment;
+
 namespace Karami.Core.Domain.Implementations;
 
 public class MessageBroker : IMessageBroker
@@ -257,7 +259,14 @@ public class MessageBroker : IMessageBroker
             }
             else
             {
-                if (messageBusHandlerMethod.GetCustomAttribute(typeof(WithTransactionAttribute)) is WithTransactionAttribute transactionAttr)
+                //for integration test situation
+                var testingCondition = _hostEnvironment.EnvironmentName.Equals(Environment.Testing);
+                
+                if 
+                (
+                    messageBusHandlerMethod.GetCustomAttribute(typeof(WithTransactionAttribute)) 
+                    is WithTransactionAttribute transactionAttr && testingCondition == false
+                )
                 {
                     unitOfWork = serviceProvider.GetRequiredService(_getTypeOfUnitOfWork()) as ICoreUnitOfWork;
                     
@@ -337,7 +346,14 @@ public class MessageBroker : IMessageBroker
                 }
                 else
                 {
-                    if (eventBusHandlerMethod.GetCustomAttribute(typeof(WithTransactionAttribute)) is WithTransactionAttribute transactionAttr)
+                    //for integration test situation
+                    var testingCondition = _hostEnvironment.EnvironmentName.Equals(Environment.Testing);
+                    
+                    if 
+                    (
+                        eventBusHandlerMethod.GetCustomAttribute(typeof(WithTransactionAttribute)) 
+                        is WithTransactionAttribute transactionAttr && testingCondition == false
+                    )
                     {
                         unitOfWork = serviceProvider.GetRequiredService(_getTypeOfUnitOfWork()) as ICoreUnitOfWork;
                     
