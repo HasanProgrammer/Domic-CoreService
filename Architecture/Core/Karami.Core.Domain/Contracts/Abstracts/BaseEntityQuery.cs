@@ -6,4 +6,5 @@ public abstract class BaseEntityQuery<TIdentity>
 {
     public TIdentity Id        { get; set; }
     public IsDeleted IsDeleted { get; set; } = IsDeleted.UnDelete;
+    public string Version      { get; } = Guid.NewGuid().ToString();
 }
