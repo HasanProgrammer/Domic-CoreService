@@ -8,7 +8,7 @@ namespace Karami.Core.Persistence.Configs;
 
 public class BaseEntityConfig<TEntity, TKey> : IEntityTypeConfiguration<TEntity> where TEntity : Entity<TKey>
 {
-    public void Configure(EntityTypeBuilder<TEntity> builder)
+    public virtual void Configure(EntityTypeBuilder<TEntity> builder)
     {
         builder.HasIndex(entity => new { entity.Id , entity.IsDeleted });
         

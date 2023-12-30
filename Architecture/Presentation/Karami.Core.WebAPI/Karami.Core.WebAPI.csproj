@@ -5,7 +5,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>disable</Nullable>
     <PackageId>Domic.Architecture.Presentation</PackageId>
-    <PackageVersion>1.2.7</PackageVersion>
+    <PackageVersion>1.2.8</PackageVersion>
     <Authors>Karami.Domic</Authors>
   </PropertyGroup>
 
