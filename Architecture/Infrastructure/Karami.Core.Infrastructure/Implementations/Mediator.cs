@@ -5,6 +5,8 @@ using Karami.Core.Infrastructure.Extensions;
 using Karami.Core.UseCase.Attributes;
 using Karami.Core.UseCase.Contracts.Interfaces;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Environment = Karami.Core.Common.ClassConsts.Environment;
 
 namespace Karami.Core.Domain.Implementations;
 
@@ -14,8 +16,13 @@ public partial class Mediator : IMediator
     private static object _lock = new();
     
     private readonly IServiceProvider _serviceProvider;
+    private readonly IHostEnvironment _hostEnvironment;
 
-    public Mediator(IServiceProvider serviceProvider) => _serviceProvider = serviceProvider;
+    public Mediator(IServiceProvider serviceProvider, IHostEnvironment hostEnvironment)
+    {
+        _serviceProvider = serviceProvider;
+        _hostEnvironment = hostEnvironment;
+    }
 }
 
 //Command & Query
@@ -100,8 +107,15 @@ public partial class Mediator
         #endregion
 
         #region Transaction
+        
+        //for integration test situation
+        var testingCondition = _hostEnvironment.EnvironmentName.Equals(Environment.Testing);
 
-        if (commandHandlerMethod.GetCustomAttribute(typeof(WithTransactionAttribute)) is WithTransactionAttribute transactionAttr)
+        if
+        (
+            commandHandlerMethod.GetCustomAttribute(typeof(WithTransactionAttribute)) 
+            is WithTransactionAttribute transactionAttr && testingCondition == false
+        )
         {
             var unitOfWork = _serviceProvider.GetRequiredService(_getTypeOfUnitOfWork()) as ICoreCommandUnitOfWork;
             
@@ -306,7 +320,14 @@ public partial class Mediator
     {
         #region Transaction
 
-        if (commandHandlerMethod.GetCustomAttribute(typeof(WithTransactionAttribute)) is WithTransactionAttribute transactionAttr)
+        //for integration test situation
+        var testingCondition = _hostEnvironment.EnvironmentName.Equals(Environment.Testing);
+        
+        if 
+        (
+            commandHandlerMethod.GetCustomAttribute(typeof(WithTransactionAttribute)) 
+            is WithTransactionAttribute transactionAttr && testingCondition == false
+        )
         {
             var unitOfWork = _serviceProvider.GetRequiredService(_getTypeOfUnitOfWork()) as ICoreCommandUnitOfWork;
             
