@@ -79,7 +79,7 @@ public static class HttpContextExtension
     /// </summary>
     /// <param name="Context"></param>
     /// <returns></returns>
-    public static string GetClientIP(this HttpContext Context) => Context.Connection.RemoteIpAddress.ToString();
+    public static string GetClientIP(this HttpContext Context) => Context.Connection.RemoteIpAddress?.ToString();
 
     /// <summary>
     /// 
