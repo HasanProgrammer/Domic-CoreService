@@ -108,15 +108,8 @@ public partial class Mediator
         #endregion
 
         #region Transaction
-        
-        //for integration test situation
-        var testingCondition = _hostEnvironment.EnvironmentName.Equals(Environment.Testing);
 
-        if
-        (
-            commandHandlerMethod.GetCustomAttribute(typeof(WithTransactionAttribute)) 
-            is WithTransactionAttribute transactionAttr && testingCondition == false
-        )
+        if (commandHandlerMethod.GetCustomAttribute(typeof(WithTransactionAttribute)) is WithTransactionAttribute transactionAttr)
         {
             var unitOfWork = _serviceProvider.GetRequiredService(_getTypeOfUnitOfWork()) as ICoreCommandUnitOfWork;
             
@@ -320,15 +313,8 @@ public partial class Mediator
     )
     {
         #region Transaction
-
-        //for integration test situation
-        var testingCondition = _hostEnvironment.EnvironmentName.Equals(Environment.Testing);
         
-        if 
-        (
-            commandHandlerMethod.GetCustomAttribute(typeof(WithTransactionAttribute)) 
-            is WithTransactionAttribute transactionAttr && testingCondition == false
-        )
+        if(commandHandlerMethod.GetCustomAttribute(typeof(WithTransactionAttribute)) is WithTransactionAttribute transactionAttr)
         {
             var unitOfWork = _serviceProvider.GetRequiredService(_getTypeOfUnitOfWork()) as ICoreCommandUnitOfWork;
             

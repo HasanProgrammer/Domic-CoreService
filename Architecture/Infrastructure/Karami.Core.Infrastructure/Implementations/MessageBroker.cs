@@ -259,14 +259,7 @@ public class MessageBroker : IMessageBroker
             }
             else
             {
-                //for integration test situation
-                var testingCondition = _hostEnvironment.EnvironmentName.Equals(Environment.Testing);
-                
-                if 
-                (
-                    messageBusHandlerMethod.GetCustomAttribute(typeof(WithTransactionAttribute)) 
-                    is WithTransactionAttribute transactionAttr && testingCondition == false
-                )
+                if (messageBusHandlerMethod.GetCustomAttribute(typeof(WithTransactionAttribute)) is WithTransactionAttribute transactionAttr)
                 {
                     unitOfWork = serviceProvider.GetRequiredService(_getTypeOfUnitOfWork()) as ICoreUnitOfWork;
                     
@@ -346,14 +339,7 @@ public class MessageBroker : IMessageBroker
                 }
                 else
                 {
-                    //for integration test situation
-                    var testingCondition = _hostEnvironment.EnvironmentName.Equals(Environment.Testing);
-                    
-                    if 
-                    (
-                        eventBusHandlerMethod.GetCustomAttribute(typeof(WithTransactionAttribute)) 
-                        is WithTransactionAttribute transactionAttr && testingCondition == false
-                    )
+                    if (eventBusHandlerMethod.GetCustomAttribute(typeof(WithTransactionAttribute)) is WithTransactionAttribute transactionAttr)
                     {
                         unitOfWork = serviceProvider.GetRequiredService(_getTypeOfUnitOfWork()) as ICoreUnitOfWork;
                     
