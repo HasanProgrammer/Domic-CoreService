@@ -38,6 +38,8 @@ public static class WebApplicationBuilderExtension
         builder.Services.AddSingleton(typeof(IDotrisDateTime) , typeof(DotrisDateTime));
         builder.Services.AddSingleton(typeof(ISerializer)     , typeof(Serializer));
         builder.Services.AddSingleton(typeof(IJsonWebToken)   , typeof(JsonWebToken));
+        
+        builder.Services.AddScoped(typeof(ILogger), typeof(Logger));
     }
     
     /// <summary>

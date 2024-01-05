@@ -49,6 +49,8 @@ public partial class Broker
     public const string ServiceRegistry_Exchange_Retry_2                        = "ServiceRegistry_Exchange_Retry_2";
     public const string Exception_Exchange                                      = "Exception_Exchange";
     public const string Request_Exchange                                        = "Request_Exchange";
+    public const string Log_Exchange                                            = "Log_Exchange";
+
 }
 
 //Queues
@@ -94,6 +96,8 @@ public partial class Broker
     public const string StateTracker_Exception_Queue_Retry                = "StateTracker_Exception_Queue_Retry";
     public const string StateTracker_Request_Queue                        = "StateTracker_Request_Queue";
     public const string StateTracker_Request_Queue_Retry                  = "StateTracker_Request_Queue_Retry";
+    public const string StateTracker_Log_Queue                            = "StateTracker_Log_Queue";
+    public const string StateTracker_Log_Queue_Retry                      = "StateTracker_Log_Queue_Retry";
     public const string ServiceRegistry_Queue                             = "ServiceRegistry_Queue";
     public const string ServiceRegistry_Queue_Retry                       = "ServiceRegistry_Queue_Retry";
 }
@@ -103,5 +107,6 @@ public partial class Broker
 {
     public const string StateTracker_Exception_Route = "StateTracker_Exception_Route";
     public const string StateTracker_Request_Route   = "StateTracker_Request_Route";
+    public const string StateTracker_Log_Route       = "StateTracker_Log_Route";
     public const string ServiceRegistry_Route        = "ServiceRegistry_Route";
 }

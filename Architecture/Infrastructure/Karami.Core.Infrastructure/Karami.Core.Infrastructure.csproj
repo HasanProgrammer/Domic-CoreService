@@ -22,7 +22,7 @@
 
   <!--CorePackage | RPC-->
   <ItemGroup>
-    <PackageReference Include="Domic.Grpc.Service" Version="1.0.0"/>
+    <PackageReference Include="Domic.Grpc.Service" Version="1.0.0" />
   </ItemGroup>
   <!--CorePackage | RPC-->
 
