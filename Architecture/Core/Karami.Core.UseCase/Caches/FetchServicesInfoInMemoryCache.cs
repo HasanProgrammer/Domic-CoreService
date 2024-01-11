@@ -10,7 +10,7 @@ public class FetchServicesInfoInMemoryCache : IMemoryCacheSetter<List<ServiceSta
 
     public FetchServicesInfoInMemoryCache(IServiceDiscovery serviceDiscovery) => _serviceDiscovery = serviceDiscovery;
 
-    [Config(Key = "ServicesInfo")]
+    [Config(Key = "ServicesInfo", Ttl = 60)]
     public Task<List<ServiceStatus>> SetAsync(CancellationToken cancellationToken)
         => _serviceDiscovery.FetchAllServicesInfoAsync(cancellationToken);
 }
