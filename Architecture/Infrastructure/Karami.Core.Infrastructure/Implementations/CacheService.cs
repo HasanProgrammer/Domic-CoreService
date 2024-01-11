@@ -35,10 +35,13 @@ public class CacheService : ICacheService
             var bytes  = Encoding.UTF8.GetBytes(result.Serialize());
             var base64 = Convert.ToBase64String(bytes);
 
-            redisCache.SetCacheValue(
-                new KeyValuePair<string, string>(cacheHandlerMethodAttr.Key, base64 ) ,
-                TimeSpan.FromMinutes( cacheHandlerMethodAttr.Ttl )
-            );
+            if (cacheHandlerMethodAttr.Ttl is not 0)
+                redisCache.SetCacheValue(
+                    new KeyValuePair<string, string>(cacheHandlerMethodAttr.Key, base64 ) ,
+                    TimeSpan.FromMinutes( cacheHandlerMethodAttr.Ttl )
+                );
+            else
+                redisCache.SetCacheValue( new KeyValuePair<string, string>(cacheHandlerMethodAttr.Key, base64 ) );
 
             return result;
         }
@@ -70,11 +73,16 @@ public class CacheService : ICacheService
             var bytes  = Encoding.UTF8.GetBytes(result.Serialize());
             var base64 = Convert.ToBase64String(bytes);
             
-            await redisCache.SetCacheValueAsync(
-                new KeyValuePair<string, string>(cacheHandlerMethodAttr.Key, base64 ) ,
-                TimeSpan.FromMinutes( cacheHandlerMethodAttr.Ttl ) ,
-                cancellationToken
-            );
+            if(cacheHandlerMethodAttr.Ttl is not 0)
+                await redisCache.SetCacheValueAsync(
+                    new KeyValuePair<string, string>(cacheHandlerMethodAttr.Key, base64 ) ,
+                    TimeSpan.FromMinutes( cacheHandlerMethodAttr.Ttl ) ,
+                    cancellationToken
+                );
+            else
+                await redisCache.SetCacheValueAsync(
+                    new KeyValuePair<string, string>(cacheHandlerMethodAttr.Key, base64 ), cancellationToken
+                );
 
             return result;
         }
