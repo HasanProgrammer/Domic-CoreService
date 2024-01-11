@@ -51,7 +51,7 @@ public class ServiceDiscovery : IServiceDiscovery
             string Endpoint(Service service)
                 => _hostEnvironment.IsProduction() ? service.IpAddress.Value : service.Host.Value;
             
-            return result.Body.Service.Select(service => 
+            return result.Body.Services.Select(service => 
                 $"https://{Endpoint(service)}:{service.Port.Value}"
             ).ToList();
         }
