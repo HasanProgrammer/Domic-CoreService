@@ -6,9 +6,11 @@ namespace Karami.Core.Domain.Contracts.Abstracts;
 
 public abstract class BaseEntityQuery<TIdentity>
 {
-    public TIdentity Id         { get; set; }
-    public TIdentity? CreatedBy { get; protected set; }
-    public TIdentity? UpdatedBy { get; protected set; }
-    public IsDeleted IsDeleted  { get; set; } = IsDeleted.UnDelete;
-    public string Version       { get; } = Guid.NewGuid().ToString();
+    public required TIdentity Id { get; set; }
+    public required TIdentity CreatedBy { get; set; }
+    public TIdentity? UpdatedBy { get; set; }
+    public required string CreatedRole { get; set; }
+    public string UpdatedRole { get; set; }
+    public IsDeleted IsDeleted { get; set; } = IsDeleted.UnDelete;
+    public string Version { get; } = Guid.NewGuid().ToString();
 }
