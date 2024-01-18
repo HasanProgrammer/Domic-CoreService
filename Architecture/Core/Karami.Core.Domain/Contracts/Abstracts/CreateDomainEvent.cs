@@ -2,10 +2,10 @@
 
 namespace Karami.Core.Domain.Contracts.Abstracts;
 
-public abstract class CreateDomainEvent : IDomainEvent
+public abstract class CreateDomainEvent<TDomainIdentity> : IDomainEvent
 {
+    public required TDomainIdentity Id             { get; init; }
+    public required TDomainIdentity CreatedBy      { get; init; }
     public required DateTime CreatedAt_EnglishDate { get; init; }
     public required string CreatedAt_PersianDate   { get; init; }
-    public required DateTime UpdatedAt_EnglishDate { get; init; }
-    public required string UpdatedAt_PersianDate   { get; init; }
 }
