@@ -28,18 +28,18 @@ public class MessageBroker : IMessageBroker
     private readonly IConnection          _connection;
     private readonly IHostEnvironment     _hostEnvironment;
     private readonly IServiceScopeFactory _serviceScopeFactory;
-    private readonly IDotrisDateTime      _dotrisDateTime;
+    private readonly IDateTime      _dateTime;
 
     public MessageBroker(
         IConfiguration       configuration       ,
         IHostEnvironment     hostEnvironment     ,
         IServiceScopeFactory serviceScopeFactory ,
-        IDotrisDateTime      dotrisDateTime
+        IDateTime      dateTime
     )
     {
         _hostEnvironment     = hostEnvironment;
         _serviceScopeFactory = serviceScopeFactory;
-        _dotrisDateTime      = dotrisDateTime;
+        _dateTime      = dateTime;
         
         var factory = new ConnectionFactory {
             HostName = configuration.GetExternalRabbitHostName(),
@@ -106,7 +106,7 @@ public class MessageBroker : IMessageBroker
                         _eventPublishHandler(channel, targetEvent);
 
                         var nowDateTime        = DateTime.Now;
-                        var nowPersianDateTime = _dotrisDateTime.ToPersianShortDate(nowDateTime);
+                        var nowPersianDateTime = _dateTime.ToPersianShortDate(nowDateTime);
 
                         targetEvent.IsActive              = IsActive.InActive;
                         targetEvent.UpdatedAt_EnglishDate = nowDateTime;
@@ -122,8 +122,8 @@ public class MessageBroker : IMessageBroker
             }
             catch (Exception e)
             {
-                e.FileLogger(_hostEnvironment, _dotrisDateTime);
-                e.CentralExceptionLogger(_hostEnvironment, this, _dotrisDateTime, NameOfService, NameOfAction);
+                e.FileLogger(_hostEnvironment, _dateTime);
+                e.CentralExceptionLogger(_hostEnvironment, this, _dateTime, NameOfService, NameOfAction);
 
                 commandUnitOfWork?.Rollback();
             }
@@ -157,7 +157,7 @@ public class MessageBroker : IMessageBroker
         }
         catch (Exception e)
         {
-            e.FileLogger(_hostEnvironment, _dotrisDateTime);
+            e.FileLogger(_hostEnvironment, _dateTime);
         }
     }
 
@@ -184,7 +184,7 @@ public class MessageBroker : IMessageBroker
         }
         catch (Exception e)
         {
-            e.FileLogger(_hostEnvironment, _dotrisDateTime);
+            e.FileLogger(_hostEnvironment, _dateTime);
         }
     }
 
@@ -279,7 +279,7 @@ public class MessageBroker : IMessageBroker
         }
         catch (Exception e)
         {
-            e.FileLogger(_hostEnvironment, _dotrisDateTime);
+            e.FileLogger(_hostEnvironment, _dateTime);
             
             unitOfWork?.Rollback();
 
@@ -362,9 +362,9 @@ public class MessageBroker : IMessageBroker
         }
         catch (Exception e)
         {
-            e.FileLogger(_hostEnvironment, _dotrisDateTime);
+            e.FileLogger(_hostEnvironment, _dateTime);
             
-            e.CentralExceptionLogger(_hostEnvironment, this, _dotrisDateTime, service, 
+            e.CentralExceptionLogger(_hostEnvironment, this, _dateTime, service, 
                 eventBusHandlerType is not null ? eventBusHandlerType.Name : NameOfAction
             );
 
@@ -382,7 +382,7 @@ public class MessageBroker : IMessageBroker
         }
         catch (Exception e)
         {
-            e.FileLogger(_hostEnvironment, _dotrisDateTime);
+            e.FileLogger(_hostEnvironment, _dateTime);
         }
     }
     
@@ -405,7 +405,7 @@ public class MessageBroker : IMessageBroker
         }
         catch (Exception e)
         {
-            e.FileLogger(_hostEnvironment, _dotrisDateTime);
+            e.FileLogger(_hostEnvironment, _dateTime);
         }
     }
     
@@ -443,7 +443,7 @@ public class MessageBroker : IMessageBroker
         }
         catch (Exception e)
         {
-            e.FileLogger(_hostEnvironment, _dotrisDateTime);
+            e.FileLogger(_hostEnvironment, _dateTime);
         }
     }
 }

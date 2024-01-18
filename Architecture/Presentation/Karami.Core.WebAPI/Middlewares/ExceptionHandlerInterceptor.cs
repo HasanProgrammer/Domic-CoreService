@@ -25,8 +25,8 @@ public class ExceptionHandlerInterceptor : Interceptor
     private readonly IConfiguration   _configuration;
     private readonly IHostEnvironment _hostEnvironment;
 
-    private IMessageBroker  _messageBroker;
-    private IDotrisDateTime _dotrisDateTime;
+    private IMessageBroker _messageBroker;
+    private IDateTime _dateTime;
     
     /// <summary>
     /// 
@@ -59,9 +59,9 @@ public class ExceptionHandlerInterceptor : Interceptor
         try
         {
             _messageBroker  = context.GetHttpContext().RequestServices.GetRequiredService<IMessageBroker>();
-            _dotrisDateTime = context.GetHttpContext().RequestServices.GetRequiredService<IDotrisDateTime>();
+            _dateTime = context.GetHttpContext().RequestServices.GetRequiredService<IDateTime>();
             
-            context.CentralRequestLogger(_messageBroker, _dotrisDateTime, _hostEnvironment, _service, request);
+            context.CentralRequestLogger(_messageBroker, _dateTime, _hostEnvironment, _service, request);
             context.CheckLicense(_configuration);
             
             return await continuation(request, context);
@@ -90,8 +90,8 @@ public class ExceptionHandlerInterceptor : Interceptor
         {
             #region Logger
 
-            e.FileLogger(_hostEnvironment, _dotrisDateTime);
-            e.CentralExceptionLogger(_hostEnvironment, _messageBroker, _dotrisDateTime, _service, context.Method);
+            e.FileLogger(_hostEnvironment, _dateTime);
+            e.CentralExceptionLogger(_hostEnvironment, _messageBroker, _dateTime, _service, context.Method);
 
             #endregion
 

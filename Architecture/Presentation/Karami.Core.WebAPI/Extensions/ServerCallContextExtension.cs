@@ -35,13 +35,13 @@ public static class ServerCallContextExtension
     /// </summary>
     /// <param name="context"></param>
     /// <param name="messageBroker"></param>
-    /// <param name="dotrisDateTime"></param>
+    /// <param name="dateTime"></param>
     /// <param name="configuration"></param>
     /// <param name="hostEnvironment"></param>
     /// <param name="serviceName"></param>
     /// <param name="payload"></param>
     public static void CentralRequestLogger(this ServerCallContext context, IMessageBroker messageBroker,
-        IDotrisDateTime dotrisDateTime, IHostEnvironment hostEnvironment,
+        IDateTime dateTime, IHostEnvironment hostEnvironment,
         string serviceName, object payload
     )
     {
@@ -50,7 +50,7 @@ public static class ServerCallContextExtension
             var httpContext = context.GetHttpContext();
             
             var nowDateTime        = DateTime.Now;
-            var nowPersianDateTime = dotrisDateTime.ToPersianShortDate(nowDateTime);
+            var nowPersianDateTime = dateTime.ToPersianShortDate(nowDateTime);
             
             var systemRequest = new SystemRequest {
                 Id        = Guid.NewGuid().ToString()               ,
@@ -76,7 +76,7 @@ public static class ServerCallContextExtension
         }
         catch (Exception e)
         {
-            e.FileLogger(hostEnvironment, dotrisDateTime);
+            e.FileLogger(hostEnvironment, dateTime);
         }
     }
     
@@ -92,7 +92,7 @@ public static class ServerCallContextExtension
     /// <param name="payload"></param>
     /// <param name="cancellationToken"></param>
     public static async Task CentralRequestLoggerAsync(this ServerCallContext context, 
-        IMessageBroker messageBroker, IDotrisDateTime dotrisDateTime, IHostEnvironment hostEnvironment, 
+        IMessageBroker messageBroker, IDateTime dotrisDateTime, IHostEnvironment hostEnvironment, 
         string serviceName, object payload, CancellationToken cancellationToken
     )
     {

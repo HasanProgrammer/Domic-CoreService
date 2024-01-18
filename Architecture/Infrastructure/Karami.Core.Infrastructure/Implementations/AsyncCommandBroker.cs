@@ -30,17 +30,17 @@ public class AsyncCommandBroker : IAsyncCommandBroker
     private readonly IHostEnvironment     _hostEnvironment;
     private readonly IMessageBroker       _messageBroker;
     private readonly IServiceScopeFactory _serviceScopeFactory;
-    private readonly IDotrisDateTime      _dotrisDateTime;
+    private readonly IDateTime            _dateTime;
 
     public AsyncCommandBroker(
-        IDotrisDateTime dotrisDateTime,
+        IDateTime dateTime,
         IServiceScopeFactory serviceScopeFactory, 
         IHostEnvironment hostEnvironment, 
         IConfiguration configuration,
         IMessageBroker messageBroker
     )
     {
-        _dotrisDateTime      = dotrisDateTime;
+        _dateTime            = dateTime;
         _serviceScopeFactory = serviceScopeFactory;
         _hostEnvironment     = hostEnvironment;
         _configuration       = configuration;
@@ -101,8 +101,8 @@ public class AsyncCommandBroker : IAsyncCommandBroker
         }
         catch (Exception e)
         {
-            e.FileLogger(_hostEnvironment, _dotrisDateTime);
-            e.CentralExceptionLogger(_hostEnvironment, _messageBroker, _dotrisDateTime, NameOfService, NameOfAction);
+            e.FileLogger(_hostEnvironment, _dateTime);
+            e.CentralExceptionLogger(_hostEnvironment, _messageBroker, _dateTime, NameOfService, NameOfAction);
         }
     }
 
@@ -278,9 +278,9 @@ public class AsyncCommandBroker : IAsyncCommandBroker
         }
         catch (Exception e)
         {
-            e.FileLogger(_hostEnvironment, _dotrisDateTime);
+            e.FileLogger(_hostEnvironment, _dateTime);
             
-            e.CentralExceptionLogger(_hostEnvironment, _messageBroker, _dotrisDateTime, service, 
+            e.CentralExceptionLogger(_hostEnvironment, _messageBroker, _dateTime, service, 
                 commandBusHandlerType is not null ? commandBusHandlerType.Name : NameOfAction
             );
 
@@ -298,7 +298,7 @@ public class AsyncCommandBroker : IAsyncCommandBroker
         }
         catch (Exception e)
         {
-            e.FileLogger(_hostEnvironment, _dotrisDateTime);
+            e.FileLogger(_hostEnvironment, _dateTime);
         }
     }
     
@@ -321,7 +321,7 @@ public class AsyncCommandBroker : IAsyncCommandBroker
         }
         catch (Exception e)
         {
-            e.FileLogger(_hostEnvironment, _dotrisDateTime);
+            e.FileLogger(_hostEnvironment, _dateTime);
         }
     }
     
@@ -388,7 +388,7 @@ public class AsyncCommandBroker : IAsyncCommandBroker
         }
         catch (Exception e)
         {
-            e.FileLogger(_hostEnvironment, _dotrisDateTime);
+            e.FileLogger(_hostEnvironment, _dateTime);
         }
     }
 
@@ -427,7 +427,7 @@ public class AsyncCommandBroker : IAsyncCommandBroker
         }
         catch (Exception e)
         {
-            e.FileLogger(_hostEnvironment, _dotrisDateTime);
+            e.FileLogger(_hostEnvironment, _dateTime);
         }
         finally
         {
@@ -454,7 +454,7 @@ public class AsyncCommandBroker : IAsyncCommandBroker
         }
         catch (Exception e)
         {
-            e.FileLogger(_hostEnvironment, _dotrisDateTime);
+            e.FileLogger(_hostEnvironment, _dateTime);
         }
         finally
         {

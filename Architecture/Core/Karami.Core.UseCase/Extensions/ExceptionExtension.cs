@@ -18,8 +18,8 @@ public static class ExceptionExtension
     /// </summary>
     /// <param name="exception"></param>
     /// <param name="environment"></param>
-    /// <param name="dotrisDateTime"></param>
-    public static void FileLogger(this Exception exception, IHostEnvironment environment, IDotrisDateTime dotrisDateTime)
+    /// <param name="dateTime"></param>
+    public static void FileLogger(this Exception exception, IHostEnvironment environment, IDateTime dateTime)
     {
         lock (_lock)
         {
@@ -30,7 +30,7 @@ public static class ExceptionExtension
         
             using StreamWriter streamWriter = new(logsPath, append: true);
 
-            streamWriter.WriteLine($"\n Date: {dotrisDateTime.ToPersianShortDate(DateTime.Now)} | Message: {exception.Message} | Source: {exception.ToString()} \n");
+            streamWriter.WriteLine($"\n Date: {dateTime.ToPersianShortDate(DateTime.Now)} | Message: {exception.Message} | Source: {exception.ToString()} \n");
         }
     }
     
@@ -40,17 +40,17 @@ public static class ExceptionExtension
     /// <param name="e"></param>
     /// <param name="hostEnvironment"></param>
     /// <param name="messageBroker"></param>
-    /// <param name="dotrisDateTime"></param>
+    /// <param name="dateTime"></param>
     /// <param name="service"></param>
     /// <param name="action"></param>
     public static void CentralExceptionLogger(this Exception e, IHostEnvironment hostEnvironment, 
-        IMessageBroker messageBroker, IDotrisDateTime dotrisDateTime, string service, string action
+        IMessageBroker messageBroker, IDateTime dateTime, string service, string action
     )
     {
         try
         {
             var nowDateTime        = DateTime.Now;
-            var nowPersianDateTime = dotrisDateTime.ToPersianShortDate(nowDateTime);
+            var nowPersianDateTime = dateTime.ToPersianShortDate(nowDateTime);
             
             var systemException = new SystemException {
                 Id        = Guid.NewGuid().ToString()      ,
@@ -75,7 +75,7 @@ public static class ExceptionExtension
         }
         catch (Exception exception)
         {
-            exception.FileLogger(hostEnvironment, dotrisDateTime);
+            exception.FileLogger(hostEnvironment, dateTime);
         }
     }
     
@@ -85,12 +85,12 @@ public static class ExceptionExtension
     /// <param name="e"></param>
     /// <param name="hostEnvironment"></param>
     /// <param name="messageBroker"></param>
-    /// <param name="dotrisDateTime"></param>
+    /// <param name="dateTime"></param>
     /// <param name="service"></param>
     /// <param name="action"></param>
     /// <param name="cancellationToken"></param>
     public static async Task CentralExceptionLoggerAsync(this Exception e, IHostEnvironment hostEnvironment,
-        IMessageBroker messageBroker, IDotrisDateTime dotrisDateTime, string service, string action, 
+        IMessageBroker messageBroker, IDateTime dateTime, string service, string action, 
         CancellationToken cancellationToken = default
     )
     {
@@ -99,7 +99,7 @@ public static class ExceptionExtension
             await Task.Run(() => {
                 
                 var nowDateTime        = DateTime.Now;
-                var nowPersianDateTime = dotrisDateTime.ToPersianShortDate(nowDateTime);
+                var nowPersianDateTime = dateTime.ToPersianShortDate(nowDateTime);
             
                 var systemException = new SystemException {
                     Id        = Guid.NewGuid().ToString()      ,
@@ -126,7 +126,7 @@ public static class ExceptionExtension
         }
         catch (Exception exception)
         {
-            exception.FileLogger(hostEnvironment, dotrisDateTime);
+            exception.FileLogger(hostEnvironment, dateTime);
         }
     }
 }

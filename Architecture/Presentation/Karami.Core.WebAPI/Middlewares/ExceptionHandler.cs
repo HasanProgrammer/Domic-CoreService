@@ -46,7 +46,7 @@ public class ExceptionHandler
             _configuration     = context.RequestServices.GetRequiredService<IConfiguration>();
             _hostEnvironment   = context.RequestServices.GetRequiredService<IHostEnvironment>();
             var messageBroker  = context.RequestServices.GetRequiredService<IMessageBroker>();
-            var dotrisDateTime = context.RequestServices.GetRequiredService<IDotrisDateTime>();
+            var dotrisDateTime = context.RequestServices.GetRequiredService<IDateTime>();
 
             context.CentralRequestLogger(_hostEnvironment, messageBroker, dotrisDateTime, _serviceName);
 
@@ -163,7 +163,7 @@ public class ExceptionHandler
     {
         #region Logger
 
-        var dotrisDateTime = context.RequestServices.GetService<IDotrisDateTime>();
+        var dotrisDateTime = context.RequestServices.GetService<IDateTime>();
 
         exception.FileLogger(_hostEnvironment, dotrisDateTime);
         exception.CentralExceptionLogger(_hostEnvironment, 

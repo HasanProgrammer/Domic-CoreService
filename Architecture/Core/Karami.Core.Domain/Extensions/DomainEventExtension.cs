@@ -10,7 +10,7 @@ public static class DomainEventExtension
     /// 
     /// </summary>
     /// <param name="domainEvents"></param>
-    /// <param name="dotrisDateTime"></param>
+    /// <param name="dateTime"></param>
     /// <param name="serializer"></param>
     /// <param name="service"></param>
     /// <param name="table"></param>
@@ -18,11 +18,11 @@ public static class DomainEventExtension
     /// <param name="username"></param>
     /// <returns></returns>
     public static IEnumerable<Event> ToEntityOfEvent(this ReadOnlyCollection<IDomainEvent> domainEvents, 
-        IDotrisDateTime dotrisDateTime, ISerializer serializer, string service, string table, string action, string username
+        IDateTime dateTime, ISerializer serializer, string service, string table, string action, string username
     )
     {
         var nowDateTime        = DateTime.Now;
-        var nowPersianDateTime = dotrisDateTime.ToPersianShortDate(nowDateTime);
+        var nowPersianDateTime = dateTime.ToPersianShortDate(nowDateTime);
         
         return domainEvents.Select(
             @event => new Event

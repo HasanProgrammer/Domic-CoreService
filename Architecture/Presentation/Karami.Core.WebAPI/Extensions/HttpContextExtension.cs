@@ -124,10 +124,10 @@ public static class HttpContextExtension
     /// <param name="context"></param>
     /// <param name="hostEnvironment"></param>
     /// <param name="messageBroker"></param>
-    /// <param name="dotrisDateTime"></param>
+    /// <param name="dateTime"></param>
     /// <param name="serviceName"></param>
     public static void CentralRequestLogger(this HttpContext context, IHostEnvironment hostEnvironment, 
-        IMessageBroker messageBroker, IDotrisDateTime dotrisDateTime, string serviceName
+        IMessageBroker messageBroker, IDateTime dateTime, string serviceName
     )
     {
         try
@@ -146,7 +146,7 @@ public static class HttpContextExtension
             httpRequest.Body.Position = 0;
 
             var nowDateTime        = DateTime.Now;
-            var nowPersianDateTime = dotrisDateTime.ToPersianShortDate(nowDateTime);
+            var nowPersianDateTime = dateTime.ToPersianShortDate(nowDateTime);
             
             var systemRequest = new SystemRequest {
                 Id        = Guid.NewGuid().ToString()           ,
@@ -172,7 +172,7 @@ public static class HttpContextExtension
         }
         catch (Exception e)
         {
-            e.FileLogger(hostEnvironment, dotrisDateTime);
+            e.FileLogger(hostEnvironment, dateTime);
         }
     }
     
@@ -182,11 +182,11 @@ public static class HttpContextExtension
     /// <param name="context"></param>
     /// <param name="hostEnvironment"></param>
     /// <param name="messageBroker"></param>
-    /// <param name="dotrisDateTime"></param>
+    /// <param name="dateTime"></param>
     /// <param name="serviceName"></param>
     /// <param name="cancellationToken"></param>
     public static async Task CentralRequestLoggerAsync(this HttpContext context, IHostEnvironment hostEnvironment, 
-        IMessageBroker messageBroker, IDotrisDateTime dotrisDateTime, string serviceName, 
+        IMessageBroker messageBroker, IDateTime dateTime, string serviceName, 
         CancellationToken cancellationToken
     )
     {
@@ -206,7 +206,7 @@ public static class HttpContextExtension
             httpRequest.Body.Position = 0;
             
             var nowDateTime        = DateTime.Now;
-            var nowPersianDateTime = dotrisDateTime.ToPersianShortDate(nowDateTime);
+            var nowPersianDateTime = dateTime.ToPersianShortDate(nowDateTime);
             
             var systemRequest = new SystemRequest {
                 Id        = Guid.NewGuid().ToString()           ,
@@ -232,7 +232,7 @@ public static class HttpContextExtension
         }
         catch (Exception e)
         {
-            e.FileLogger(hostEnvironment, dotrisDateTime);
+            e.FileLogger(hostEnvironment, dateTime);
         }
     }
 }

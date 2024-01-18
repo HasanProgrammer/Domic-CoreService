@@ -1,6 +1,6 @@
 ﻿namespace Karami.Core.Domain.Contracts.Interfaces;
 
-public interface IDotrisDateTime
+public interface IDateTime
 {
     /// <summary>
     /// 

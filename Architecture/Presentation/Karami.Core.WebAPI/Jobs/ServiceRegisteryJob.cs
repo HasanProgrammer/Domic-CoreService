@@ -58,7 +58,7 @@ public class ServiceRegisteryJob : IHostedService
         }
         catch (Exception e)
         {
-            e.FileLogger(_hostEnvironment, scope.ServiceProvider.GetRequiredService<IDotrisDateTime>());
+            e.FileLogger(_hostEnvironment, scope.ServiceProvider.GetRequiredService<IDateTime>());
         }
 
         return Task.CompletedTask;

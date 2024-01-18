@@ -35,9 +35,9 @@ public static class WebApplicationBuilderExtension
     /// <param name="builder"></param>
     public static void RegisterHelpers(this WebApplicationBuilder builder)
     {
-        builder.Services.AddSingleton(typeof(IDotrisDateTime) , typeof(DotrisDateTime));
-        builder.Services.AddSingleton(typeof(ISerializer)     , typeof(Serializer));
-        builder.Services.AddSingleton(typeof(IJsonWebToken)   , typeof(JsonWebToken));
+        builder.Services.AddSingleton(typeof(IDateTime)     , typeof(DomicDateTime));
+        builder.Services.AddSingleton(typeof(ISerializer)   , typeof(Serializer));
+        builder.Services.AddSingleton(typeof(IJsonWebToken) , typeof(JsonWebToken));
         
         builder.Services.AddScoped(typeof(ILogger), typeof(Logger));
     }
