@@ -23,6 +23,12 @@ public class BaseEntityQueryConfig<TEntityQuery, TKey> : IEntityTypeConfiguratio
                .HasConversion(new EnumToNumberConverter<IsDeleted, byte>())
                .IsRequired();
         
+        builder.Property(entity => entity.CreatedBy)  .IsRequired();
+        builder.Property(entity => entity.CreatedRole).IsRequired();
+        
+        builder.Property(entity => entity.CreatedAt_EnglishDate).IsRequired();
+        builder.Property(entity => entity.CreatedAt_PersianDate).IsRequired();
+        
         //Optimestic solution for concurrency
         builder.Property(entity => entity.Version).IsConcurrencyToken().IsRequired();
 

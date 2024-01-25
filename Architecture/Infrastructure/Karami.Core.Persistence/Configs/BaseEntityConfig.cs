@@ -22,6 +22,9 @@ public class BaseEntityConfig<TEntity, TKey> : IEntityTypeConfiguration<TEntity>
                .HasConversion(new EnumToNumberConverter<IsDeleted, byte>())
                .IsRequired();
         
+        builder.Property(entity => entity.CreatedBy)  .IsRequired();
+        builder.Property(entity => entity.CreatedRole).IsRequired();
+        
         //Optimestic solution for concurrency
         builder.Property(entity => entity.Version).IsConcurrencyToken().IsRequired();
         
@@ -31,8 +34,8 @@ public class BaseEntityConfig<TEntity, TKey> : IEntityTypeConfiguration<TEntity>
         });
         
         builder.OwnsOne(entity => entity.UpdatedAt, updatedAt => {
-            updatedAt.Property(vo => vo.EnglishDate).IsRequired().HasColumnName("UpdatedAt_EnglishDate");
-            updatedAt.Property(vo => vo.PersianDate).IsRequired().HasColumnName("UpdatedAt_PersianDate");
+            updatedAt.Property(vo => vo.EnglishDate).HasColumnName("UpdatedAt_EnglishDate");
+            updatedAt.Property(vo => vo.PersianDate).HasColumnName("UpdatedAt_PersianDate");
         });
 
         builder.HasQueryFilter(entity => entity.IsDeleted == IsDeleted.UnDelete);
