@@ -11,9 +11,9 @@ namespace Karami.Core.Domain.Contracts.Abstracts;
 
 public abstract partial class Entity<TIdentity> : BaseEntity<TIdentity>
 {
-    public IsActive  IsActive   { get; protected set; } = IsActive.Active;
+    public IsActive IsActive    { get; protected set; } = IsActive.Active;
     public CreatedAt CreatedAt  { get; protected set; }
-    public UpdatedAt UpdatedAt  { get; protected set; }
+    public UpdatedAt? UpdatedAt { get; protected set; }
 }
 
 public abstract partial class Entity<TIdentity>
