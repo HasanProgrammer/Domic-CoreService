@@ -31,7 +31,9 @@ public class BaseEntityConfig<TEntity, TKey> : IEntityTypeConfiguration<TEntity>
         builder.OwnsOne(entity => entity.CreatedAt, createdAt => {
             createdAt.Property(vo => vo.EnglishDate).IsRequired().HasColumnName("CreatedAt_EnglishDate");
             createdAt.Property(vo => vo.PersianDate).IsRequired().HasColumnName("CreatedAt_PersianDate");
-        });
+        })
+        .Navigation(entity => entity.CreatedAt)
+        .IsRequired();
         
         builder.OwnsOne(entity => entity.UpdatedAt, updatedAt => {
             updatedAt.Property(vo => vo.EnglishDate).HasColumnName("UpdatedAt_EnglishDate");
