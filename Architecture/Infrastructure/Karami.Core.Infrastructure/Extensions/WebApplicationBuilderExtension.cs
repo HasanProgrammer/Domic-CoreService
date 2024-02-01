@@ -12,6 +12,7 @@ using Karami.Core.Domain.Implementations;
 using Karami.Core.Grpc.Service;
 using Karami.Core.Infrastructure.Attributes;
 using Karami.Core.Infrastructure.Implementations;
+using Karami.Core.Persistence.Interceptors;
 using Karami.Core.UseCase.Contracts.Interfaces;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Builder;
@@ -51,13 +52,16 @@ public static class WebApplicationBuilderExtension
     /// </summary>
     /// <param name="builder"></param>
     /// <typeparam name="TContext"></typeparam>
-    public static void RegisterCommandSqlServer<TContext>(this WebApplicationBuilder builder) where TContext : DbContext
+    /// <typeparam name="TIdentity"></typeparam>
+    public static void RegisterEntityFrameworkCoreCommand<TContext, TIdentity>(this WebApplicationBuilder builder) 
+        where TContext : DbContext
     {
         if(builder.Environment.EnvironmentName.Equals(Karami.Core.Common.ClassConsts.Environment.Testing))
             builder.Services.AddDbContext<TContext>(config => config.UseInMemoryDatabase("Testing-CommandDatabase"));
         else
-            builder.Services.AddDbContext<TContext>(config => 
+            builder.Services.AddDbContext<TContext>((provider, config) => 
                 config.UseSqlServer(builder.Configuration.GetCommandSqlServerConnectionString())
+                      .AddInterceptors(provider.GetRequiredService<EfOutBoxPublishEventInterceptor<TIdentity>>())
             );
     }
     
@@ -66,7 +70,8 @@ public static class WebApplicationBuilderExtension
     /// </summary>
     /// <param name="builder"></param>
     /// <typeparam name="TContext"></typeparam>
-    public static void RegisterQuerySqlServer<TContext>(this WebApplicationBuilder builder) where TContext : DbContext
+    public static void RegisterEntityFrameworkCoreQuery<TContext>(this WebApplicationBuilder builder) 
+        where TContext : DbContext
     {
         if(builder.Environment.EnvironmentName.Equals(Karami.Core.Common.ClassConsts.Environment.Testing))
             builder.Services.AddDbContext<TContext>(config => config.UseInMemoryDatabase("Testing-QueryDatabase"));
@@ -80,7 +85,7 @@ public static class WebApplicationBuilderExtension
     /// 
     /// </summary>
     /// <param name="builder"></param>
-    public static void RegisterMongoDB(this WebApplicationBuilder builder)
+    public static void RegisterMongoDbDriver(this WebApplicationBuilder builder)
     {
         builder.Services.AddScoped<MongoClient>(Provider => 
             new MongoClient(
@@ -94,7 +99,7 @@ public static class WebApplicationBuilderExtension
     /// </summary>
     /// <param name="builder"></param>
     /// <returns></returns>
-    public static void RegisterCaching(this WebApplicationBuilder builder)
+    public static void RegisterRedisCaching(this WebApplicationBuilder builder)
     {
         Type[] useCaseAssemblyTypes = Assembly.Load(new AssemblyName("Karami.UseCase")).GetTypes();
         
