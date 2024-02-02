@@ -13,16 +13,14 @@ public class EfOutBoxPublishEventInterceptor<TIdentity> : SaveChangesInterceptor
 {
     private readonly ISerializer              _serializer;
     private readonly IConfiguration           _configuration;
-    private readonly IDateTime                _dateTime;
     private readonly IGlobalUniqueIdGenerator _globalUniqueIdGenerator;
 
     public EfOutBoxPublishEventInterceptor(IGlobalUniqueIdGenerator globalUniqueIdGenerator, ISerializer serializer, 
-        IConfiguration configuration, IDateTime dateTime
+        IConfiguration configuration
     )
     {
         _serializer              = serializer;
         _configuration           = configuration;
-        _dateTime                = dateTime;
         _globalUniqueIdGenerator = globalUniqueIdGenerator;
     }
     

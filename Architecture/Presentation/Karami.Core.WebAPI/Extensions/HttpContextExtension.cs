@@ -1,5 +1,4 @@
-﻿using Karami.Core.Common.ClassExtensions;
-using Karami.Core.Domain.Constants;
+﻿using Karami.Core.Domain.Constants;
 using Karami.Core.Domain.Contracts.Interfaces;
 using Karami.Core.Domain.Entities;
 using Karami.Core.Domain.Enumerations;
@@ -8,26 +7,12 @@ using Karami.Core.UseCase.Contracts.Interfaces;
 using Karami.Core.UseCase.DTOs;
 using Karami.Core.UseCase.Extensions;
 using Microsoft.AspNetCore.Http;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 
 namespace Karami.Core.WebAPI.Extensions;
 
 public static class HttpContextExtension
 {
-    /// <summary>
-    /// 
-    /// </summary>
-    /// <param name="Context"></param>
-    /// <param name="Configuration"></param>
-    /// <returns></returns>
-    public static HttpContext AddCorsHeaders(this HttpContext Context, IConfiguration Configuration)
-    {
-        Context.Response.Headers.Add("Access-Control-Allow-Origin", Configuration.GetValue<string>("AdminWebUrl"));
-
-        return Context;
-    }
-
     /// <summary>
     /// 
     /// </summary>
@@ -58,18 +43,6 @@ public static class HttpContextExtension
     /// 
     /// </summary>
     /// <param name="Context"></param>
-    /// <returns></returns>
-    public static HttpContext ClearHeaders(this HttpContext Context)
-    {
-        Context.Response.Headers.Clear();
-
-        return Context;
-    }
-    
-    /// <summary>
-    /// 
-    /// </summary>
-    /// <param name="Context"></param>
     /// <param name="Payload"></param>
     public static async Task SendPayloadAsync(this HttpContext Context, string Payload) 
         => await Context.Response.WriteAsync(Payload);
@@ -80,43 +53,6 @@ public static class HttpContextExtension
     /// <param name="Context"></param>
     /// <returns></returns>
     public static string GetClientIP(this HttpContext Context) => Context.Connection.RemoteIpAddress?.ToString();
-
-    /// <summary>
-    /// 
-    /// </summary>
-    /// <param name="Context"></param>
-    /// <returns></returns>
-    public static string GetTokenOfGrpcHeader(this HttpContext Context) 
-        => Context.Request.Headers["Token"];
-
-    /// <summary>
-    /// 
-    /// </summary>
-    /// <param name="Context"></param>
-    /// <returns></returns>
-    public static string GetTokenFromQueryString(this HttpContext Context) 
-        => $"Bearer { Context.Request.Query["access_token"] }";
-   
-    /// <summary>
-    /// 
-    /// </summary>
-    /// <param name="Context"></param>
-    /// <returns></returns>
-    public static string GetRowTokenFromQueryString(this HttpContext Context) => Context.Request.Query["access_token"];
-    
-    /// <summary>
-    /// 
-    /// </summary>
-    /// <param name="context"></param>
-    /// <param name="configuration"></param>
-    /// <returns></returns>
-    public static void CheckLicense(this HttpContext context, IConfiguration configuration)
-    {
-        var headers = context.Request.Headers;
-        
-        if(!headers.Licence().Equals( configuration.GetValue<string>("SecretKey") )) 
-            throw new InvalidOperationException("شما مجوز لازم برای دسترسی به این منبع را دارا نمی باشید !");
-    }
     
     /// <summary>
     /// 

@@ -14,6 +14,8 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Newtonsoft.Json;
 
+using ILogger = Serilog.ILogger;
+
 namespace Karami.Core.WebAPI.Middlewares;
 
 /// <summary>
@@ -22,12 +24,12 @@ namespace Karami.Core.WebAPI.Middlewares;
 public class FullExceptionHandlerInterceptor : Interceptor
 {
     private readonly Type             _icommandUnitOfWorkType;
-    private readonly string           _service;
     private readonly IConfiguration   _configuration;
     private readonly IHostEnvironment _hostEnvironment;
 
     private IMessageBroker         _messageBroker;
     private IDateTime              _dateTime;
+    private ILogger                _logger;
     private ICoreCommandUnitOfWork _commandUnitOfWork;
     
     /// <summary>
@@ -37,11 +39,10 @@ public class FullExceptionHandlerInterceptor : Interceptor
     /// <param name="hostEnvironment"></param>
     /// <param name="service"></param>
     /// <param name="icommandUnitOfWorkType"></param>
-    public FullExceptionHandlerInterceptor(IConfiguration configuration, IHostEnvironment hostEnvironment, string service,
+    public FullExceptionHandlerInterceptor(IConfiguration configuration, IHostEnvironment hostEnvironment, 
         Type icommandUnitOfWorkType
     )
     {
-        _service                = service;
         _configuration          = configuration;
         _hostEnvironment        = hostEnvironment;
         _icommandUnitOfWorkType = icommandUnitOfWorkType;
@@ -61,6 +62,8 @@ public class FullExceptionHandlerInterceptor : Interceptor
         ServerCallContext context , UnaryServerMethod<TRequest, TResponse> continuation
     )
     {
+        var serviceName = _configuration.GetValue<string>("NameOfService");
+        
         try
         {
             if(_icommandUnitOfWorkType is not null)
@@ -69,10 +72,11 @@ public class FullExceptionHandlerInterceptor : Interceptor
                            .RequestServices
                            .GetRequiredService(_icommandUnitOfWorkType) as ICoreCommandUnitOfWork;
             
-            _messageBroker = context.GetHttpContext().RequestServices.GetRequiredService<IMessageBroker>();
             _dateTime      = context.GetHttpContext().RequestServices.GetRequiredService<IDateTime>();
+            _logger        = context.GetHttpContext().RequestServices.GetRequiredService<ILogger>();
+            _messageBroker = context.GetHttpContext().RequestServices.GetRequiredService<IMessageBroker>();
             
-            context.CentralRequestLogger(_messageBroker, _dateTime, _hostEnvironment, _service, request);
+            context.CentralRequestLogger(_messageBroker, _dateTime, _hostEnvironment, serviceName, request);
             context.CheckLicense(_configuration);
             
             return await continuation(request, context);
@@ -106,7 +110,8 @@ public class FullExceptionHandlerInterceptor : Interceptor
             #region Logger
 
             e.FileLogger(_hostEnvironment, _dateTime);
-            e.CentralExceptionLogger(_hostEnvironment, _messageBroker, _dateTime, _service, context.Method);
+            e.ElasticStackExceptionLogger(_hostEnvironment, _dateTime, _logger, serviceName, context.Method);
+            e.CentralExceptionLogger(_hostEnvironment, _messageBroker, _dateTime, serviceName, context.Method);
 
             #endregion
          

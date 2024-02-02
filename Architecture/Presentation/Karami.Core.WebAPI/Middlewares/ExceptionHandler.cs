@@ -16,31 +16,32 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 
+using ILogger = Serilog.ILogger;
+
 namespace Karami.Core.WebAPI.Middlewares;
 
 public class ExceptionHandler
 {
-    private readonly string          _serviceName;
+    private readonly ILogger         _logger;
     private readonly RequestDelegate _next;
     
     private IConfiguration   _configuration;
     private IHostEnvironment _hostEnvironment;
-        
+
     /// <summary>
     /// 
     /// </summary>
     /// <param name="next"></param>
-    /// <param name="configuration"></param>
-    /// <param name="hostEnvironment"></param>
-    /// <param name="serviceName"></param>
-    public ExceptionHandler(RequestDelegate next, string serviceName)
+    public ExceptionHandler(RequestDelegate next, ILogger logger)
     {
-        _next        = next;
-        _serviceName = serviceName;
+        _next   = next;
+        _logger = logger;
     }
 
     public async Task Invoke(HttpContext context)
     {
+        var serviceName = _configuration.GetValue<string>("NameOfService");
+        
         try
         {
             _configuration     = context.RequestServices.GetRequiredService<IConfiguration>();
@@ -48,7 +49,7 @@ public class ExceptionHandler
             var messageBroker  = context.RequestServices.GetRequiredService<IMessageBroker>();
             var dotrisDateTime = context.RequestServices.GetRequiredService<IDateTime>();
 
-            context.CentralRequestLogger(_hostEnvironment, messageBroker, dotrisDateTime, _serviceName);
+            context.CentralRequestLogger(_hostEnvironment, messageBroker, dotrisDateTime, serviceName);
 
             await _next(context);
         }
@@ -138,7 +139,7 @@ public class ExceptionHandler
             {
                 //The target service does not accept the request
                 
-                var payload = _mainExceptionProcessing(context, e);
+                var payload = _mainExceptionProcessing(context, e, serviceName);
             
                 await context.JsonContent().StatusCode(200).SendPayloadAsync(payload);
             }
@@ -147,7 +148,7 @@ public class ExceptionHandler
         }
         catch (Exception e)
         {
-            var payload = _mainExceptionProcessing(context, e);
+            var payload = _mainExceptionProcessing(context, e, serviceName);
             
             await context.JsonContent().StatusCode(200).SendPayloadAsync(payload);
         }
@@ -159,15 +160,18 @@ public class ExceptionHandler
     /// <param name="context"></param>
     /// <param name="exception"></param>
     /// <returns></returns>
-    private object _mainExceptionProcessing(HttpContext context, Exception exception)
+    private object _mainExceptionProcessing(HttpContext context, Exception exception, string serviceName)
     {
         #region Logger
 
-        var dotrisDateTime = context.RequestServices.GetService<IDateTime>();
+        var dateTime = context.RequestServices.GetService<IDateTime>();
 
-        exception.FileLogger(_hostEnvironment, dotrisDateTime);
+        exception.FileLogger(_hostEnvironment, dateTime);
+        
+        exception.ElasticStackExceptionLogger(_hostEnvironment, dateTime, _logger, serviceName, context.Request.Path);
+        
         exception.CentralExceptionLogger(_hostEnvironment, 
-            context.RequestServices.GetService<IMessageBroker>(), dotrisDateTime, _serviceName, context.Request.Path
+            context.RequestServices.GetService<IMessageBroker>(), dateTime, serviceName, context.Request.Path
         );
 
         #endregion
