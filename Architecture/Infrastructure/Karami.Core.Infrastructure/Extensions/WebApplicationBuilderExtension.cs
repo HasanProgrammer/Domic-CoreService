@@ -57,6 +57,10 @@ public static class WebApplicationBuilderExtension
     /// <param name="builder"></param>
     public static void RegisterELK(this WebApplicationBuilder builder)
     {
+        var elasticUri      = Environment.GetEnvironmentVariable("ElasticUri");
+        var elasticUsername = Environment.GetEnvironmentVariable("ElasticUsername");
+        var elasticPassword = Environment.GetEnvironmentVariable("ElasticPassword");
+        
         var environment = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT");
         
         var configuration = new ConfigurationBuilder().AddJsonFile("appsettings.json", optional: false,
@@ -67,7 +71,9 @@ public static class WebApplicationBuilderExtension
         
         #region Elastic
 
-        var settings = new ConnectionSettings(new Uri(configuration["ElasticConfiguration:Uri"]));
+        var settings = new ConnectionSettings(new Uri(elasticUri));
+
+        settings.BasicAuthentication(elasticUsername, elasticPassword);
 
         builder.Services.AddSingleton<IElasticClient>(new ElasticClient(settings));
 
@@ -78,7 +84,7 @@ public static class WebApplicationBuilderExtension
         var indexPart_1 = Assembly.GetExecutingAssembly().GetName().Name.ToLower().Replace(".", "-");
         var indexPart_2 = environment?.ToLower().Replace(".", "-");
         
-        var elOptions = new ElasticsearchSinkOptions( new Uri(configuration["ElasticConfiguration:Uri"]) ) {
+        var elOptions = new ElasticsearchSinkOptions( new Uri(elasticUri) ) {
             AutoRegisterTemplate = true,
             IndexFormat = $"{indexPart_1}-{indexPart_2}-{DateTime.UtcNow:yyyy-MM}"
         };
