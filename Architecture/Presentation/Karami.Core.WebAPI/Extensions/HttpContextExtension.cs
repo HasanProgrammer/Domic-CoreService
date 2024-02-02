@@ -53,6 +53,14 @@ public static class HttpContextExtension
     /// <param name="Context"></param>
     /// <returns></returns>
     public static string GetClientIP(this HttpContext Context) => Context.Connection.RemoteIpAddress?.ToString();
+
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="Context"></param>
+    /// <returns></returns>
+    public static string GetTokenOfGrpcHeader(this HttpContext Context) 
+        => Context.Request.Headers["Token"];
     
     /// <summary>
     /// 
