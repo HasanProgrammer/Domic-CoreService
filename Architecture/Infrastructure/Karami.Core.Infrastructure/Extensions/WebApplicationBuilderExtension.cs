@@ -115,10 +115,14 @@ public static class WebApplicationBuilderExtension
         if(builder.Environment.EnvironmentName.Equals(Karami.Core.Common.ClassConsts.Environment.Testing))
             builder.Services.AddDbContext<TContext>(config => config.UseInMemoryDatabase("Testing-CommandDatabase"));
         else
+        {
+            builder.Services.AddScoped<EfOutBoxPublishEventInterceptor<TIdentity>>();
+            
             builder.Services.AddDbContext<TContext>((provider, config) => 
                 config.UseSqlServer(builder.Configuration.GetCommandSqlServerConnectionString())
                       .AddInterceptors(provider.GetRequiredService<EfOutBoxPublishEventInterceptor<TIdentity>>())
             );
+        }
     }
     
     /// <summary>
