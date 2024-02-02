@@ -25,8 +25,6 @@ public class EventConfig : IEntityTypeConfiguration<Event>
         
         builder.Property(entity => entity.CreatedAt_EnglishDate).IsRequired();
         builder.Property(entity => entity.CreatedAt_PersianDate).IsRequired();
-        builder.Property(entity => entity.UpdatedAt_EnglishDate).IsRequired();
-        builder.Property(entity => entity.UpdatedAt_PersianDate).IsRequired();
 
         builder.Property(Event => Event.IsActive)
                .HasConversion(new EnumToNumberConverter<IsActive, int>())

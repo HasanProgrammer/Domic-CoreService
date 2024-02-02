@@ -52,9 +52,7 @@ public class EfOutBoxPublishEventInterceptor<TIdentity> : SaveChangesInterceptor
                             _ => "Unknown"
                         },
                         CreatedAt_EnglishDate = domainEntity.CreatedAt.EnglishDate.Value,
-                        CreatedAt_PersianDate = domainEntity.CreatedAt.PersianDate,
-                        UpdatedAt_EnglishDate = domainEntity.UpdatedAt.EnglishDate.Value, //unnecessary
-                        UpdatedAt_PersianDate = domainEntity.UpdatedAt.PersianDate //unnecessary
+                        CreatedAt_PersianDate = domainEntity.CreatedAt.PersianDate
                     })
                 );
             }
@@ -95,9 +93,7 @@ public class EfOutBoxPublishEventInterceptor<TIdentity> : SaveChangesInterceptor
                             _ => "Unknown"
                         },
                         CreatedAt_EnglishDate = domainEntity.CreatedAt.EnglishDate.Value,
-                        CreatedAt_PersianDate = domainEntity.CreatedAt.PersianDate,
-                        UpdatedAt_EnglishDate = domainEntity.UpdatedAt.EnglishDate.Value, //unnecessary
-                        UpdatedAt_PersianDate = domainEntity.UpdatedAt.PersianDate //unnecessary
+                        CreatedAt_PersianDate = domainEntity.CreatedAt.PersianDate
                     })
                 );
             }
