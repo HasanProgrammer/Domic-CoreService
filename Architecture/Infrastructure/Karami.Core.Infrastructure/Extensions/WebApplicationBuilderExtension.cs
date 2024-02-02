@@ -22,8 +22,12 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.IdentityModel.Tokens;
 using MongoDB.Driver;
+using Nest;
+using Serilog;
+using Serilog.Sinks.Elasticsearch;
 using StackExchange.Redis;
 
+using ILogger     = Karami.Core.UseCase.Contracts.Interfaces.ILogger;
 using Environment = System.Environment;
 
 namespace Karami.Core.Infrastructure.Extensions;
@@ -45,6 +49,52 @@ public static class WebApplicationBuilderExtension
         builder.Services.AddSingleton(typeof(IGlobalUniqueIdGenerator), typeof(GlobalUniqueIdGenerator));
         
         builder.Services.AddScoped(typeof(ILogger), typeof(Logger));
+    }
+
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="builder"></param>
+    public static void RegisterELK(this WebApplicationBuilder builder)
+    {
+        var environment = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT");
+        
+        var configuration = new ConfigurationBuilder().AddJsonFile("appsettings.json", optional: false,
+                                                          reloadOnChange: true
+                                                      )
+                                                      .AddJsonFile($"appsettings.{environment}.json", optional: true)
+                                                      .Build();
+        
+        #region Elastic
+
+        var settings = new ConnectionSettings(new Uri(configuration["ElasticConfiguration:Uri"]));
+
+        builder.Services.AddSingleton<IElasticClient>(new ElasticClient(settings));
+
+        #endregion
+
+        #region Serilog&Kibana
+
+        var indexPart_1 = Assembly.GetExecutingAssembly().GetName().Name.ToLower().Replace(".", "-");
+        var indexPart_2 = environment?.ToLower().Replace(".", "-");
+        
+        var elOptions = new ElasticsearchSinkOptions( new Uri(configuration["ElasticConfiguration:Uri"]) ) {
+            AutoRegisterTemplate = true,
+            IndexFormat = $"{indexPart_1}-{indexPart_2}-{DateTime.UtcNow:yyyy-MM}"
+        };
+
+        Log.Logger = new LoggerConfiguration().Enrich.FromLogContext()
+                                              .Enrich.WithMachineName()
+                                              .WriteTo.Debug()
+                                              .WriteTo.Console()
+                                              .WriteTo.Elasticsearch(elOptions)
+                                              .Enrich.WithProperty("Environment", environment)
+                                              .ReadFrom.Configuration(configuration)
+                                              .CreateLogger();
+
+        builder.Host.UseSerilog();
+
+        #endregion
     }
     
     /// <summary>
