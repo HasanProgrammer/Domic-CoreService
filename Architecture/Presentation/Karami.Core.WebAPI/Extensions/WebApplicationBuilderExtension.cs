@@ -3,7 +3,6 @@ using Karami.Core.Domain.Contracts.Interfaces;
 using Karami.Core.WebAPI.Jobs;
 using Karami.Core.WebAPI.Middlewares;
 using Microsoft.AspNetCore.Builder;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 
@@ -18,8 +17,6 @@ public static class WebApplicationBuilderExtension
     /// <param name="serviceName"></param>
     public static void RegisterGrpcServer(this WebApplicationBuilder builder)
     {
-        var serviceName = builder.Configuration.GetValue<string>("NameOfService");
-        
         Type[] domainAssemblyTypes = Assembly.Load(new AssemblyName("Karami.Domain")).GetTypes();
         
         var icommandUnitOfWorkType =
@@ -31,12 +28,10 @@ public static class WebApplicationBuilderExtension
             
             if(icommandUnitOfWorkType is not null)
                 options.Interceptors.Add<FullExceptionHandlerInterceptor>(
-                    builder.Configuration, builder.Environment, serviceName, icommandUnitOfWorkType
+                    builder.Configuration, builder.Environment, icommandUnitOfWorkType
                 );
             else
-                options.Interceptors.Add<ExceptionHandlerInterceptor>(
-                    builder.Configuration, builder.Environment, serviceName
-                );
+                options.Interceptors.Add<ExceptionHandlerInterceptor>(builder.Configuration, builder.Environment);
 
             options.EnableDetailedErrors = true;
             
