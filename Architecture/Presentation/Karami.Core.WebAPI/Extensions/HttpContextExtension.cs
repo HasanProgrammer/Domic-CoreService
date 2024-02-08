@@ -5,9 +5,10 @@ using Karami.Core.Domain.Enumerations;
 using Karami.Core.Infrastructure.Extensions;
 using Karami.Core.UseCase.Contracts.Interfaces;
 using Karami.Core.UseCase.DTOs;
-using Karami.Core.UseCase.Extensions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Hosting;
+
+using ILogger = Serilog.ILogger;
 
 namespace Karami.Core.WebAPI.Extensions;
 
@@ -66,58 +67,50 @@ public static class HttpContextExtension
     /// 
     /// </summary>
     /// <param name="context"></param>
-    /// <param name="hostEnvironment"></param>
+    /// <param name="globalUniqueIdGenerator"></param>
     /// <param name="messageBroker"></param>
     /// <param name="dateTime"></param>
     /// <param name="serviceName"></param>
-    public static void CentralRequestLogger(this HttpContext context, IHostEnvironment hostEnvironment, 
-        IMessageBroker messageBroker, IDateTime dateTime, string serviceName
+    public static void CentralRequestLogger(this HttpContext context, 
+        IGlobalUniqueIdGenerator globalUniqueIdGenerator, IMessageBroker messageBroker, IDateTime dateTime, 
+        string serviceName
     )
     {
-        try
-        {
-            var httpRequest = context.Request;
+        var httpRequest = context.Request;
             
-            if(!httpRequest.Body.CanSeek)
-                httpRequest.EnableBuffering();
+        if(!httpRequest.Body.CanSeek)
+            httpRequest.EnableBuffering();
 
-            httpRequest.Body.Position = 0;
+        httpRequest.Body.Position = 0;
 
-            StreamReader streamReader = new(httpRequest.Body);
+        StreamReader streamReader = new(httpRequest.Body);
 
-            var payload = streamReader.ReadToEndAsync().Result;
+        var payload = streamReader.ReadToEndAsync().Result;
             
-            httpRequest.Body.Position = 0;
+        httpRequest.Body.Position = 0;
 
-            var nowDateTime        = DateTime.Now;
-            var nowPersianDateTime = dateTime.ToPersianShortDate(nowDateTime);
+        var nowDateTime        = DateTime.Now;
+        var nowPersianDateTime = dateTime.ToPersianShortDate(nowDateTime);
             
-            var systemRequest = new SystemRequest {
-                Id        = Guid.NewGuid().ToString()           ,
-                IpClient  = context.GetClientIP()               ,
-                Service   = serviceName                         ,
-                Action    = context.Request.Path                ,
-                Header    = context.Request.Headers.Serialize() ,
-                Payload   = payload                             ,
-                CreatedAt_EnglishDate = nowDateTime             ,
-                CreatedAt_PersianDate = nowPersianDateTime      ,
-                UpdatedAt_EnglishDate = nowDateTime             ,
-                UpdatedAt_PersianDate = nowPersianDateTime
-            };
+        var systemRequest = new SystemRequest {
+            Id        = globalUniqueIdGenerator.GetRandom(6) ,
+            IpClient  = context.GetClientIP()                ,
+            Service   = serviceName                          ,
+            Action    = context.Request.Path                 ,
+            Header    = context.Request.Headers.Serialize()  ,
+            Payload   = payload                              ,
+            CreatedAt_EnglishDate = nowDateTime              ,
+            CreatedAt_PersianDate = nowPersianDateTime
+        };
 
-            var dto = new MessageBrokerDto<SystemRequest> {
-                Message      = systemRequest,
-                ExchangeType = Exchange.Direct,
-                Exchange     = Broker.Request_Exchange,
-                Route        = Broker.StateTracker_Request_Route
-            };
+        var dto = new MessageBrokerDto<SystemRequest> {
+            Message      = systemRequest,
+            ExchangeType = Exchange.Direct,
+            Exchange     = Broker.Request_Exchange,
+            Route        = Broker.StateTracker_Request_Route
+        };
                 
-            messageBroker.Publish<SystemRequest>(dto);
-        }
-        catch (Exception e)
-        {
-            e.FileLogger(hostEnvironment, dateTime);
-        }
+        messageBroker.Publish<SystemRequest>(dto);
     }
     
     /// <summary>
@@ -125,13 +118,15 @@ public static class HttpContextExtension
     /// </summary>
     /// <param name="context"></param>
     /// <param name="hostEnvironment"></param>
+    /// <param name="globalUniqueIdGenerator"></param>
     /// <param name="messageBroker"></param>
     /// <param name="dateTime"></param>
+    /// <param name="logger"></param>
     /// <param name="serviceName"></param>
     /// <param name="cancellationToken"></param>
     public static async Task CentralRequestLoggerAsync(this HttpContext context, IHostEnvironment hostEnvironment, 
-        IMessageBroker messageBroker, IDateTime dateTime, string serviceName, 
-        CancellationToken cancellationToken
+        IGlobalUniqueIdGenerator globalUniqueIdGenerator, IMessageBroker messageBroker, IDateTime dateTime, 
+        ILogger logger, string serviceName, CancellationToken cancellationToken
     )
     {
         try
@@ -153,16 +148,14 @@ public static class HttpContextExtension
             var nowPersianDateTime = dateTime.ToPersianShortDate(nowDateTime);
             
             var systemRequest = new SystemRequest {
-                Id        = Guid.NewGuid().ToString()           ,
-                IpClient  = context.GetClientIP()               ,
-                Service   = serviceName                         ,
-                Action    = context.Request.Path                ,
-                Header    = context.Request.Headers.Serialize() ,
-                Payload   = payload                             ,
-                CreatedAt_EnglishDate = nowDateTime             ,
-                CreatedAt_PersianDate = nowPersianDateTime      ,
-                UpdatedAt_EnglishDate = nowDateTime             ,
-                UpdatedAt_PersianDate = nowPersianDateTime
+                Id        = globalUniqueIdGenerator.GetRandom(6) ,
+                IpClient  = context.GetClientIP()                ,
+                Service   = serviceName                          ,
+                Action    = context.Request.Path                 ,
+                Header    = context.Request.Headers.Serialize()  ,
+                Payload   = payload                              ,
+                CreatedAt_EnglishDate = nowDateTime              ,
+                CreatedAt_PersianDate = nowPersianDateTime
             };
             
             var dto = new MessageBrokerDto<SystemRequest> {
@@ -172,11 +165,15 @@ public static class HttpContextExtension
                 Route        = Broker.StateTracker_Request_Route
             };
                 
-            messageBroker.Publish<SystemRequest>(dto);
+            await Task.Run(() => messageBroker.Publish<SystemRequest>(dto), cancellationToken);
         }
         catch (Exception e)
         {
             e.FileLogger(hostEnvironment, dateTime);
+            
+            e.ElasticStackExceptionLogger(hostEnvironment, globalUniqueIdGenerator, dateTime, logger, serviceName, 
+                context.Request.Path
+            );
         }
     }
 }

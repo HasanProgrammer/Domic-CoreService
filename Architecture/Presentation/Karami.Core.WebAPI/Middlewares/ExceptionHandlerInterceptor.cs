@@ -4,9 +4,9 @@ using Grpc.Core;
 using Grpc.Core.Interceptors;
 using Karami.Core.Common.ClassExtensions;
 using Karami.Core.Domain.Contracts.Interfaces;
+using Karami.Core.Infrastructure.Extensions;
 using Karami.Core.UseCase.Contracts.Interfaces;
 using Karami.Core.UseCase.Exceptions;
-using Karami.Core.UseCase.Extensions;
 using Karami.Core.WebAPI.Exceptions;
 using Karami.Core.WebAPI.Extensions;
 using Microsoft.Extensions.Configuration;
@@ -25,10 +25,11 @@ public class ExceptionHandlerInterceptor : Interceptor
 {
     private readonly IConfiguration   _configuration;
     private readonly IHostEnvironment _hostEnvironment;
-
-    private IMessageBroker _messageBroker;
-    private IDateTime _dateTime;
-    private ILogger _logger;
+    
+    private IMessageBroker           _messageBroker;
+    private IDateTime                _dateTime;
+    private ILogger                  _logger;
+    private IGlobalUniqueIdGenerator _globalUniqueIdGenerator;
     
     /// <summary>
     /// 
@@ -61,11 +62,15 @@ public class ExceptionHandlerInterceptor : Interceptor
         
         try
         {
-            _dateTime      = context.GetHttpContext().RequestServices.GetRequiredService<IDateTime>();
-            _logger        = context.GetHttpContext().RequestServices.GetRequiredService<ILogger>();
-            _messageBroker = context.GetHttpContext().RequestServices.GetRequiredService<IMessageBroker>();
+            _dateTime                = context.GetHttpContext().RequestServices.GetRequiredService<IDateTime>();
+            _logger                  = context.GetHttpContext().RequestServices.GetRequiredService<ILogger>();
+            _messageBroker           = context.GetHttpContext().RequestServices.GetRequiredService<IMessageBroker>();
+            _globalUniqueIdGenerator = context.GetHttpContext().RequestServices.GetRequiredService<IGlobalUniqueIdGenerator>();
             
-            context.CentralRequestLogger(_messageBroker, _dateTime, _hostEnvironment, serviceName, request);
+            context.CentralRequestLoggerAsync(_hostEnvironment, _globalUniqueIdGenerator, _messageBroker, _dateTime, 
+                _logger, serviceName, request, context.CancellationToken
+            );
+            
             context.CheckLicense(_configuration);
             
             return await continuation(request, context);
@@ -95,8 +100,14 @@ public class ExceptionHandlerInterceptor : Interceptor
             #region Logger
 
             e.FileLogger(_hostEnvironment, _dateTime);
-            e.ElasticStackExceptionLogger(_hostEnvironment, _dateTime, _logger, serviceName, context.Method);
-            e.CentralExceptionLogger(_hostEnvironment, _messageBroker, _dateTime, serviceName, context.Method);
+            
+            e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, _logger, serviceName, 
+                context.Method
+            );
+            
+            e.CentralExceptionLoggerAsync(_hostEnvironment, _globalUniqueIdGenerator, _messageBroker, _dateTime, 
+                serviceName, context.Method, context.CancellationToken
+            );
 
             #endregion
 

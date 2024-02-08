@@ -2,9 +2,9 @@
 using Karami.Core.Domain.Constants;
 using Karami.Core.Domain.Contracts.Interfaces;
 using Karami.Core.Domain.Enumerations;
+using Karami.Core.Infrastructure.Extensions;
 using Karami.Core.UseCase.Contracts.Interfaces;
 using Karami.Core.UseCase.DTOs;
-using Karami.Core.UseCase.Extensions;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;

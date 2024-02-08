@@ -8,7 +8,6 @@ using Karami.Core.Domain.Exceptions;
 using Karami.Core.Infrastructure.Extensions;
 using Karami.Core.UseCase.Contracts.Interfaces;
 using Karami.Core.UseCase.Exceptions;
-using Karami.Core.UseCase.Extensions;
 using Karami.Core.WebAPI.Exceptions;
 using Karami.Core.WebAPI.Extensions;
 using Microsoft.AspNetCore.Http;
@@ -25,8 +24,11 @@ public class ExceptionHandler
     private readonly ILogger         _logger;
     private readonly RequestDelegate _next;
     
-    private IConfiguration   _configuration;
-    private IHostEnvironment _hostEnvironment;
+    private IConfiguration           _configuration;
+    private IHostEnvironment         _hostEnvironment;
+    private IMessageBroker           _messageBroker;
+    private IDateTime                _dateTime;
+    private IGlobalUniqueIdGenerator _globalUniqueIdGenerator;
 
     /// <summary>
     /// 
@@ -44,12 +46,15 @@ public class ExceptionHandler
         
         try
         {
-            _configuration     = context.RequestServices.GetRequiredService<IConfiguration>();
-            _hostEnvironment   = context.RequestServices.GetRequiredService<IHostEnvironment>();
-            var messageBroker  = context.RequestServices.GetRequiredService<IMessageBroker>();
-            var dotrisDateTime = context.RequestServices.GetRequiredService<IDateTime>();
+            _configuration           = context.RequestServices.GetRequiredService<IConfiguration>();
+            _hostEnvironment         = context.RequestServices.GetRequiredService<IHostEnvironment>();
+            _dateTime                = context.RequestServices.GetRequiredService<IDateTime>();
+            _messageBroker           = context.RequestServices.GetRequiredService<IMessageBroker>(); 
+            _globalUniqueIdGenerator = context.RequestServices.GetRequiredService<IGlobalUniqueIdGenerator>();
 
-            context.CentralRequestLogger(_hostEnvironment, messageBroker, dotrisDateTime, serviceName);
+            context.CentralRequestLoggerAsync(_hostEnvironment, _globalUniqueIdGenerator, _messageBroker, _dateTime,
+                _logger, serviceName, default
+            );
 
             await _next(context);
         }
@@ -139,7 +144,7 @@ public class ExceptionHandler
             {
                 //The target service does not accept the request
                 
-                var payload = _mainExceptionProcessing(context, e, serviceName);
+                var payload = _MainExceptionProcessing(context, e, serviceName);
             
                 await context.JsonContent().StatusCode(200).SendPayloadAsync(payload);
             }
@@ -148,7 +153,7 @@ public class ExceptionHandler
         }
         catch (Exception e)
         {
-            var payload = _mainExceptionProcessing(context, e, serviceName);
+            var payload = _MainExceptionProcessing(context, e, serviceName);
             
             await context.JsonContent().StatusCode(200).SendPayloadAsync(payload);
         }
@@ -160,18 +165,18 @@ public class ExceptionHandler
     /// <param name="context"></param>
     /// <param name="exception"></param>
     /// <returns></returns>
-    private object _mainExceptionProcessing(HttpContext context, Exception exception, string serviceName)
+    private object _MainExceptionProcessing(HttpContext context, Exception exception, string serviceName)
     {
         #region Logger
 
-        var dateTime = context.RequestServices.GetService<IDateTime>();
-
-        exception.FileLogger(_hostEnvironment, dateTime);
+        exception.FileLogger(_hostEnvironment, _dateTime);
         
-        exception.ElasticStackExceptionLogger(_hostEnvironment, dateTime, _logger, serviceName, context.Request.Path);
+        exception.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, _logger, 
+            serviceName, context.Request.Path
+        );
         
-        exception.CentralExceptionLogger(_hostEnvironment, 
-            context.RequestServices.GetService<IMessageBroker>(), dateTime, serviceName, context.Request.Path
+        exception.CentralExceptionLoggerAsync(_hostEnvironment, _globalUniqueIdGenerator, _messageBroker, _dateTime, 
+            serviceName, context.Request.Path, default
         );
 
         #endregion

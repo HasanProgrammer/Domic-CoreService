@@ -9,7 +9,6 @@ using Karami.Core.UseCase.Attributes;
 using Karami.Core.UseCase.Contracts.Abstracts;
 using Karami.Core.UseCase.Contracts.Interfaces;
 using Karami.Core.UseCase.Exceptions;
-using Karami.Core.UseCase.Extensions;
 using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -18,33 +17,33 @@ using Newtonsoft.Json;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 
-using Host        = Karami.Core.Common.ClassHelpers.Host;
-using Environment = Karami.Core.Common.ClassConsts.Environment;
+using ILogger = Serilog.ILogger;
 
 namespace Karami.Core.Infrastructure.Implementations;
 
 public class AsyncCommandBroker : IAsyncCommandBroker
 {
-    private readonly IConnection          _connection;
-    private readonly IConfiguration       _configuration;
-    private readonly IHostEnvironment     _hostEnvironment;
-    private readonly IMessageBroker       _messageBroker;
-    private readonly IServiceScopeFactory _serviceScopeFactory;
-    private readonly IDateTime            _dateTime;
+    private readonly IConnection              _connection;
+    private readonly IConfiguration           _configuration;
+    private readonly IHostEnvironment         _hostEnvironment;
+    private readonly IMessageBroker           _messageBroker;
+    private readonly IServiceScopeFactory     _serviceScopeFactory;
+    private readonly IGlobalUniqueIdGenerator _globalUniqueIdGenerator;
+    private readonly IDateTime                _dateTime;
+    private readonly ILogger                  _logger;
 
-    public AsyncCommandBroker(
-        IDateTime dateTime,
-        IServiceScopeFactory serviceScopeFactory, 
-        IHostEnvironment hostEnvironment, 
-        IConfiguration configuration,
-        IMessageBroker messageBroker
+    public AsyncCommandBroker(IDateTime dateTime, IServiceScopeFactory serviceScopeFactory,
+        IHostEnvironment hostEnvironment, IConfiguration configuration, IMessageBroker messageBroker,
+        IGlobalUniqueIdGenerator globalUniqueIdGenerator, ILogger logger
     )
     {
-        _dateTime            = dateTime;
-        _serviceScopeFactory = serviceScopeFactory;
-        _hostEnvironment     = hostEnvironment;
-        _configuration       = configuration;
-        _messageBroker       = messageBroker;
+        _dateTime                = dateTime;
+        _serviceScopeFactory     = serviceScopeFactory;
+        _hostEnvironment         = hostEnvironment;
+        _configuration           = configuration;
+        _messageBroker           = messageBroker;
+        _logger                  = logger;
+        _globalUniqueIdGenerator = globalUniqueIdGenerator;
         
         var factory = new ConnectionFactory {
             HostName = configuration.GetInternalRabbitHostName() ,
@@ -80,7 +79,7 @@ public class AsyncCommandBroker : IAsyncCommandBroker
     {
         try
         {
-            _registerAllAsyncCommandQueuesInMessageBroker();
+            _RegisterAllAsyncCommandQueuesInMessageBroker();
             
             var channel = _connection.CreateModel();
             
@@ -93,7 +92,7 @@ public class AsyncCommandBroker : IAsyncCommandBroker
                 
                 var message = Encoding.UTF8.GetString(args.Body.ToArray());
                 
-                _commandOfQueueHandle(channel, args, message, NameOfService, serviceScope.ServiceProvider);
+                _CommandOfQueueHandle(channel, args, message, NameOfService, serviceScope.ServiceProvider);
                 
             };
 
@@ -102,7 +101,14 @@ public class AsyncCommandBroker : IAsyncCommandBroker
         catch (Exception e)
         {
             e.FileLogger(_hostEnvironment, _dateTime);
-            e.CentralExceptionLogger(_hostEnvironment, _messageBroker, _dateTime, NameOfService, NameOfAction);
+            
+            e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, _logger, 
+                NameOfService, NameOfAction
+            );
+            
+            e.CentralExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _messageBroker, _dateTime, 
+                NameOfService, NameOfAction
+            );
         }
     }
 
@@ -114,7 +120,7 @@ public class AsyncCommandBroker : IAsyncCommandBroker
     
     /*---------------------------------------------------------------*/
     
-    private void _commandOfQueueHandle(IModel channel, BasicDeliverEventArgs args, string message, string service, 
+    private void _CommandOfQueueHandle(IModel channel, BasicDeliverEventArgs args, string message, string service, 
         IServiceProvider serviceProvider
     )
     {
@@ -169,7 +175,7 @@ public class AsyncCommandBroker : IAsyncCommandBroker
             var retryAttr =
                 commandBusHandlerTypeMethod.GetCustomAttribute(typeof(WithMaxRetryAttribute)) as WithMaxRetryAttribute;
 
-            if (_isMaxRetryMessage(args, retryAttr))
+            if (_IsMaxRetryMessage(args, retryAttr))
             {
                 if (retryAttr.HasAfterMaxRetryHandle)
                 {
@@ -179,7 +185,9 @@ public class AsyncCommandBroker : IAsyncCommandBroker
                     afterMaxRetryHandlerMethod.Invoke(commandBusHandler, new object[] { message });
                 }
                 
-                _trySendAckMessage(channel, args); //Remove message
+                _TrySendAckMessage(channel, args, service, 
+                    commandBusHandlerType is not null ? commandBusHandlerType.Name : NameOfAction
+                );
             }
             else
             {
@@ -236,7 +244,7 @@ public class AsyncCommandBroker : IAsyncCommandBroker
                 
                 if (commandBusHandlerTypeMethod.GetCustomAttribute(typeof(WithTransactionAttribute)) is WithTransactionAttribute transactionAttr)
                 {
-                    unitOfWork = serviceProvider.GetRequiredService(_getTypeOfCommandUnitOfWork()) as ICoreUnitOfWork;
+                    unitOfWork = serviceProvider.GetRequiredService(_GetTypeOfCommandUnitOfWork()) as ICoreUnitOfWork;
                     
                     unitOfWork.Transaction(transactionAttr.IsolationLevel);
 
@@ -249,11 +257,17 @@ public class AsyncCommandBroker : IAsyncCommandBroker
 
                 #endregion
                 
-                _cleanCache(commandBusHandlerTypeMethod, serviceProvider);
+                _CleanCache(commandBusHandlerTypeMethod, serviceProvider, service, 
+                    commandBusHandlerType is not null ? commandBusHandlerType.Name : NameOfAction
+                );
                 
-                _pushSuccessNotification(connectionId?.ToString(), commandType.BaseType?.Name, resultInvokeCommand);
+                _PushSuccessNotification(connectionId?.ToString(), commandType.BaseType?.Name, resultInvokeCommand, 
+                    service, commandBusHandlerType is not null ? commandBusHandlerType.Name : NameOfAction
+                );
 
-                _trySendAckMessage(channel, args);
+                _TrySendAckMessage(channel, args, service, 
+                    commandBusHandlerType is not null ? commandBusHandlerType.Name : NameOfAction
+                );
             }
         }
         catch (DomainException e)
@@ -264,7 +278,9 @@ public class AsyncCommandBroker : IAsyncCommandBroker
                 Body    = new { }
             };
             
-            _pushValidationNotification(channel, args, unitOfWork, connectionId?.ToString(), payload);
+            _PushValidationNotification(channel, args, unitOfWork, connectionId?.ToString(), payload, service, 
+                commandBusHandlerType is not null ? commandBusHandlerType.Name : NameOfAction
+            );
         }
         catch (UseCaseException e)
         {
@@ -274,23 +290,35 @@ public class AsyncCommandBroker : IAsyncCommandBroker
                 Body    = new { }
             };
             
-            _pushValidationNotification(channel, args, unitOfWork, connectionId?.ToString(), payload);
+            _PushValidationNotification(channel, args, unitOfWork, connectionId?.ToString(), payload, service, 
+                commandBusHandlerType is not null ? commandBusHandlerType.Name : NameOfAction
+            );
         }
         catch (Exception e)
         {
+            #region Logger
+
             e.FileLogger(_hostEnvironment, _dateTime);
             
-            e.CentralExceptionLogger(_hostEnvironment, _messageBroker, _dateTime, service, 
+            e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, _logger, 
+                NameOfService, NameOfAction
+            );
+            
+            e.CentralExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _messageBroker, _dateTime, service, 
                 commandBusHandlerType is not null ? commandBusHandlerType.Name : NameOfAction
             );
 
+            #endregion
+
             unitOfWork?.Rollback();
 
-            _requeueMessageAsDeadLetter(channel, args);
+            _RequeueMessageAsDeadLetter(channel, args, service, 
+                commandBusHandlerType is not null ? commandBusHandlerType.Name : NameOfAction
+            );
         }
     }
     
-    private void _requeueMessageAsDeadLetter(IModel channel, BasicDeliverEventArgs args)
+    private void _RequeueMessageAsDeadLetter(IModel channel, BasicDeliverEventArgs args, string service, string action)
     {
         try
         {
@@ -299,10 +327,18 @@ public class AsyncCommandBroker : IAsyncCommandBroker
         catch (Exception e)
         {
             e.FileLogger(_hostEnvironment, _dateTime);
+            
+            e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, _logger, 
+                NameOfService, NameOfAction
+            );
+            
+            e.CentralExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _messageBroker, _dateTime, service, 
+                action
+            );
         }
     }
     
-    private bool _isMaxRetryMessage(BasicDeliverEventArgs args, WithMaxRetryAttribute maxRetryAttribute)
+    private bool _IsMaxRetryMessage(BasicDeliverEventArgs args, WithMaxRetryAttribute maxRetryAttribute)
     {
         var xDeath = args.BasicProperties.Headers?.FirstOrDefault(header => header.Key.Equals("x-death")).Value;
 
@@ -313,19 +349,27 @@ public class AsyncCommandBroker : IAsyncCommandBroker
         return Convert.ToInt32(countRetry) > maxRetryAttribute?.Count;
     }
     
-    private void _trySendAckMessage(IModel channel, BasicDeliverEventArgs args)
+    private void _TrySendAckMessage(IModel channel, BasicDeliverEventArgs args, string service, string action)
     {
         try
         {
-            channel.BasicAck(args.DeliveryTag, false); //Delete This Message From Queue
+            channel.BasicAck(args.DeliveryTag, false); //Delete this message from queue
         }
         catch (Exception e)
         {
             e.FileLogger(_hostEnvironment, _dateTime);
+
+            e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, _logger, 
+                NameOfService, NameOfAction
+            );
+            
+            e.CentralExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _messageBroker, _dateTime, service, 
+                action
+            );
         }
     }
     
-    private Type _getTypeOfCommandUnitOfWork()
+    private Type _GetTypeOfCommandUnitOfWork()
     {
         var domainTypes = Assembly.Load(new AssemblyName("Karami.Domain")).GetTypes();
 
@@ -334,7 +378,7 @@ public class AsyncCommandBroker : IAsyncCommandBroker
         );
     }
 
-    private void _registerAllAsyncCommandQueuesInMessageBroker()
+    private void _RegisterAllAsyncCommandQueuesInMessageBroker()
     {
         var useCaseTypes = Assembly.Load(new AssemblyName("Karami.UseCase")).GetTypes();
         
@@ -374,7 +418,9 @@ public class AsyncCommandBroker : IAsyncCommandBroker
         }
     }
     
-    private void _cleanCache(MethodInfo eventBusHandlerMethod, IServiceProvider serviceProvider)
+    private void _CleanCache(MethodInfo eventBusHandlerMethod, IServiceProvider serviceProvider, string service, 
+        string action
+    )
     {
         try
         {
@@ -389,10 +435,20 @@ public class AsyncCommandBroker : IAsyncCommandBroker
         catch (Exception e)
         {
             e.FileLogger(_hostEnvironment, _dateTime);
+            
+            e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, _logger, 
+                NameOfService, NameOfAction
+            );
+            
+            e.CentralExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _messageBroker, _dateTime, service, 
+                action
+            );
         }
     }
 
-    private void _pushSuccessNotification(string connectionId, string typeOfCommand, object result)
+    private void _PushSuccessNotification(string connectionId, string typeOfCommand, object result, string service, 
+        string action
+    )
     {
         var hubConnection =
             new HubConnectionBuilder().WithUrl(
@@ -428,6 +484,14 @@ public class AsyncCommandBroker : IAsyncCommandBroker
         catch (Exception e)
         {
             e.FileLogger(_hostEnvironment, _dateTime);
+            
+            e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, _logger, 
+                NameOfService, NameOfAction
+            );
+            
+            e.CentralExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _messageBroker, _dateTime, service, 
+                action
+            );
         }
         finally
         {
@@ -435,8 +499,8 @@ public class AsyncCommandBroker : IAsyncCommandBroker
         }
     }
     
-    private void _pushValidationNotification(IModel channel, BasicDeliverEventArgs args, ICoreUnitOfWork unitOfWork, 
-        string connectionId, Payload payload
+    private void _PushValidationNotification(IModel channel, BasicDeliverEventArgs args, ICoreUnitOfWork unitOfWork, 
+        string connectionId, Payload payload, string service, string action
     )
     {
         unitOfWork?.Rollback();
@@ -455,12 +519,20 @@ public class AsyncCommandBroker : IAsyncCommandBroker
         catch (Exception e)
         {
             e.FileLogger(_hostEnvironment, _dateTime);
+            
+            e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, _logger, 
+                NameOfService, NameOfAction
+            );
+            
+            e.CentralExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _messageBroker, _dateTime, service, 
+                action
+            );
         }
         finally
         {
             hubConnection.DisposeAsync();
         }
 
-        _trySendAckMessage(channel, args);
+        _TrySendAckMessage(channel, args, service, action);
     }
 }

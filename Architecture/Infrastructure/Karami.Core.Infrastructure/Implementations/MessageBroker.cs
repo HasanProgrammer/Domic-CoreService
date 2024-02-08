@@ -9,7 +9,6 @@ using Karami.Core.Infrastructure.Extensions;
 using Karami.Core.UseCase.Attributes;
 using Karami.Core.UseCase.Contracts.Interfaces;
 using Karami.Core.UseCase.DTOs;
-using Karami.Core.UseCase.Extensions;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -17,27 +16,31 @@ using Newtonsoft.Json;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 
+using ILogger = Serilog.ILogger;
+
 namespace Karami.Core.Infrastructure.Implementations;
 
 public class MessageBroker : IMessageBroker
 {
     private static object _lock = new();
     
-    private readonly IConnection          _connection;
-    private readonly IHostEnvironment     _hostEnvironment;
-    private readonly IServiceScopeFactory _serviceScopeFactory;
-    private readonly IDateTime            _dateTime;
+    private readonly IConnection              _connection;
+    private readonly IHostEnvironment         _hostEnvironment;
+    private readonly IServiceScopeFactory     _serviceScopeFactory;
+    private readonly IDateTime                _dateTime;
+    private readonly ILogger                  _logger;
+    private readonly IGlobalUniqueIdGenerator _globalUniqueIdGenerator;
 
-    public MessageBroker(
-        IConfiguration       configuration       ,
-        IHostEnvironment     hostEnvironment     ,
-        IServiceScopeFactory serviceScopeFactory ,
-        IDateTime            dateTime
+    public MessageBroker(IConfiguration configuration, IHostEnvironment hostEnvironment, 
+        IServiceScopeFactory serviceScopeFactory, IDateTime dateTime, ILogger logger, 
+        IGlobalUniqueIdGenerator globalUniqueIdGenerator
     )
     {
-        _hostEnvironment     = hostEnvironment;
-        _serviceScopeFactory = serviceScopeFactory;
-        _dateTime            = dateTime;
+        _hostEnvironment         = hostEnvironment;
+        _serviceScopeFactory     = serviceScopeFactory;
+        _dateTime                = dateTime;
+        _logger                  = logger;
+        _globalUniqueIdGenerator = globalUniqueIdGenerator;
         
         var factory = new ConnectionFactory {
             HostName = configuration.GetExternalRabbitHostName(),
@@ -87,7 +90,7 @@ public class MessageBroker : IMessageBroker
             using IServiceScope serviceScope = _serviceScopeFactory.CreateScope();
 
             var commandUnitOfWork =
-                serviceScope.ServiceProvider.GetRequiredService(_getTypeOfCommandUnitOfWork()) as ICoreCommandUnitOfWork;
+                serviceScope.ServiceProvider.GetRequiredService(_GetTypeOfCommandUnitOfWork()) as ICoreCommandUnitOfWork;
 
             var eventCommandRepository = serviceScope.ServiceProvider.GetRequiredService<IEventCommandRepository>();
 
@@ -101,7 +104,7 @@ public class MessageBroker : IMessageBroker
                 {
                     if (targetEvent.IsActive == IsActive.Active)
                     {
-                        _eventPublishHandler(channel, targetEvent);
+                        _EventPublishHandler(channel, targetEvent);
 
                         var nowDateTime        = DateTime.Now;
                         var nowPersianDateTime = _dateTime.ToPersianShortDate(nowDateTime);
@@ -121,7 +124,14 @@ public class MessageBroker : IMessageBroker
             catch (Exception e)
             {
                 e.FileLogger(_hostEnvironment, _dateTime);
-                e.CentralExceptionLogger(_hostEnvironment, this, _dateTime, NameOfService, NameOfAction);
+                
+                e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, _logger, 
+                    NameOfService, NameOfAction
+                );
+                
+                e.CentralExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, this, _dateTime, NameOfService, 
+                    NameOfAction
+                );
 
                 commandUnitOfWork?.Rollback();
             }
@@ -147,7 +157,7 @@ public class MessageBroker : IMessageBroker
                 
                 var message = Encoding.UTF8.GetString(args.Body.ToArray()).DeSerialize<TMessage>();
 
-                _messageOfQueueHandle(channel, args, message, serviceScope.ServiceProvider);
+                _MessageOfQueueHandle(channel, args, message, serviceScope.ServiceProvider);
                 
             };
             
@@ -156,6 +166,10 @@ public class MessageBroker : IMessageBroker
         catch (Exception e)
         {
             e.FileLogger(_hostEnvironment, _dateTime);
+            
+            e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, _logger, 
+                NameOfService, NameOfAction
+            );
         }
     }
 
@@ -174,7 +188,7 @@ public class MessageBroker : IMessageBroker
                 
                 var @event = Encoding.UTF8.GetString(args.Body.ToArray()).DeSerialize<Event>();
                 
-                _eventOfQueueHandle(channel, args, @event, NameOfService, serviceScope.ServiceProvider);
+                _EventOfQueueHandle(channel, args, @event, NameOfService, serviceScope.ServiceProvider);
                 
             };
 
@@ -183,6 +197,10 @@ public class MessageBroker : IMessageBroker
         catch (Exception e)
         {
             e.FileLogger(_hostEnvironment, _dateTime);
+            
+            e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, _logger, 
+                NameOfService, NameOfAction
+            );
         }
     }
 
@@ -194,7 +212,7 @@ public class MessageBroker : IMessageBroker
     
     /*---------------------------------------------------------------*/
 
-    private void _eventPublishHandler(IModel channel, Event @event)
+    private void _EventPublishHandler(IModel channel, Event @event)
     {
         var nameOfEvent = @event.Type;
 
@@ -226,7 +244,7 @@ public class MessageBroker : IMessageBroker
         }
     }
 
-    private void _messageOfQueueHandle<TMessage>(IModel channel, BasicDeliverEventArgs args, TMessage message,
+    private void _MessageOfQueueHandle<TMessage>(IModel channel, BasicDeliverEventArgs args, TMessage message,
         IServiceProvider serviceProvider
     ) where TMessage : class
     {
@@ -243,7 +261,7 @@ public class MessageBroker : IMessageBroker
             var retryAttr =
                 messageBusHandlerMethod.GetCustomAttribute(typeof(WithMaxRetryAttribute)) as WithMaxRetryAttribute;
 
-            if (_isMaxRetryMessage(args, retryAttr))
+            if (_IsMaxRetryMessage(args, retryAttr))
             {
                 if (retryAttr.HasAfterMaxRetryHandle)
                 {
@@ -253,13 +271,13 @@ public class MessageBroker : IMessageBroker
                     afterMaxRetryHandlerMethod.Invoke(messageBusHandler, new object[] { message });
                 }
                 
-                _trySendAckMessage(channel, args); //Remove message
+                _TrySendAckMessage(channel, args); //Remove message
             }
             else
             {
                 if (messageBusHandlerMethod.GetCustomAttribute(typeof(WithTransactionAttribute)) is WithTransactionAttribute transactionAttr)
                 {
-                    unitOfWork = serviceProvider.GetRequiredService(_getTypeOfUnitOfWork()) as ICoreUnitOfWork;
+                    unitOfWork = serviceProvider.GetRequiredService(_GetTypeOfUnitOfWork()) as ICoreUnitOfWork;
                     
                     unitOfWork.Transaction(transactionAttr.IsolationLevel);
 
@@ -270,22 +288,26 @@ public class MessageBroker : IMessageBroker
                 else
                     messageBusHandlerMethod.Invoke(messageBusHandler, new object[] { message });
 
-                _cleanCache(messageBusHandlerMethod, serviceProvider);
+                _CleanCache(messageBusHandlerMethod, serviceProvider);
             
-                _trySendAckMessage(channel, args); //Consume Message Of Queue & Delete This Message From Queue
+                _TrySendAckMessage(channel, args); //Consume Message Of Queue & Delete This Message From Queue
             }
         }
         catch (Exception e)
         {
             e.FileLogger(_hostEnvironment, _dateTime);
             
+            e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, _logger, 
+                NameOfService, NameOfAction
+            );
+            
             unitOfWork?.Rollback();
 
-            _requeueMessageAsDeadLetter(channel, args);
+            _RequeueMessageAsDeadLetter(channel, args);
         }
     }
     
-    private void _eventOfQueueHandle(IModel channel, BasicDeliverEventArgs args, Event @event, string service,
+    private void _EventOfQueueHandle(IModel channel, BasicDeliverEventArgs args, Event @event, string service,
         IServiceProvider serviceProvider
     )
     {
@@ -323,7 +345,7 @@ public class MessageBroker : IMessageBroker
                 var retryAttr =
                     eventBusHandlerMethod.GetCustomAttribute(typeof(WithMaxRetryAttribute)) as WithMaxRetryAttribute;
 
-                if (_isMaxRetryMessage(args, retryAttr))
+                if (_IsMaxRetryMessage(args, retryAttr))
                 {
                     if (retryAttr.HasAfterMaxRetryHandle)
                     {
@@ -333,13 +355,13 @@ public class MessageBroker : IMessageBroker
                         afterMaxRetryHandlerMethod.Invoke(eventBusHandler, new object[] { payload });
                     }
                     
-                    _trySendAckMessage(channel, args); //Remove message
+                    _TrySendAckMessage(channel, args); //Remove message
                 }
                 else
                 {
                     if (eventBusHandlerMethod.GetCustomAttribute(typeof(WithTransactionAttribute)) is WithTransactionAttribute transactionAttr)
                     {
-                        unitOfWork = serviceProvider.GetRequiredService(_getTypeOfUnitOfWork()) as ICoreUnitOfWork;
+                        unitOfWork = serviceProvider.GetRequiredService(_GetTypeOfUnitOfWork()) as ICoreUnitOfWork;
                     
                         unitOfWork.Transaction(transactionAttr.IsolationLevel);
 
@@ -350,29 +372,33 @@ public class MessageBroker : IMessageBroker
                     else
                         eventBusHandlerMethod.Invoke(eventBusHandler, new object[] { payload });
 
-                    _cleanCache(eventBusHandlerMethod, serviceProvider);
+                    _CleanCache(eventBusHandlerMethod, serviceProvider);
                     
-                    _trySendAckMessage(channel, args); //Consume Message Of Queue & Delete This Message From Queue
+                    _TrySendAckMessage(channel, args); //Consume Message Of Queue & Delete This Message From Queue
                 }
             }
             else
-                _trySendAckMessage(channel, args);
+                _TrySendAckMessage(channel, args);
         }
         catch (Exception e)
         {
             e.FileLogger(_hostEnvironment, _dateTime);
             
-            e.CentralExceptionLogger(_hostEnvironment, this, _dateTime, service, 
+            e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, _logger, 
+                NameOfService, NameOfAction
+            );
+            
+            e.CentralExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, this, _dateTime, service, 
                 eventBusHandlerType is not null ? eventBusHandlerType.Name : NameOfAction
             );
 
             unitOfWork?.Rollback();
 
-            _requeueMessageAsDeadLetter(channel, args);
+            _RequeueMessageAsDeadLetter(channel, args);
         }
     }
     
-    private void _requeueMessageAsDeadLetter(IModel channel, BasicDeliverEventArgs args)
+    private void _RequeueMessageAsDeadLetter(IModel channel, BasicDeliverEventArgs args)
     {
         try
         {
@@ -381,10 +407,14 @@ public class MessageBroker : IMessageBroker
         catch (Exception e)
         {
             e.FileLogger(_hostEnvironment, _dateTime);
+            
+            e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, _logger, 
+                NameOfService, NameOfAction
+            );
         }
     }
     
-    private bool _isMaxRetryMessage(BasicDeliverEventArgs args, WithMaxRetryAttribute maxRetryAttribute)
+    private bool _IsMaxRetryMessage(BasicDeliverEventArgs args, WithMaxRetryAttribute maxRetryAttribute)
     {
         var xDeath = args.BasicProperties.Headers?.FirstOrDefault(header => header.Key.Equals("x-death")).Value;
 
@@ -395,7 +425,7 @@ public class MessageBroker : IMessageBroker
         return Convert.ToInt32(countRetry) > maxRetryAttribute?.Count;
     }
     
-    private void _trySendAckMessage(IModel channel, BasicDeliverEventArgs args)
+    private void _TrySendAckMessage(IModel channel, BasicDeliverEventArgs args)
     {
         try
         {
@@ -404,10 +434,14 @@ public class MessageBroker : IMessageBroker
         catch (Exception e)
         {
             e.FileLogger(_hostEnvironment, _dateTime);
+            
+            e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, _logger, 
+                NameOfService, NameOfAction
+            );
         }
     }
     
-    private Type _getTypeOfUnitOfWork()
+    private Type _GetTypeOfUnitOfWork()
     {
         var domainTypes = Assembly.Load(new AssemblyName("Karami.Domain")).GetTypes();
 
@@ -418,7 +452,7 @@ public class MessageBroker : IMessageBroker
         );
     }
     
-    private Type _getTypeOfCommandUnitOfWork()
+    private Type _GetTypeOfCommandUnitOfWork()
     {
         var domainTypes = Assembly.Load(new AssemblyName("Karami.Domain")).GetTypes();
 
@@ -427,7 +461,7 @@ public class MessageBroker : IMessageBroker
         );
     }
     
-    private void _cleanCache(MethodInfo eventBusHandlerMethod, IServiceProvider serviceProvider)
+    private void _CleanCache(MethodInfo eventBusHandlerMethod, IServiceProvider serviceProvider)
     {
         try
         {
@@ -442,6 +476,10 @@ public class MessageBroker : IMessageBroker
         catch (Exception e)
         {
             e.FileLogger(_hostEnvironment, _dateTime);
+            
+            e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, _logger, 
+                NameOfService, NameOfAction
+            );
         }
     }
 }

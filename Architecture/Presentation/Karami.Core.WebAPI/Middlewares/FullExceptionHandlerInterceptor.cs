@@ -5,9 +5,9 @@ using Grpc.Core.Interceptors;
 using Karami.Core.Common.ClassExtensions;
 using Karami.Core.Domain.Contracts.Interfaces;
 using Karami.Core.Domain.Exceptions;
+using Karami.Core.Infrastructure.Extensions;
 using Karami.Core.UseCase.Contracts.Interfaces;
 using Karami.Core.UseCase.Exceptions;
-using Karami.Core.UseCase.Extensions;
 using Karami.Core.WebAPI.Extensions;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -23,14 +23,15 @@ namespace Karami.Core.WebAPI.Middlewares;
 /// </summary>
 public class FullExceptionHandlerInterceptor : Interceptor
 {
-    private readonly Type             _icommandUnitOfWorkType;
+    private readonly Type             _iCommandUnitOfWorkType;
     private readonly IConfiguration   _configuration;
     private readonly IHostEnvironment _hostEnvironment;
 
-    private IMessageBroker         _messageBroker;
-    private IDateTime              _dateTime;
-    private ILogger                _logger;
-    private ICoreCommandUnitOfWork _commandUnitOfWork;
+    private IMessageBroker           _messageBroker;
+    private IDateTime                _dateTime;
+    private ILogger                  _logger;
+    private ICoreCommandUnitOfWork   _commandUnitOfWork;
+    private IGlobalUniqueIdGenerator _globalUniqueIdGenerator;
     
     /// <summary>
     /// 
@@ -38,14 +39,14 @@ public class FullExceptionHandlerInterceptor : Interceptor
     /// <param name="configuration"></param>
     /// <param name="hostEnvironment"></param>
     /// <param name="service"></param>
-    /// <param name="icommandUnitOfWorkType"></param>
+    /// <param name="iCommandUnitOfWorkType"></param>
     public FullExceptionHandlerInterceptor(IConfiguration configuration, IHostEnvironment hostEnvironment, 
-        Type icommandUnitOfWorkType
+        Type iCommandUnitOfWorkType
     )
     {
         _configuration          = configuration;
         _hostEnvironment        = hostEnvironment;
-        _icommandUnitOfWorkType = icommandUnitOfWorkType;
+        _iCommandUnitOfWorkType = iCommandUnitOfWorkType;
     }
     
     /// <summary>
@@ -66,22 +67,26 @@ public class FullExceptionHandlerInterceptor : Interceptor
         
         try
         {
-            if(_icommandUnitOfWorkType is not null)
+            if(_iCommandUnitOfWorkType is not null)
                 _commandUnitOfWork =
                     context.GetHttpContext()
                            .RequestServices
-                           .GetRequiredService(_icommandUnitOfWorkType) as ICoreCommandUnitOfWork;
+                           .GetRequiredService(_iCommandUnitOfWorkType) as ICoreCommandUnitOfWork;
             
-            _dateTime      = context.GetHttpContext().RequestServices.GetRequiredService<IDateTime>();
-            _logger        = context.GetHttpContext().RequestServices.GetRequiredService<ILogger>();
-            _messageBroker = context.GetHttpContext().RequestServices.GetRequiredService<IMessageBroker>();
+            _dateTime                = context.GetHttpContext().RequestServices.GetRequiredService<IDateTime>();
+            _logger                  = context.GetHttpContext().RequestServices.GetRequiredService<ILogger>();
+            _messageBroker           = context.GetHttpContext().RequestServices.GetRequiredService<IMessageBroker>();
+            _globalUniqueIdGenerator = context.GetHttpContext().RequestServices.GetRequiredService<IGlobalUniqueIdGenerator>();
             
-            context.CentralRequestLogger(_messageBroker, _dateTime, _hostEnvironment, serviceName, request);
+            context.CentralRequestLoggerAsync(_hostEnvironment, _globalUniqueIdGenerator, _messageBroker, _dateTime, 
+                _logger, serviceName, request, context.CancellationToken
+            );
+            
             context.CheckLicense(_configuration);
             
             return await continuation(request, context);
         }
-        catch (DomainException e) //For Command Side
+        catch (DomainException e) //For command side
         {
             _commandUnitOfWork.Rollback();
             
@@ -93,7 +98,7 @@ public class FullExceptionHandlerInterceptor : Interceptor
 
             throw new RpcException(new Status(StatusCode.Internal, JsonConvert.SerializeObject(Response)));
         }
-        catch (UseCaseException e) //For Command Side
+        catch (UseCaseException e) //For command side
         {
             _commandUnitOfWork.Rollback();
             
@@ -110,8 +115,14 @@ public class FullExceptionHandlerInterceptor : Interceptor
             #region Logger
 
             e.FileLogger(_hostEnvironment, _dateTime);
-            e.ElasticStackExceptionLogger(_hostEnvironment, _dateTime, _logger, serviceName, context.Method);
-            e.CentralExceptionLogger(_hostEnvironment, _messageBroker, _dateTime, serviceName, context.Method);
+            
+            e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, _logger, serviceName, 
+                context.Method
+            );
+            
+            e.CentralExceptionLoggerAsync(_hostEnvironment, _globalUniqueIdGenerator, _messageBroker, _dateTime, 
+                serviceName, context.Method, context.CancellationToken
+            );
 
             #endregion
          
