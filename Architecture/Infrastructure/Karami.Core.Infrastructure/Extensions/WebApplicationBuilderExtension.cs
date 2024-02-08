@@ -56,9 +56,9 @@ public static class WebApplicationBuilderExtension
     /// <param name="builder"></param>
     public static void RegisterELK(this WebApplicationBuilder builder)
     {
-        var elasticUri      = Environment.GetEnvironmentVariable("ElasticUri");
-        var elasticUsername = Environment.GetEnvironmentVariable("ElasticUsername");
-        var elasticPassword = Environment.GetEnvironmentVariable("ElasticPassword");
+        var elasticUri      = Environment.GetEnvironmentVariable("Elastic-Host");
+        var elasticUsername = Environment.GetEnvironmentVariable("Elastic-Username");
+        var elasticPassword = Environment.GetEnvironmentVariable("Elastic-Password");
         
         var environment = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT");
         
