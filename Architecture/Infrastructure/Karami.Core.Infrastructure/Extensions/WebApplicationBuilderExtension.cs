@@ -8,7 +8,6 @@ using Karami.Core.Common.ClassConsts;
 using Karami.Core.Common.ClassExceptions;
 using Karami.Core.Common.ClassExtensions;
 using Karami.Core.Domain.Contracts.Interfaces;
-using Karami.Core.Domain.Implementations;
 using Karami.Core.Grpc.Service;
 using Karami.Core.Infrastructure.Attributes;
 using Karami.Core.Infrastructure.Implementations;

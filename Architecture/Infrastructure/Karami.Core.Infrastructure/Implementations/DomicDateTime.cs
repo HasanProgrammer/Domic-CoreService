@@ -1,7 +1,7 @@
 ﻿using Karami.Core.Domain.Contracts.Interfaces;
 using MD.PersianDateTime.Standard;
 
-namespace Karami.Core.Domain.Implementations;
+namespace Karami.Core.Infrastructure.Implementations;
 
 public class DomicDateTime : IDateTime
 {

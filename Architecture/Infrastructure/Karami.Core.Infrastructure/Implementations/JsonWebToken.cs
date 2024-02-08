@@ -5,7 +5,7 @@ using Karami.Core.UseCase.Contracts.Interfaces;
 using Karami.Core.UseCase.DTOs;
 using Microsoft.IdentityModel.Tokens;
 
-namespace Karami.Core.Domain.Implementations;
+namespace Karami.Core.Infrastructure.Implementations;
 
 public class JsonWebToken : IJsonWebToken
 {

@@ -17,9 +17,7 @@ using Newtonsoft.Json;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 
-using Environment = Karami.Core.Common.ClassConsts.Environment;
-
-namespace Karami.Core.Domain.Implementations;
+namespace Karami.Core.Infrastructure.Implementations;
 
 public class MessageBroker : IMessageBroker
 {
@@ -28,18 +26,18 @@ public class MessageBroker : IMessageBroker
     private readonly IConnection          _connection;
     private readonly IHostEnvironment     _hostEnvironment;
     private readonly IServiceScopeFactory _serviceScopeFactory;
-    private readonly IDateTime      _dateTime;
+    private readonly IDateTime            _dateTime;
 
     public MessageBroker(
         IConfiguration       configuration       ,
         IHostEnvironment     hostEnvironment     ,
         IServiceScopeFactory serviceScopeFactory ,
-        IDateTime      dateTime
+        IDateTime            dateTime
     )
     {
         _hostEnvironment     = hostEnvironment;
         _serviceScopeFactory = serviceScopeFactory;
-        _dateTime      = dateTime;
+        _dateTime            = dateTime;
         
         var factory = new ConnectionFactory {
             HostName = configuration.GetExternalRabbitHostName(),

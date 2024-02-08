@@ -9,7 +9,7 @@ using Microsoft.Extensions.Hosting;
 
 using Environment = Karami.Core.Common.ClassConsts.Environment;
 
-namespace Karami.Core.Domain.Implementations;
+namespace Karami.Core.Infrastructure.Implementations;
 
 //DI
 public partial class Mediator : IMediator

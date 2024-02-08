@@ -21,7 +21,7 @@ using RabbitMQ.Client.Events;
 using Host        = Karami.Core.Common.ClassHelpers.Host;
 using Environment = Karami.Core.Common.ClassConsts.Environment;
 
-namespace Karami.Core.Domain.Implementations;
+namespace Karami.Core.Infrastructure.Implementations;
 
 public class AsyncCommandBroker : IAsyncCommandBroker
 {

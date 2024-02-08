@@ -5,7 +5,7 @@ using Karami.Core.UseCase.Attributes;
 using Karami.Core.UseCase.Contracts.Interfaces;
 using Microsoft.Extensions.DependencyInjection;
 
-namespace Karami.Core.Domain.Implementations;
+namespace Karami.Core.Infrastructure.Implementations;
 
 public class CacheService : ICacheService
 {

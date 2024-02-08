@@ -1,7 +1,7 @@
 ﻿using Karami.Core.Domain.Contracts.Interfaces;
 using Newtonsoft.Json;
 
-namespace Karami.Core.Domain.Implementations;
+namespace Karami.Core.Infrastructure.Implementations;
 
 public class Serializer : ISerializer
 {
