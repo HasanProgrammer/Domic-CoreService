@@ -271,7 +271,7 @@ public class MessageBroker : IMessageBroker
                     afterMaxRetryHandlerMethod.Invoke(messageBusHandler, new object[] { message });
                 }
                 
-                _TrySendAckMessage(channel, args); //Remove message
+                _TrySendAckMessage(channel, args);
             }
             else
             {
@@ -290,7 +290,7 @@ public class MessageBroker : IMessageBroker
 
                 _CleanCache(messageBusHandlerMethod, serviceProvider);
             
-                _TrySendAckMessage(channel, args); //Consume Message Of Queue & Delete This Message From Queue
+                _TrySendAckMessage(channel, args);
             }
         }
         catch (Exception e)
@@ -429,7 +429,7 @@ public class MessageBroker : IMessageBroker
     {
         try
         {
-            channel.BasicAck(args.DeliveryTag, false); //Delete This Message From Queue
+            channel.BasicAck(args.DeliveryTag, false); //Delete this message from queue
         }
         catch (Exception e)
         {

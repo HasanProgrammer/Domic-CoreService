@@ -1,4 +1,5 @@
 ﻿using Karami.Core.Domain.Constants;
+using Karami.Core.Domain.Contracts.Interfaces;
 using Karami.Core.Domain.Entities;
 using Karami.Core.Domain.Enumerations;
 using Karami.Core.UseCase.Contracts.Interfaces;
@@ -8,16 +9,21 @@ namespace Karami.Core.Infrastructure.Implementations;
 
 public class Logger : ILogger
 {
-    private readonly IMessageBroker _messageBroker;
+    private readonly IMessageBroker           _messageBroker;
+    private readonly IGlobalUniqueIdGenerator _globalUniqueIdGenerator;
 
-    public Logger(IMessageBroker messageBroker) => _messageBroker = messageBroker;
+    public Logger(IMessageBroker messageBroker, IGlobalUniqueIdGenerator globalUniqueIdGenerator)
+    {
+        _messageBroker           = messageBroker;
+        _globalUniqueIdGenerator = globalUniqueIdGenerator;
+    }
 
     public void Record(string uniqueKey, string serviceName, object item)
     {
         var newLog = new Log {
-            Id          = Guid.NewGuid().ToString(),
-            UniqueKey   = uniqueKey,
-            ServiceName = serviceName, 
+            Id          = _globalUniqueIdGenerator.GetRandom(6),
+            UniqueKey   = uniqueKey   ,
+            ServiceName = serviceName , 
             Item        = item
         };
         
@@ -35,24 +41,20 @@ public class Logger : ILogger
         CancellationToken cancellationToken = default
     )
     {
-        return Task.Run(() => {
-
-            var newLog = new Log {
-                Id          = Guid.NewGuid().ToString(),
-                UniqueKey   = uniqueKey,
-                ServiceName = serviceName, 
-                Item        = item
-            };
+        var newLog = new Log {
+            Id          = _globalUniqueIdGenerator.GetRandom(6),
+            UniqueKey   = uniqueKey   ,
+            ServiceName = serviceName , 
+            Item        = item
+        };
         
-            var messageBrokerDto = new MessageBrokerDto<Log> {
-                Message      = newLog,
-                ExchangeType = Exchange.Direct,
-                Exchange     = Broker.Log_Exchange,
-                Route        = Broker.StateTracker_Log_Route
-            };
+        var messageBrokerDto = new MessageBrokerDto<Log> {
+            Message      = newLog,
+            ExchangeType = Exchange.Direct,
+            Exchange     = Broker.Log_Exchange,
+            Route        = Broker.StateTracker_Log_Route
+        };
         
-            _messageBroker.Publish(messageBrokerDto);
-            
-        }, cancellationToken);
+        return Task.Run(() => _messageBroker.Publish(messageBrokerDto), cancellationToken);
     }
 }

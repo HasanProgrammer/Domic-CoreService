@@ -5,30 +5,17 @@ using Karami.Core.Infrastructure.Extensions;
 using Karami.Core.UseCase.Attributes;
 using Karami.Core.UseCase.Contracts.Interfaces;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
-
-using Environment = Karami.Core.Common.ClassConsts.Environment;
 
 namespace Karami.Core.Infrastructure.Implementations;
 
-//DI
-public partial class Mediator : IMediator
+public class Mediator
 {
     private static object _lock = new();
     
     private readonly IServiceProvider _serviceProvider;
-    private readonly IHostEnvironment _hostEnvironment;
 
-    public Mediator(IServiceProvider serviceProvider, IHostEnvironment hostEnvironment)
-    {
-        _serviceProvider = serviceProvider;
-        _hostEnvironment = hostEnvironment;
-    }
-}
-
-//Command & Query
-public partial class Mediator
-{
+    public Mediator(IServiceProvider serviceProvider) => _serviceProvider = serviceProvider;
+    
     public TResult Dispatch<TResult>(ICommand<TResult> command)
     {
         Type type        = typeof(ICommandHandler<,>);
@@ -45,15 +32,15 @@ public partial class Mediator
         {
             lock (_lock)
             {
-                _validation(commandHandler, commandHandlerType, commandHandlerMethod, command);
+                _Validation(commandHandler, commandHandlerType, commandHandlerMethod, command);
                 
-                return _invokeHandleMethod(commandHandler, commandHandlerMethod, command);
+                return _InvokeHandleMethod(commandHandler, commandHandlerMethod, command);
             }
         }
         
-        _validation(commandHandler, commandHandlerType, commandHandlerMethod, command);
+        _Validation(commandHandler, commandHandlerType, commandHandlerMethod, command);
         
-        return _invokeHandleMethod(commandHandler, commandHandlerMethod, command);
+        return _InvokeHandleMethod(commandHandler, commandHandlerMethod, command);
     }
 
     public void DispatchAsFireAndForget(IAsyncCommand command)
@@ -111,7 +98,7 @@ public partial class Mediator
 
         if (commandHandlerMethod.GetCustomAttribute(typeof(WithTransactionAttribute)) is WithTransactionAttribute transactionAttr)
         {
-            var unitOfWork = _serviceProvider.GetRequiredService(_getTypeOfUnitOfWork()) as ICoreCommandUnitOfWork;
+            var unitOfWork = _serviceProvider.GetRequiredService(_GetTypeOfUnitOfWork()) as ICoreCommandUnitOfWork;
             
             unitOfWork.Transaction(transactionAttr.IsolationLevel);
             
@@ -119,7 +106,7 @@ public partial class Mediator
             
             unitOfWork.Commit();
 
-            _cleanCache(commandHandlerMethod);
+            _CleanCache(commandHandlerMethod);
 
             return result;
         }
@@ -129,21 +116,17 @@ public partial class Mediator
         var resultWithoutTransaction =
             await (Task<TResult>)commandHandlerMethod.Invoke(commandHandler, new object[]{ command , cancellationToken });
 
-        _cleanCache(commandHandlerMethod);
+        _CleanCache(commandHandlerMethod);
         
         return resultWithoutTransaction;
     }
 
     public async Task DispatchAsFireAndForgetAsync(IAsyncCommand command, CancellationToken cancellationToken)
     {
-        await Task.Run(() => {
-            
-            var asyncCommandBroker =
-                _serviceProvider.GetRequiredService(typeof(IAsyncCommandBroker)) as IAsyncCommandBroker;
+        var asyncCommandBroker =
+            _serviceProvider.GetRequiredService(typeof(IAsyncCommandBroker)) as IAsyncCommandBroker;
         
-            asyncCommandBroker.Publish(command);
-            
-        }, cancellationToken);
+        await Task.Run(() => asyncCommandBroker.Publish(command), cancellationToken);
     }
     
     public TResult Dispatch<TResult>(IQuery<TResult> query)
@@ -294,12 +277,10 @@ public partial class Mediator
 
         return await (Task<TResult>)handlerResult;
     }
-}
-
-//Private functions
-public partial class Mediator
-{
-    private Type _getTypeOfUnitOfWork()
+    
+    /*---------------------------------------------------------------*/
+    
+    private Type _GetTypeOfUnitOfWork()
     {
         var domainTypes = Assembly.Load(new AssemblyName("Karami.Domain")).GetTypes();
 
@@ -308,7 +289,7 @@ public partial class Mediator
         );
     }
     
-    private TResult _invokeHandleMethod<TResult>(object commandHandler, MethodInfo commandHandlerMethod,
+    private TResult _InvokeHandleMethod<TResult>(object commandHandler, MethodInfo commandHandlerMethod,
         ICommand<TResult> command
     )
     {
@@ -316,7 +297,7 @@ public partial class Mediator
         
         if(commandHandlerMethod.GetCustomAttribute(typeof(WithTransactionAttribute)) is WithTransactionAttribute transactionAttr)
         {
-            var unitOfWork = _serviceProvider.GetRequiredService(_getTypeOfUnitOfWork()) as ICoreCommandUnitOfWork;
+            var unitOfWork = _serviceProvider.GetRequiredService(_GetTypeOfUnitOfWork()) as ICoreCommandUnitOfWork;
             
             unitOfWork.Transaction(transactionAttr.IsolationLevel);
             
@@ -324,7 +305,7 @@ public partial class Mediator
             
             unitOfWork.Commit();
                     
-            _cleanCache(commandHandlerMethod);
+            _CleanCache(commandHandlerMethod);
 
             return result;
         }
@@ -334,12 +315,12 @@ public partial class Mediator
         var resultWithoutTransaction =
             (TResult)commandHandlerMethod.Invoke(commandHandler, new object[]{ command });
             
-        _cleanCache(commandHandlerMethod);
+        _CleanCache(commandHandlerMethod);
         
         return resultWithoutTransaction;
     }
 
-    private void _validation<TResult>(object commandHandler, Type commandHandlerType,
+    private void _Validation<TResult>(object commandHandler, Type commandHandlerType,
         MethodInfo commandHandlerMethod, ICommand<TResult> command
     )
     {
@@ -369,7 +350,7 @@ public partial class Mediator
         }
     }
 
-    private void _cleanCache(MethodInfo commandHandlerMethod)
+    private void _CleanCache(MethodInfo commandHandlerMethod)
     {
         if (commandHandlerMethod.GetCustomAttribute(typeof(WithCleanCacheAttribute)) is WithCleanCacheAttribute cacheAttribute)
         {
