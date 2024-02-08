@@ -39,7 +39,7 @@ public class EfOutBoxPublishEventInterceptor<TIdentity> : SaveChangesInterceptor
 
                 outBoxEvents.AddRange(
                     domainEvents.Select(@event => new Event {
-                        Id      = _globalUniqueIdGenerator.GetRandom(),
+                        Id      = _globalUniqueIdGenerator.GetRandom(6),
                         //Target Service => ( WebAPI ) project => ( Configs ) folder => Service.json
                         Service = _configuration.GetValue<string>("NameOfService"),
                         Table   = $"{domainEntity.GetType().Name}Table",
@@ -80,7 +80,7 @@ public class EfOutBoxPublishEventInterceptor<TIdentity> : SaveChangesInterceptor
 
                 outBoxEvents.AddRange(
                     domainEvents.Select(@event => new Event {
-                        Id      = _globalUniqueIdGenerator.GetRandom(),
+                        Id      = _globalUniqueIdGenerator.GetRandom(6),
                         //Target Service => ( WebAPI ) project => ( Configs ) folder => Service.json
                         Service = _configuration.GetValue<string>("NameOfService"),
                         Table   = $"{domainEntity.GetType().Name}Table",
