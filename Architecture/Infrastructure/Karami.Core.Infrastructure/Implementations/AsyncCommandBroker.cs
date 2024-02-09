@@ -17,8 +17,6 @@ using Newtonsoft.Json;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 
-using ILogger = Serilog.ILogger;
-
 namespace Karami.Core.Infrastructure.Implementations;
 
 public class AsyncCommandBroker : IAsyncCommandBroker
@@ -30,11 +28,10 @@ public class AsyncCommandBroker : IAsyncCommandBroker
     private readonly IServiceScopeFactory     _serviceScopeFactory;
     private readonly IGlobalUniqueIdGenerator _globalUniqueIdGenerator;
     private readonly IDateTime                _dateTime;
-    private readonly ILogger                  _logger;
 
     public AsyncCommandBroker(IDateTime dateTime, IServiceScopeFactory serviceScopeFactory,
-        IHostEnvironment hostEnvironment, IConfiguration configuration, IMessageBroker messageBroker,
-        IGlobalUniqueIdGenerator globalUniqueIdGenerator, ILogger logger
+        IHostEnvironment hostEnvironment, IConfiguration configuration, IMessageBroker messageBroker, 
+        IGlobalUniqueIdGenerator globalUniqueIdGenerator
     )
     {
         _dateTime                = dateTime;
@@ -42,7 +39,6 @@ public class AsyncCommandBroker : IAsyncCommandBroker
         _hostEnvironment         = hostEnvironment;
         _configuration           = configuration;
         _messageBroker           = messageBroker;
-        _logger                  = logger;
         _globalUniqueIdGenerator = globalUniqueIdGenerator;
         
         var factory = new ConnectionFactory {

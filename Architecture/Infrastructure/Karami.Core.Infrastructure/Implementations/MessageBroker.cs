@@ -16,8 +16,6 @@ using Newtonsoft.Json;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 
-using ILogger = Serilog.ILogger;
-
 namespace Karami.Core.Infrastructure.Implementations;
 
 public class MessageBroker : IMessageBroker
@@ -28,18 +26,15 @@ public class MessageBroker : IMessageBroker
     private readonly IHostEnvironment         _hostEnvironment;
     private readonly IServiceScopeFactory     _serviceScopeFactory;
     private readonly IDateTime                _dateTime;
-    private readonly ILogger                  _logger;
     private readonly IGlobalUniqueIdGenerator _globalUniqueIdGenerator;
 
     public MessageBroker(IConfiguration configuration, IHostEnvironment hostEnvironment, 
-        IServiceScopeFactory serviceScopeFactory, IDateTime dateTime, ILogger logger, 
-        IGlobalUniqueIdGenerator globalUniqueIdGenerator
+        IServiceScopeFactory serviceScopeFactory, IDateTime dateTime, IGlobalUniqueIdGenerator globalUniqueIdGenerator
     )
     {
         _hostEnvironment         = hostEnvironment;
         _serviceScopeFactory     = serviceScopeFactory;
         _dateTime                = dateTime;
-        _logger                  = logger;
         _globalUniqueIdGenerator = globalUniqueIdGenerator;
         
         var factory = new ConnectionFactory {
