@@ -8,7 +8,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Karami.Core.Infrastructure.Implementations;
 
-public class Mediator
+public class Mediator : IMediator
 {
     private static object _lock = new();
     
