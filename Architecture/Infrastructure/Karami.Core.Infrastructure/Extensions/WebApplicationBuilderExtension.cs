@@ -56,6 +56,8 @@ public static class WebApplicationBuilderExtension
     /// <param name="builder"></param>
     public static void RegisterELK(this WebApplicationBuilder builder)
     {
+        builder.Services.AddScoped<Serilog.ILogger>();
+        
         var elasticUri      = Environment.GetEnvironmentVariable("Elastic-Host");
         var elasticUsername = Environment.GetEnvironmentVariable("Elastic-Username");
         var elasticPassword = Environment.GetEnvironmentVariable("Elastic-Password");
