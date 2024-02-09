@@ -8,8 +8,6 @@ using Karami.Core.UseCase.DTOs;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Hosting;
 
-using ILogger = Serilog.ILogger;
-
 namespace Karami.Core.WebAPI.Extensions;
 
 public static class HttpContextExtension
@@ -112,7 +110,7 @@ public static class HttpContextExtension
                 
         messageBroker.Publish<SystemRequest>(dto);
     }
-    
+
     /// <summary>
     /// 
     /// </summary>
@@ -121,12 +119,11 @@ public static class HttpContextExtension
     /// <param name="globalUniqueIdGenerator"></param>
     /// <param name="messageBroker"></param>
     /// <param name="dateTime"></param>
-    /// <param name="logger"></param>
     /// <param name="serviceName"></param>
     /// <param name="cancellationToken"></param>
     public static async Task CentralRequestLoggerAsync(this HttpContext context, IHostEnvironment hostEnvironment, 
         IGlobalUniqueIdGenerator globalUniqueIdGenerator, IMessageBroker messageBroker, IDateTime dateTime, 
-        ILogger logger, string serviceName, CancellationToken cancellationToken
+        string serviceName, CancellationToken cancellationToken
     )
     {
         try

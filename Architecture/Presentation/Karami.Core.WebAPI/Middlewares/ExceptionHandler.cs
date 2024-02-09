@@ -15,13 +15,10 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 
-using ILogger = Serilog.ILogger;
-
 namespace Karami.Core.WebAPI.Middlewares;
 
 public class ExceptionHandler
 {
-    private readonly ILogger         _logger;
     private readonly RequestDelegate _next;
     
     private IConfiguration           _configuration;
@@ -34,11 +31,7 @@ public class ExceptionHandler
     /// 
     /// </summary>
     /// <param name="next"></param>
-    public ExceptionHandler(RequestDelegate next, ILogger logger)
-    {
-        _next   = next;
-        _logger = logger;
-    }
+    public ExceptionHandler(RequestDelegate next) => _next = next;
 
     public async Task Invoke(HttpContext context)
     {
@@ -52,8 +45,8 @@ public class ExceptionHandler
             _messageBroker           = context.RequestServices.GetRequiredService<IMessageBroker>(); 
             _globalUniqueIdGenerator = context.RequestServices.GetRequiredService<IGlobalUniqueIdGenerator>();
 
-            context.CentralRequestLoggerAsync(_hostEnvironment, _globalUniqueIdGenerator, _messageBroker, _dateTime,
-                _logger, serviceName, default
+            context.CentralRequestLoggerAsync(_hostEnvironment, _globalUniqueIdGenerator, _messageBroker, _dateTime, 
+                serviceName, default
             );
 
             await _next(context);

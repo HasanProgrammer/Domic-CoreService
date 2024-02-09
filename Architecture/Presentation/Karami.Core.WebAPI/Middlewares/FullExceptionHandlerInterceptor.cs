@@ -14,8 +14,6 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Newtonsoft.Json;
 
-using ILogger = Serilog.ILogger;
-
 namespace Karami.Core.WebAPI.Middlewares;
 
 /// <summary>
@@ -29,7 +27,6 @@ public class FullExceptionHandlerInterceptor : Interceptor
 
     private IMessageBroker           _messageBroker;
     private IDateTime                _dateTime;
-    private ILogger                  _logger;
     private ICoreCommandUnitOfWork   _commandUnitOfWork;
     private IGlobalUniqueIdGenerator _globalUniqueIdGenerator;
     
