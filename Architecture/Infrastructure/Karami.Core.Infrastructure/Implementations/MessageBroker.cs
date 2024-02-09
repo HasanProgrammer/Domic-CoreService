@@ -125,7 +125,7 @@ public class MessageBroker : IMessageBroker
             {
                 e.FileLogger(_hostEnvironment, _dateTime);
                 
-                e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, _logger, 
+                e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, 
                     NameOfService, NameOfAction
                 );
                 
@@ -167,7 +167,7 @@ public class MessageBroker : IMessageBroker
         {
             e.FileLogger(_hostEnvironment, _dateTime);
             
-            e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, _logger, 
+            e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, 
                 NameOfService, NameOfAction
             );
         }
@@ -198,7 +198,7 @@ public class MessageBroker : IMessageBroker
         {
             e.FileLogger(_hostEnvironment, _dateTime);
             
-            e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, _logger, 
+            e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, 
                 NameOfService, NameOfAction
             );
         }
@@ -297,7 +297,7 @@ public class MessageBroker : IMessageBroker
         {
             e.FileLogger(_hostEnvironment, _dateTime);
             
-            e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, _logger, 
+            e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, 
                 NameOfService, NameOfAction
             );
             
@@ -384,7 +384,7 @@ public class MessageBroker : IMessageBroker
         {
             e.FileLogger(_hostEnvironment, _dateTime);
             
-            e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, _logger, 
+            e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, 
                 NameOfService, NameOfAction
             );
             
@@ -408,7 +408,7 @@ public class MessageBroker : IMessageBroker
         {
             e.FileLogger(_hostEnvironment, _dateTime);
             
-            e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, _logger, 
+            e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, 
                 NameOfService, NameOfAction
             );
         }
@@ -435,7 +435,7 @@ public class MessageBroker : IMessageBroker
         {
             e.FileLogger(_hostEnvironment, _dateTime);
             
-            e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, _logger, 
+            e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, 
                 NameOfService, NameOfAction
             );
         }
@@ -477,7 +477,7 @@ public class MessageBroker : IMessageBroker
         {
             e.FileLogger(_hostEnvironment, _dateTime);
             
-            e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, _logger, 
+            e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, 
                 NameOfService, NameOfAction
             );
         }

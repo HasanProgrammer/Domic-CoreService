@@ -4,8 +4,7 @@ using Karami.Core.Domain.Enumerations;
 using Karami.Core.UseCase.Contracts.Interfaces;
 using Karami.Core.UseCase.DTOs;
 using Microsoft.Extensions.Hosting;
-
-using ILogger         = Serilog.ILogger;
+using Serilog;
 using SystemException = Karami.Core.Domain.Entities.SystemException;
 
 namespace Karami.Core.Infrastructure.Extensions;
@@ -34,7 +33,7 @@ public static class ExceptionExtension
             streamWriter.WriteLine($"\n Date: {dateTime.ToPersianShortDate(DateTime.Now)} | Message: {exception.Message} | Source: {exception.ToString()} \n");
         }
     }
-    
+
     /// <summary>
     /// 
     /// </summary>
@@ -42,12 +41,10 @@ public static class ExceptionExtension
     /// <param name="hostEnvironment"></param>
     /// <param name="globalUniqueIdGenerator"></param>
     /// <param name="dateTime"></param>
-    /// <param name="logger"></param>
     /// <param name="service"></param>
     /// <param name="action"></param>
     public static void ElasticStackExceptionLogger(this Exception e, IHostEnvironment hostEnvironment, 
-        IGlobalUniqueIdGenerator globalUniqueIdGenerator, IDateTime dateTime, ILogger logger, string service, 
-        string action
+        IGlobalUniqueIdGenerator globalUniqueIdGenerator, IDateTime dateTime, string service, string action
     )
     {
         try
@@ -65,7 +62,7 @@ public static class ExceptionExtension
                 CreatedAt_PersianDate = nowPersianDateTime
             };
             
-            logger.Error($"{service}-{action}:{systemException.Serialize()}");
+            Log.Error($"{service}-{action}:{systemException.Serialize()}");
         }
         catch (Exception exception)
         {

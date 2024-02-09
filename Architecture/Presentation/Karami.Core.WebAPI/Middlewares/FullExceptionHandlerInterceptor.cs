@@ -74,12 +74,11 @@ public class FullExceptionHandlerInterceptor : Interceptor
                            .GetRequiredService(_iCommandUnitOfWorkType) as ICoreCommandUnitOfWork;
             
             _dateTime                = context.GetHttpContext().RequestServices.GetRequiredService<IDateTime>();
-            _logger                  = context.GetHttpContext().RequestServices.GetRequiredService<ILogger>();
             _messageBroker           = context.GetHttpContext().RequestServices.GetRequiredService<IMessageBroker>();
             _globalUniqueIdGenerator = context.GetHttpContext().RequestServices.GetRequiredService<IGlobalUniqueIdGenerator>();
             
             context.CentralRequestLoggerAsync(_hostEnvironment, _globalUniqueIdGenerator, _messageBroker, _dateTime, 
-                _logger, serviceName, request, context.CancellationToken
+                serviceName, request, context.CancellationToken
             );
             
             context.CheckLicense(_configuration);
@@ -116,7 +115,7 @@ public class FullExceptionHandlerInterceptor : Interceptor
 
             e.FileLogger(_hostEnvironment, _dateTime);
             
-            e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, _logger, serviceName, 
+            e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, serviceName, 
                 context.Method
             );
             

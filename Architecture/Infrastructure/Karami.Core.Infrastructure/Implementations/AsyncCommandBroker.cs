@@ -102,8 +102,8 @@ public class AsyncCommandBroker : IAsyncCommandBroker
         {
             e.FileLogger(_hostEnvironment, _dateTime);
             
-            e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, _logger, 
-                NameOfService, NameOfAction
+            e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, NameOfService, 
+                NameOfAction
             );
             
             e.CentralExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _messageBroker, _dateTime, 
@@ -300,7 +300,7 @@ public class AsyncCommandBroker : IAsyncCommandBroker
 
             e.FileLogger(_hostEnvironment, _dateTime);
             
-            e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, _logger, 
+            e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, 
                 NameOfService, NameOfAction
             );
             
@@ -328,7 +328,7 @@ public class AsyncCommandBroker : IAsyncCommandBroker
         {
             e.FileLogger(_hostEnvironment, _dateTime);
             
-            e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, _logger, 
+            e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, 
                 NameOfService, NameOfAction
             );
             
@@ -359,7 +359,7 @@ public class AsyncCommandBroker : IAsyncCommandBroker
         {
             e.FileLogger(_hostEnvironment, _dateTime);
 
-            e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, _logger, 
+            e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, 
                 NameOfService, NameOfAction
             );
             
@@ -436,7 +436,7 @@ public class AsyncCommandBroker : IAsyncCommandBroker
         {
             e.FileLogger(_hostEnvironment, _dateTime);
             
-            e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, _logger, 
+            e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, 
                 NameOfService, NameOfAction
             );
             
@@ -485,7 +485,7 @@ public class AsyncCommandBroker : IAsyncCommandBroker
         {
             e.FileLogger(_hostEnvironment, _dateTime);
             
-            e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, _logger, 
+            e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, 
                 NameOfService, NameOfAction
             );
             
@@ -520,7 +520,7 @@ public class AsyncCommandBroker : IAsyncCommandBroker
         {
             e.FileLogger(_hostEnvironment, _dateTime);
             
-            e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, _logger, 
+            e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, 
                 NameOfService, NameOfAction
             );
             

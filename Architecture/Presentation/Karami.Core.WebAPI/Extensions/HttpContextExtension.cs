@@ -171,7 +171,7 @@ public static class HttpContextExtension
         {
             e.FileLogger(hostEnvironment, dateTime);
             
-            e.ElasticStackExceptionLogger(hostEnvironment, globalUniqueIdGenerator, dateTime, logger, serviceName, 
+            e.ElasticStackExceptionLogger(hostEnvironment, globalUniqueIdGenerator, dateTime, serviceName, 
                 context.Request.Path
             );
         }

@@ -171,7 +171,7 @@ public class ExceptionHandler
 
         exception.FileLogger(_hostEnvironment, _dateTime);
         
-        exception.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, _logger, 
+        exception.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, 
             serviceName, context.Request.Path
         );
         

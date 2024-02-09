@@ -11,8 +11,6 @@ using Karami.Core.WebAPI.Exceptions;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 
-using ILogger = Serilog.ILogger;
-
 namespace Karami.Core.WebAPI.Extensions;
 
 public static class ServerCallContextExtension
@@ -69,7 +67,7 @@ public static class ServerCallContextExtension
             
         messageBroker.Publish<SystemRequest>(dto);
     }
-    
+
     /// <summary>
     /// 
     /// </summary>
@@ -78,13 +76,12 @@ public static class ServerCallContextExtension
     /// <param name="globalUniqueIdGenerator"></param>
     /// <param name="messageBroker"></param>
     /// <param name="dateTime"></param>
-    /// <param name="logger"></param>
     /// <param name="serviceName"></param>
     /// <param name="payload"></param>
     /// <param name="cancellationToken"></param>
     public static async Task CentralRequestLoggerAsync(this ServerCallContext context, IHostEnvironment hostEnvironment, 
         IGlobalUniqueIdGenerator globalUniqueIdGenerator, IMessageBroker messageBroker, IDateTime dateTime, 
-        ILogger logger, string serviceName, object payload, CancellationToken cancellationToken
+        string serviceName, object payload, CancellationToken cancellationToken
     )
     {
         try
@@ -118,7 +115,7 @@ public static class ServerCallContextExtension
         {
             e.FileLogger(hostEnvironment, dateTime);
             
-            e.ElasticStackExceptionLogger(hostEnvironment, globalUniqueIdGenerator, dateTime, logger, serviceName, 
+            e.ElasticStackExceptionLogger(hostEnvironment, globalUniqueIdGenerator, dateTime, serviceName, 
                 context.Method
             );
             
