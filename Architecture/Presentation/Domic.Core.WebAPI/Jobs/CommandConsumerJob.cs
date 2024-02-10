@@ -22,7 +22,7 @@ public class CommandConsumerJob : IHostedService
         _commandBroker.NameOfAction  = nameof(CommandConsumerJob);
         _commandBroker.NameOfService = _configuration.GetValue<string>("NameOfService");
         
-        var useCaseTypes = Assembly.Load(new AssemblyName("Karami.UseCase")).GetTypes();
+        var useCaseTypes = Assembly.Load(new AssemblyName("Domic.UseCase")).GetTypes();
         
         var asyncCommandTypes =
             useCaseTypes.Where(type => type.BaseType?.GetInterfaces().Any(i => i == typeof(IAsyncCommand)) ?? false);

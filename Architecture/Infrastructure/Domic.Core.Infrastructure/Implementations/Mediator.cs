@@ -282,7 +282,7 @@ public class Mediator : IMediator
     
     private Type _GetTypeOfUnitOfWork()
     {
-        var domainTypes = Assembly.Load(new AssemblyName("Karami.Domain")).GetTypes();
+        var domainTypes = Assembly.Load(new AssemblyName("Domic.Domain")).GetTypes();
 
         return domainTypes.FirstOrDefault(
             type => type.GetInterfaces().Any(i => i == typeof(ICoreCommandUnitOfWork))

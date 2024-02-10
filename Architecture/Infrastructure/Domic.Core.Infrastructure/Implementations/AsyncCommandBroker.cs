@@ -56,7 +56,7 @@ public class AsyncCommandBroker : IAsyncCommandBroker
 
     public void Publish<TCommand>(TCommand command) where TCommand : IAsyncCommand
     {
-        var useCaseTypes   = Assembly.Load(new AssemblyName("Karami.UseCase")).GetTypes();
+        var useCaseTypes   = Assembly.Load(new AssemblyName("Domic.UseCase")).GetTypes();
         var commandBusType = useCaseTypes.FirstOrDefault(type => type == command.GetType());
         var messageBroker  = commandBusType.GetCustomAttribute(typeof(QueueableAttribute)) as QueueableAttribute;
 
@@ -136,7 +136,7 @@ public class AsyncCommandBroker : IAsyncCommandBroker
                     args.BasicProperties.Headers?.FirstOrDefault(header => header.Key.Equals("Namespace")).Value as byte[]
                 );
             
-            var useCaseTypes = Assembly.Load(new AssemblyName("Karami.UseCase")).GetTypes();
+            var useCaseTypes = Assembly.Load(new AssemblyName("Domic.UseCase")).GetTypes();
             
             var targetConsumerCommandBusHandlerType = useCaseTypes.FirstOrDefault(
                 type => type.GetInterfaces().Any(
@@ -367,7 +367,7 @@ public class AsyncCommandBroker : IAsyncCommandBroker
     
     private Type _GetTypeOfCommandUnitOfWork()
     {
-        var domainTypes = Assembly.Load(new AssemblyName("Karami.Domain")).GetTypes();
+        var domainTypes = Assembly.Load(new AssemblyName("Domic.Domain")).GetTypes();
 
         return domainTypes.FirstOrDefault(
             type => type.GetInterfaces().Any(i => i == typeof(ICoreCommandUnitOfWork))
@@ -376,7 +376,7 @@ public class AsyncCommandBroker : IAsyncCommandBroker
 
     private void _RegisterAllAsyncCommandQueuesInMessageBroker()
     {
-        var useCaseTypes = Assembly.Load(new AssemblyName("Karami.UseCase")).GetTypes();
+        var useCaseTypes = Assembly.Load(new AssemblyName("Domic.UseCase")).GetTypes();
         
         var commandBusTypes = useCaseTypes.Where(useCaseType => 
             useCaseType.BaseType?.GetInterfaces().Any(i => i == typeof(IAsyncCommand)) ?? false

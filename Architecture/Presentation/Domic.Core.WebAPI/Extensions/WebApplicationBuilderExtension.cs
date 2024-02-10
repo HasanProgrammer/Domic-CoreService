@@ -17,7 +17,7 @@ public static class WebApplicationBuilderExtension
     /// <param name="serviceName"></param>
     public static void RegisterGrpcServer(this WebApplicationBuilder builder)
     {
-        Type[] domainAssemblyTypes = Assembly.Load(new AssemblyName("Karami.Domain")).GetTypes();
+        Type[] domainAssemblyTypes = Assembly.Load(new AssemblyName("Domic.Domain")).GetTypes();
         
         var icommandUnitOfWorkType =
             domainAssemblyTypes.FirstOrDefault(type =>
@@ -44,7 +44,7 @@ public static class WebApplicationBuilderExtension
     /// <param name="builder"></param>
     public static void RegisterJobs(this WebApplicationBuilder builder)
     {
-        Type[] webApiAssemblyTypes = Assembly.Load(new AssemblyName("Karami.WebAPI")).GetTypes();
+        Type[] webApiAssemblyTypes = Assembly.Load(new AssemblyName("Domic.WebAPI")).GetTypes();
 
         var jobTypes = webApiAssemblyTypes.Where(type =>
             type.GetInterfaces().Any(i => i == typeof(IHostedService))

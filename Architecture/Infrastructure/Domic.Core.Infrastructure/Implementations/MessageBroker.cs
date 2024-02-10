@@ -211,7 +211,7 @@ public class MessageBroker : IMessageBroker
     {
         var nameOfEvent = @event.Type;
 
-        var domainTypes = Assembly.Load(new AssemblyName("Karami.Domain")).GetTypes();
+        var domainTypes = Assembly.Load(new AssemblyName("Domic.Domain")).GetTypes();
         
         var typeOfEvents = domainTypes.Where(
             type => type.BaseType?.GetInterfaces().Any(i => i == typeof(IDomainEvent)) ?? false
@@ -311,7 +311,7 @@ public class MessageBroker : IMessageBroker
 
         try
         {
-            var useCaseTypes = Assembly.Load(new AssemblyName("Karami.UseCase")).GetTypes();
+            var useCaseTypes = Assembly.Load(new AssemblyName("Domic.UseCase")).GetTypes();
 
             var targetConsumerEventBusHandlerType = useCaseTypes.FirstOrDefault(
                 type => type.GetInterfaces().Any(
@@ -438,7 +438,7 @@ public class MessageBroker : IMessageBroker
     
     private Type _GetTypeOfUnitOfWork()
     {
-        var domainTypes = Assembly.Load(new AssemblyName("Karami.Domain")).GetTypes();
+        var domainTypes = Assembly.Load(new AssemblyName("Domic.Domain")).GetTypes();
 
         return domainTypes.FirstOrDefault(
             type => type.GetInterfaces().Any(i => i == typeof(ICoreQueryUnitOfWork))
@@ -449,7 +449,7 @@ public class MessageBroker : IMessageBroker
     
     private Type _GetTypeOfCommandUnitOfWork()
     {
-        var domainTypes = Assembly.Load(new AssemblyName("Karami.Domain")).GetTypes();
+        var domainTypes = Assembly.Load(new AssemblyName("Domic.Domain")).GetTypes();
 
         return domainTypes.FirstOrDefault(
             type => type.GetInterfaces().Any(i => i == typeof(ICoreCommandUnitOfWork))

@@ -160,7 +160,7 @@ public static class WebApplicationBuilderExtension
     /// <returns></returns>
     public static void RegisterRedisCaching(this WebApplicationBuilder builder)
     {
-        Type[] useCaseAssemblyTypes = Assembly.Load(new AssemblyName("Karami.UseCase")).GetTypes();
+        Type[] useCaseAssemblyTypes = Assembly.Load(new AssemblyName("Domic.UseCase")).GetTypes();
         
         //Third party ( Redis )
         builder.Services.AddScoped<IConnectionMultiplexer>(
@@ -357,7 +357,7 @@ public static class WebApplicationBuilderExtension
     /// <param name="builder"></param>
     public static void RegisterServicesOfGrpcClientWebRequest(this WebApplicationBuilder builder)
     {
-        Type[] infrastructureAssemblyTypes = Assembly.Load(new AssemblyName("Karami.Infrastructure")).GetTypes();
+        Type[] infrastructureAssemblyTypes = Assembly.Load(new AssemblyName("Domic.Infrastructure")).GetTypes();
         
         RegisterAllServicesOfGrpcClientWebRequest(builder.Services, infrastructureAssemblyTypes);
     }
@@ -368,7 +368,7 @@ public static class WebApplicationBuilderExtension
     /// <param name="builder"></param>
     public static void RegisterServicesOfHttpWebRequest(this WebApplicationBuilder builder)
     {
-        Type[] infrastructureAssemblyTypes = Assembly.Load(new AssemblyName("Karami.Infrastructure")).GetTypes();
+        Type[] infrastructureAssemblyTypes = Assembly.Load(new AssemblyName("Domic.Infrastructure")).GetTypes();
         
         RegisterAllServicesOfHttpWebRequest(builder.Services, infrastructureAssemblyTypes);
     }
@@ -379,7 +379,7 @@ public static class WebApplicationBuilderExtension
     /// <param name="builder"></param>
     public static void RegisterCommandRepositories(this WebApplicationBuilder builder)
     {
-        Type[] infrastructureAssemblyTypes = Assembly.Load(new AssemblyName("Karami.Infrastructure")).GetTypes();
+        Type[] infrastructureAssemblyTypes = Assembly.Load(new AssemblyName("Domic.Infrastructure")).GetTypes();
         
         RegisterAllCommandRepositories(builder.Services, infrastructureAssemblyTypes);
     }
@@ -390,7 +390,7 @@ public static class WebApplicationBuilderExtension
     /// <param name="builder"></param>
     public static void RegisterQueryRepositories(this WebApplicationBuilder builder)
     {
-        Type[] infrastructureAssemblyTypes = Assembly.Load(new AssemblyName("Karami.Infrastructure")).GetTypes();
+        Type[] infrastructureAssemblyTypes = Assembly.Load(new AssemblyName("Domic.Infrastructure")).GetTypes();
         
         RegisterAllQueryRepositories(builder.Services, infrastructureAssemblyTypes);
     }
@@ -405,7 +405,7 @@ public static class WebApplicationBuilderExtension
         builder.Services.AddTransient(typeof(IMediator), typeof(Mediator));
         builder.Services.AddSingleton(typeof(IAsyncCommandBroker), typeof(AsyncCommandBroker));
         
-        Type[] useCaseAssemblyTypes = Assembly.Load(new AssemblyName("Karami.UseCase")).GetTypes();
+        Type[] useCaseAssemblyTypes = Assembly.Load(new AssemblyName("Domic.UseCase")).GetTypes();
         
         RegisterAllQueriesHandler(builder.Services, useCaseAssemblyTypes);
         RegisterAllCommandsHandler(builder.Services, useCaseAssemblyTypes);
@@ -422,7 +422,7 @@ public static class WebApplicationBuilderExtension
     {
         builder.Services.AddSingleton(typeof(IMessageBroker), typeof(MessageBroker));
 
-        Type[] useCaseAssemblyTypes = Assembly.Load(new AssemblyName("Karami.UseCase")).GetTypes();
+        Type[] useCaseAssemblyTypes = Assembly.Load(new AssemblyName("Domic.UseCase")).GetTypes();
         
         RegisterAllConsumerMessageBusHandlers(builder.Services, useCaseAssemblyTypes);
         RegisterAllConsumerEventBusHandler(builder.Services, useCaseAssemblyTypes);

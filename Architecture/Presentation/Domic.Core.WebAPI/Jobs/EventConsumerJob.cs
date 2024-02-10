@@ -23,7 +23,7 @@ public class EventConsumerJob : IHostedService
         _messageBroker.NameOfAction  = nameof(EventConsumerJob);
         _messageBroker.NameOfService = _configuration.GetValue<string>("NameOfService");
         
-        var domainTypes = Assembly.Load(new AssemblyName("Karami.Domain")).GetTypes();
+        var domainTypes = Assembly.Load(new AssemblyName("Domic.Domain")).GetTypes();
         
         var eventTypes =
             domainTypes.Where(type => type.BaseType?.GetInterfaces().Any(i => i == typeof(IDomainEvent)) ?? false);
