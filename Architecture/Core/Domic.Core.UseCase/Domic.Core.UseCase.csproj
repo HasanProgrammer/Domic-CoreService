@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net7.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <PackageId>Domic.Architecture.UseCase</PackageId>
+    <PackageVersion>2.0.0</PackageVersion>
+    <Authors>Karami.Domic</Authors>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\Commons\Domic.Core.Common\Domic.Core.Common.csproj" />
+    <ProjectReference Include="..\Domic.Core.Domain\Domic.Core.Domain.csproj" />
+  </ItemGroup>
+
+</Project>

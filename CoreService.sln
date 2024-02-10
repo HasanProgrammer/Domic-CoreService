@@ -7,25 +7,25 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Architecture", "Architectur
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Core", "Core", "{EDD14BE9-FDCC-44D1-A311-E901C6CDFFE5}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Karami.Core.Domain", "Architecture\Core\Karami.Core.Domain\Karami.Core.Domain.csproj", "{D7E96AF4-22A6-4563-B147-BCB8A96D4CA8}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Domic.Core.Domain", "Architecture\Core\Domic.Core.Domain\Domic.Core.Domain.csproj", "{D7E96AF4-22A6-4563-B147-BCB8A96D4CA8}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Karami.Core.UseCase", "Architecture\Core\Karami.Core.UseCase\Karami.Core.UseCase.csproj", "{AF7AE816-969E-4D84-9D0C-C5436E4F2F54}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Domic.Core.UseCase", "Architecture\Core\Domic.Core.UseCase\Domic.Core.UseCase.csproj", "{AF7AE816-969E-4D84-9D0C-C5436E4F2F54}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Infrastructure", "Infrastructure", "{6185012F-955C-43D0-B526-916688D91183}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Karami.Core.Infrastructure", "Architecture\Infrastructure\Karami.Core.Infrastructure\Karami.Core.Infrastructure.csproj", "{AC54D119-1B07-4342-A4D8-439F201EE99B}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Domic.Core.Infrastructure", "Architecture\Infrastructure\Domic.Core.Infrastructure\Domic.Core.Infrastructure.csproj", "{AC54D119-1B07-4342-A4D8-439F201EE99B}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Karami.Core.Persistence", "Architecture\Infrastructure\Karami.Core.Persistence\Karami.Core.Persistence.csproj", "{0ABDE1D9-1E32-48A7-B225-2906A9E356B2}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Domic.Core.Persistence", "Architecture\Infrastructure\Domic.Core.Persistence\Domic.Core.Persistence.csproj", "{0ABDE1D9-1E32-48A7-B225-2906A9E356B2}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Presentation", "Presentation", "{CDB990DD-CCBA-4E35-AA61-25600ED8CC3B}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Karami.Core.WebAPI", "Architecture\Presentation\Karami.Core.WebAPI\Karami.Core.WebAPI.csproj", "{3A4AA736-3F58-4A6F-8CDA-6929D21494D7}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Domic.Core.WebAPI", "Architecture\Presentation\Domic.Core.WebAPI\Domic.Core.WebAPI.csproj", "{3A4AA736-3F58-4A6F-8CDA-6929D21494D7}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Commons", "Commons", "{06D57A52-1543-43F8-A1E2-AC258266EF32}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Karami.Core.Common", "Commons\Karami.Core.Common\Karami.Core.Common.csproj", "{A0ABD2CE-ED0E-43BA-AC01-04A4A8A98F70}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Domic.Core.Common", "Commons\Domic.Core.Common\Domic.Core.Common.csproj", "{A0ABD2CE-ED0E-43BA-AC01-04A4A8A98F70}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Karami.Core.Package", "Commons\Karami.Core.Package\Karami.Core.Package.csproj", "{3540BA34-AA9B-4520-8859-B53D8384857C}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Domic.Core.Package", "Commons\Domic.Core.Package\Domic.Core.Package.csproj", "{3540BA34-AA9B-4520-8859-B53D8384857C}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

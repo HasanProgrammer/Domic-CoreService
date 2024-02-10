@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net7.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <PackageId>Domic.Architecture.Infrastructure</PackageId>
+    <PackageVersion>3.0.0</PackageVersion>
+    <Authors>Karami.Domic</Authors>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Domic.Core.Persistence\Domic.Core.Persistence.csproj" />
+    <ProjectReference Include="..\..\Core\Domic.Core.UseCase\Domic.Core.UseCase.csproj" />
+  </ItemGroup>
+
+  <!--Packages-->
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\Commons\Domic.Core.Package\Domic.Core.Package.csproj" />
+  </ItemGroup>
+  <!--Packages-->
+
+  <!--CorePackage | RPC-->
+  <ItemGroup>
+    <PackageReference Include="Domic.Grpc.Service" Version="1.1.0" />
+  </ItemGroup>
+  <!--CorePackage | RPC-->
+
+  <!--SDK Packages-->
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+  <!--SDK Packages-->
+  
+</Project>
