@@ -9,9 +9,6 @@ public static class IApplicationBuilderExtension
     /// 
     /// </summary>
     /// <param name="builder"></param>
-    /// <param name="configuration"></param>
-    /// <param name="hostEnvironment"></param>
-    /// <param name="serviceName"></param>
-    public static void UseCoreExceptionHandler(this IApplicationBuilder builder, string serviceName) 
-        => builder.UseMiddleware<ExceptionHandler>(serviceName);
+    public static void UseCoreExceptionHandler(this IApplicationBuilder builder) 
+        => builder.UseMiddleware<ExceptionHandler>();
 }
