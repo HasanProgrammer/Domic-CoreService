@@ -15,7 +15,8 @@ public interface IConsumerCommandBusHandler<in TCommand, TResult> where TCommand
     /// <param name="message"></param>
     /// <param name="cancellationToken"></param>
     /// <returns></returns>
-    public Task<TResult> HandleAsync(TCommand message, CancellationToken cancellationToken);
+    public Task<TResult> HandleAsync(TCommand message, CancellationToken cancellationToken) 
+        => throw new NotImplementedException();
 
     /// <summary>
     /// 
