@@ -29,7 +29,8 @@ public class MessageBroker : IMessageBroker
     private readonly IGlobalUniqueIdGenerator _globalUniqueIdGenerator;
 
     public MessageBroker(IConfiguration configuration, IHostEnvironment hostEnvironment, 
-        IServiceScopeFactory serviceScopeFactory, IDateTime dateTime, IGlobalUniqueIdGenerator globalUniqueIdGenerator
+        IServiceScopeFactory serviceScopeFactory, IDateTime dateTime, IGlobalUniqueIdGenerator globalUniqueIdGenerator,
+        bool dispatchConsumersAsync = true
     )
     {
         _hostEnvironment         = hostEnvironment;
@@ -43,12 +44,16 @@ public class MessageBroker : IMessageBroker
             Password = configuration.GetExternalRabbitPassword(),
             Port     = configuration.GetExternalRabbitPort() 
         };
+
+        factory.DispatchConsumersAsync = dispatchConsumersAsync;
         
         _connection = factory.CreateConnection();
     }
 
     public string NameOfAction  { get; set; }
     public string NameOfService { get; set; }
+
+    #region MessageStructure
 
     public void Publish<TMessage>(MessageBrokerDto<TMessage> messageBroker) where TMessage : class
     {
@@ -61,22 +66,150 @@ public class MessageBroker : IMessageBroker
                     messageBroker.Message.Serialize(), messageBroker.Exchange, messageBroker.Route, 
                     messageBroker.Headers
                 );
-            break;
+                break;
 
             case Exchange.FanOut :
                 channel.PublishMessageToFanOutExchange(
                     messageBroker.Message.Serialize(), messageBroker.Exchange
                 );
-            break;
+                break;
 
             case Exchange.Unknown :
                 channel.PublishMessage(messageBroker.Message.Serialize(), messageBroker.Queue);
-            break;
+                break;
 
             default: throw new ArgumentOutOfRangeException();
         }
     }
 
+    public void Subscribe<TMessage>(string queue) where TMessage : class
+    {
+        try
+        {
+            var channel = _connection.CreateModel();
+            
+            EventingBasicConsumer consumer = new(channel);
+
+            consumer.Received += (sender, args) => {
+                
+                //ScopeServices trigger
+                using IServiceScope serviceScope = _serviceScopeFactory.CreateScope();
+                
+                var message = Encoding.UTF8.GetString(args.Body.ToArray()).DeSerialize<TMessage>();
+
+                _MessageOfQueueHandle(channel, args, message, serviceScope.ServiceProvider);
+                
+            };
+            
+            channel.BasicConsume(queue: queue, consumer: consumer);
+        }
+        catch (Exception e)
+        {
+            e.FileLogger(_hostEnvironment, _dateTime);
+            
+            e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, 
+                NameOfService, NameOfAction
+            );
+        }
+    }
+
+    public void Subscribe(string queue, Type messageType)
+    {
+        try
+        {
+            var channel = _connection.CreateModel();
+            
+            EventingBasicConsumer consumer = new(channel);
+
+            consumer.Received += (sender, args) => {
+                
+                //ScopeServices trigger
+                using IServiceScope serviceScope = _serviceScopeFactory.CreateScope();
+                
+                var message = Encoding.UTF8.GetString(args.Body.ToArray()).DeSerialize(messageType);
+
+                _MessageOfQueueHandle(channel, args, message, serviceScope.ServiceProvider);
+                
+            };
+            
+            channel.BasicConsume(queue: queue, consumer: consumer);
+        }
+        catch (Exception e)
+        {
+            e.FileLogger(_hostEnvironment, _dateTime);
+            
+            e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, 
+                NameOfService, NameOfAction
+            );
+        }
+    }
+
+    public void SubscribeAsynchronously<TMessage>(string queue, CancellationToken cancellationToken) where TMessage : class
+    {
+        try
+        {
+            var channel = _connection.CreateModel();
+            
+            AsyncEventingBasicConsumer consumer = new(channel);
+
+            consumer.Received += async (sender, args) => {
+                
+                //ScopeServices trigger
+                using IServiceScope serviceScope = _serviceScopeFactory.CreateScope();
+                
+                var message = Encoding.UTF8.GetString(args.Body.ToArray()).DeSerialize<TMessage>();
+
+                await _MessageOfQueueHandleAsync(channel, args, message, serviceScope.ServiceProvider, cancellationToken);
+                
+            };
+            
+            channel.BasicConsume(queue: queue, consumer: consumer);
+        }
+        catch (Exception e)
+        {
+            e.FileLogger(_hostEnvironment, _dateTime);
+            
+            e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, 
+                NameOfService, NameOfAction
+            );
+        }
+    }
+
+    public void SubscribeAsynchronously(string queue, Type messageType, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var channel = _connection.CreateModel();
+            
+            AsyncEventingBasicConsumer consumer = new(channel);
+
+            consumer.Received += async (sender, args) => {
+                
+                //ScopeServices trigger
+                using IServiceScope serviceScope = _serviceScopeFactory.CreateScope();
+                
+                var message = Encoding.UTF8.GetString(args.Body.ToArray()).DeSerialize(messageType);
+
+                await _MessageOfQueueHandleAsync(channel, args, message, serviceScope.ServiceProvider, cancellationToken);
+                
+            };
+            
+            channel.BasicConsume(queue: queue, consumer: consumer);
+        }
+        catch (Exception e)
+        {
+            e.FileLogger(_hostEnvironment, _dateTime);
+            
+            e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, 
+                NameOfService, NameOfAction
+            );
+        }
+    }
+
+    #endregion
+
+    #region EventStructure
+    
     public void Publish()
     {
         lock (_lock)
@@ -137,37 +270,6 @@ public class MessageBroker : IMessageBroker
         }
     }
 
-    public void Subscribe<TMessage>(string queue) where TMessage : class
-    {
-        try
-        {
-            var channel = _connection.CreateModel();
-            
-            EventingBasicConsumer consumer = new(channel);
-
-            consumer.Received += (sender, args) => {
-                
-                //ScopeServices trigger
-                using IServiceScope serviceScope = _serviceScopeFactory.CreateScope();
-                
-                var message = Encoding.UTF8.GetString(args.Body.ToArray()).DeSerialize<TMessage>();
-
-                _MessageOfQueueHandle(channel, args, message, serviceScope.ServiceProvider);
-                
-            };
-            
-            channel.BasicConsume(queue: queue, consumer: consumer);
-        }
-        catch (Exception e)
-        {
-            e.FileLogger(_hostEnvironment, _dateTime);
-            
-            e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, 
-                NameOfService, NameOfAction
-            );
-        }
-    }
-
     public void Subscribe(string queue)
     {
         try
@@ -198,6 +300,39 @@ public class MessageBroker : IMessageBroker
             );
         }
     }
+
+    public void SubscribeAsynchronously(string queue, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var channel = _connection.CreateModel();
+            
+            var consumer = new AsyncEventingBasicConsumer(channel);
+
+            consumer.Received += async (sender, args) => {
+                
+                //ScopeServices trigger
+                using IServiceScope serviceScope = _serviceScopeFactory.CreateScope();
+                
+                var @event = Encoding.UTF8.GetString(args.Body.ToArray()).DeSerialize<Event>();
+                
+               await _EventOfQueueHandleAsync(channel, args, @event, NameOfService, serviceScope.ServiceProvider, cancellationToken);
+                
+            };
+
+            channel.BasicConsume(queue: queue, consumer: consumer);
+        }
+        catch (Exception e)
+        {
+            e.FileLogger(_hostEnvironment, _dateTime);
+            
+            e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, 
+                NameOfService, NameOfAction
+            );
+        }
+    }
+
+    #endregion
 
     public void Dispose()
     {
@@ -302,6 +437,201 @@ public class MessageBroker : IMessageBroker
         }
     }
     
+    private async Task _MessageOfQueueHandleAsync<TMessage>(IModel channel, BasicDeliverEventArgs args, TMessage message,
+        IServiceProvider serviceProvider, CancellationToken cancellationToken
+    ) where TMessage : class
+    {
+        ICoreUnitOfWork unitOfWork = null;
+
+        try
+        {
+            var messageBusHandler     = serviceProvider.GetRequiredService(typeof(IConsumerMessageBusHandler<TMessage>));
+            var messageBusHandlerType = messageBusHandler.GetType();
+            
+            var messageBusHandlerMethod =
+                messageBusHandlerType.GetMethod("HandleAsync") ?? throw new Exception("HandleAsync function not found !");
+
+            var retryAttr =
+                messageBusHandlerMethod.GetCustomAttribute(typeof(WithMaxRetryAttribute)) as WithMaxRetryAttribute;
+
+            if (_IsMaxRetryMessage(args, retryAttr))
+            {
+                if (retryAttr.HasAfterMaxRetryHandle)
+                {
+                    var afterMaxRetryHandlerMethod =
+                        messageBusHandlerType.GetMethod("AfterMaxRetryHandleAsync") ?? throw new Exception("AfterMaxRetryHandleAsync function not found !");
+                    
+                    await (Task)afterMaxRetryHandlerMethod.Invoke(messageBusHandler, new object[] { message, cancellationToken });
+                }
+                
+                _TrySendAckMessage(channel, args);
+            }
+            else
+            {
+                if (messageBusHandlerMethod.GetCustomAttribute(typeof(WithTransactionAttribute)) is WithTransactionAttribute transactionAttr)
+                {
+                    unitOfWork = serviceProvider.GetRequiredService(_GetTypeOfUnitOfWork()) as ICoreUnitOfWork;
+                    
+                    unitOfWork.Transaction(transactionAttr.IsolationLevel);
+
+                    await (Task)messageBusHandlerMethod.Invoke(messageBusHandler, new object[] { message, cancellationToken });
+
+                    unitOfWork.Commit();
+                }
+                else
+                    await (Task)messageBusHandlerMethod.Invoke(messageBusHandler, new object[] { message, cancellationToken });
+
+                _CleanCache(messageBusHandlerMethod, serviceProvider);
+            
+                _TrySendAckMessage(channel, args);
+            }
+        }
+        catch (Exception e)
+        {
+            e.FileLogger(_hostEnvironment, _dateTime);
+            
+            e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, 
+                NameOfService, NameOfAction
+            );
+            
+            unitOfWork?.Rollback();
+
+            _RequeueMessageAsDeadLetter(channel, args);
+        }
+    }
+    
+    private void _MessageOfQueueHandle(IModel channel, BasicDeliverEventArgs args, object message, 
+        IServiceProvider serviceProvider
+    )
+    {
+       ICoreUnitOfWork unitOfWork = null;
+
+        try
+        {
+            var consumerMessageBusHandlerContract =
+                typeof(IConsumerMessageBusHandler<>).MakeGenericType(message.GetType());
+                
+            var messageBusHandler     = serviceProvider.GetRequiredService(consumerMessageBusHandlerContract);
+            var messageBusHandlerType = messageBusHandler.GetType();
+            
+            var messageBusHandlerMethod =
+                messageBusHandlerType.GetMethod("Handle") ?? throw new Exception("Handle function not found !");
+
+            var retryAttr =
+                messageBusHandlerMethod.GetCustomAttribute(typeof(WithMaxRetryAttribute)) as WithMaxRetryAttribute;
+
+            if (_IsMaxRetryMessage(args, retryAttr))
+            {
+                if (retryAttr.HasAfterMaxRetryHandle)
+                {
+                    var afterMaxRetryHandlerMethod =
+                        messageBusHandlerType.GetMethod("AfterMaxRetryHandle") ?? throw new Exception("AfterMaxRetryHandle function not found !");
+                    
+                    afterMaxRetryHandlerMethod.Invoke(messageBusHandler, new[] { message });
+                }
+                
+                _TrySendAckMessage(channel, args);
+            }
+            else
+            {
+                if (messageBusHandlerMethod.GetCustomAttribute(typeof(WithTransactionAttribute)) is WithTransactionAttribute transactionAttr)
+                {
+                    unitOfWork = serviceProvider.GetRequiredService(_GetTypeOfUnitOfWork()) as ICoreUnitOfWork;
+                    
+                    unitOfWork.Transaction(transactionAttr.IsolationLevel);
+
+                    messageBusHandlerMethod.Invoke(messageBusHandler, new[] { message });
+
+                    unitOfWork.Commit();
+                }
+                else
+                    messageBusHandlerMethod.Invoke(messageBusHandler, new[] { message });
+
+                _CleanCache(messageBusHandlerMethod, serviceProvider);
+            
+                _TrySendAckMessage(channel, args);
+            }
+        }
+        catch (Exception e)
+        {
+            e.FileLogger(_hostEnvironment, _dateTime);
+            
+            e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, 
+                NameOfService, NameOfAction
+            );
+            
+            unitOfWork?.Rollback();
+
+            _RequeueMessageAsDeadLetter(channel, args);
+        }
+    }
+    
+    private async Task _MessageOfQueueHandleAsync(IModel channel, BasicDeliverEventArgs args, object message, 
+        IServiceProvider serviceProvider, CancellationToken cancellationToken
+    )
+    {
+       ICoreUnitOfWork unitOfWork = null;
+
+        try
+        {
+            var consumerMessageBusHandlerContract =
+                typeof(IConsumerMessageBusHandler<>).MakeGenericType(message.GetType());
+                
+            var messageBusHandler     = serviceProvider.GetRequiredService(consumerMessageBusHandlerContract);
+            var messageBusHandlerType = messageBusHandler.GetType();
+            
+            var messageBusHandlerMethod =
+                messageBusHandlerType.GetMethod("HandleAsync") ?? throw new Exception("HandleAsync function not found !");
+
+            var retryAttr =
+                messageBusHandlerMethod.GetCustomAttribute(typeof(WithMaxRetryAttribute)) as WithMaxRetryAttribute;
+
+            if (_IsMaxRetryMessage(args, retryAttr))
+            {
+                if (retryAttr.HasAfterMaxRetryHandle)
+                {
+                    var afterMaxRetryHandlerMethod =
+                        messageBusHandlerType.GetMethod("AfterMaxRetryHandleAsync") ?? throw new Exception("AfterMaxRetryHandleAsync function not found !");
+                    
+                    await (Task)afterMaxRetryHandlerMethod.Invoke(messageBusHandler, new[] { message, cancellationToken });
+                }
+                
+                _TrySendAckMessage(channel, args);
+            }
+            else
+            {
+                if (messageBusHandlerMethod.GetCustomAttribute(typeof(WithTransactionAttribute)) is WithTransactionAttribute transactionAttr)
+                {
+                    unitOfWork = serviceProvider.GetRequiredService(_GetTypeOfUnitOfWork()) as ICoreUnitOfWork;
+                    
+                    unitOfWork.Transaction(transactionAttr.IsolationLevel);
+
+                    await (Task)messageBusHandlerMethod.Invoke(messageBusHandler, new[] { message, cancellationToken });
+
+                    unitOfWork.Commit();
+                }
+                else
+                    await (Task)messageBusHandlerMethod.Invoke(messageBusHandler, new[] { message, cancellationToken });
+
+                _CleanCache(messageBusHandlerMethod, serviceProvider);
+            
+                _TrySendAckMessage(channel, args);
+            }
+        }
+        catch (Exception e)
+        {
+            e.FileLogger(_hostEnvironment, _dateTime);
+            
+            e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, 
+                NameOfService, NameOfAction
+            );
+            
+            unitOfWork?.Rollback();
+
+            _RequeueMessageAsDeadLetter(channel, args);
+        }
+    }
+    
     private void _EventOfQueueHandle(IModel channel, BasicDeliverEventArgs args, Event @event, string service,
         IServiceProvider serviceProvider
     )
@@ -347,10 +677,10 @@ public class MessageBroker : IMessageBroker
                         var afterMaxRetryHandlerMethod =
                             eventBusHandlerType.GetMethod("AfterMaxRetryHandle") ?? throw new Exception("AfterMaxRetryHandle function not found !");
                         
-                        afterMaxRetryHandlerMethod.Invoke(eventBusHandler, new object[] { payload });
+                        afterMaxRetryHandlerMethod.Invoke(eventBusHandler, new[] { payload });
                     }
                     
-                    _TrySendAckMessage(channel, args); //Remove message
+                    _TrySendAckMessage(channel, args);
                 }
                 else
                 {
@@ -360,16 +690,107 @@ public class MessageBroker : IMessageBroker
                     
                         unitOfWork.Transaction(transactionAttr.IsolationLevel);
 
-                        eventBusHandlerMethod.Invoke(eventBusHandler, new object[] { payload });
+                        eventBusHandlerMethod.Invoke(eventBusHandler, new[] { payload });
 
                         unitOfWork.Commit();
                     }
                     else
-                        eventBusHandlerMethod.Invoke(eventBusHandler, new object[] { payload });
+                        eventBusHandlerMethod.Invoke(eventBusHandler, new[] { payload });
 
                     _CleanCache(eventBusHandlerMethod, serviceProvider);
                     
-                    _TrySendAckMessage(channel, args); //Consume Message Of Queue & Delete This Message From Queue
+                    _TrySendAckMessage(channel, args);
+                }
+            }
+            else
+                _TrySendAckMessage(channel, args);
+        }
+        catch (Exception e)
+        {
+            e.FileLogger(_hostEnvironment, _dateTime);
+            
+            e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, 
+                NameOfService, NameOfAction
+            );
+            
+            e.CentralExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, this, _dateTime, service, 
+                eventBusHandlerType is not null ? eventBusHandlerType.Name : NameOfAction
+            );
+
+            unitOfWork?.Rollback();
+
+            _RequeueMessageAsDeadLetter(channel, args);
+        }
+    }
+    
+    private async Task _EventOfQueueHandleAsync(IModel channel, BasicDeliverEventArgs args, Event @event, 
+        string service, IServiceProvider serviceProvider, CancellationToken cancellationToken
+    )
+    {
+        Type eventBusHandlerType   = null;
+        ICoreUnitOfWork unitOfWork = null;
+
+        try
+        {
+            var useCaseTypes = Assembly.Load(new AssemblyName("Domic.UseCase")).GetTypes();
+
+            var targetConsumerEventBusHandlerType = useCaseTypes.FirstOrDefault(
+                type => type.GetInterfaces().Any(
+                    i => i.IsGenericType &&
+                         i.GetGenericTypeDefinition() == typeof(IConsumerEventBusHandler<>) &&
+                         i.GetGenericArguments().Any(arg => arg.Name.Equals(@event.Type))
+                )
+            );
+
+            if (targetConsumerEventBusHandlerType is not null)
+            {
+                var eventType = targetConsumerEventBusHandlerType.GetInterfaces()
+                                                                 .Select(i => i.GetGenericArguments()[0])
+                                                                 .FirstOrDefault();
+        
+                var fullContractOfConsumerType = typeof(IConsumerEventBusHandler<>).MakeGenericType(eventType);
+            
+                var eventBusHandler = serviceProvider.GetRequiredService(fullContractOfConsumerType);
+                eventBusHandlerType = eventBusHandler.GetType();
+                
+                var payload = JsonConvert.DeserializeObject(@event.Payload, eventType);
+
+                var eventBusHandlerMethod =
+                    eventBusHandlerType.GetMethod("HandleAsync") ?? throw new Exception("HandleAsync function not found !");
+
+                var retryAttr =
+                    eventBusHandlerMethod.GetCustomAttribute(typeof(WithMaxRetryAttribute)) as WithMaxRetryAttribute;
+
+                if (_IsMaxRetryMessage(args, retryAttr))
+                {
+                    if (retryAttr.HasAfterMaxRetryHandle)
+                    {
+                        var afterMaxRetryHandlerMethod =
+                            eventBusHandlerType.GetMethod("AfterMaxRetryHandleAsync") ?? throw new Exception("AfterMaxRetryHandleAsync function not found !");
+                        
+                        await (Task)afterMaxRetryHandlerMethod.Invoke(eventBusHandler, new[] { payload, cancellationToken });
+                    }
+                    
+                    _TrySendAckMessage(channel, args);
+                }
+                else
+                {
+                    if (eventBusHandlerMethod.GetCustomAttribute(typeof(WithTransactionAttribute)) is WithTransactionAttribute transactionAttr)
+                    {
+                        unitOfWork = serviceProvider.GetRequiredService(_GetTypeOfUnitOfWork()) as ICoreUnitOfWork;
+                    
+                        unitOfWork.Transaction(transactionAttr.IsolationLevel);
+
+                        await (Task)eventBusHandlerMethod.Invoke(eventBusHandler, new[] { payload, cancellationToken });
+
+                        unitOfWork.Commit();
+                    }
+                    else
+                        await (Task)eventBusHandlerMethod.Invoke(eventBusHandler, new[] { payload, cancellationToken });
+
+                    _CleanCache(eventBusHandlerMethod, serviceProvider);
+                    
+                    _TrySendAckMessage(channel, args);
                 }
             }
             else

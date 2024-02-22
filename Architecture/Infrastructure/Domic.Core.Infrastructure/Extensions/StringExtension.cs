@@ -9,11 +9,22 @@ public static class StringExtension
     /// <summary>
     /// 
     /// </summary>
-    /// <param name="Input"></param>
+    /// <param name="input"></param>
     /// <typeparam name="T"></typeparam>
     /// <returns></returns>
-    public static T DeSerialize<T>(this string Input)
-        => JsonConvert.DeserializeObject<T>(Input, new JsonSerializerSettings {
+    public static T DeSerialize<T>(this string input)
+        => JsonConvert.DeserializeObject<T>(input, new JsonSerializerSettings {
+            Formatting = Formatting.Indented
+        });
+    
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="input"></param>
+    /// <param name="destination"></param>
+    /// <returns></returns>
+    public static object DeSerialize(this string input, Type destination)
+        => JsonConvert.DeserializeObject(input, destination, new JsonSerializerSettings {
             Formatting = Formatting.Indented
         });
 }

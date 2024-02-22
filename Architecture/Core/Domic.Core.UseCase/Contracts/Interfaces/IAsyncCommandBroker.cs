@@ -20,4 +20,13 @@ public interface IAsyncCommandBroker : IDisposable
     /// <param name="queue"></param>
     /// <exception cref="NotImplementedException"></exception>
     public void Subscribe(string queue) => throw new NotImplementedException();
+    
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="queue"></param>
+    /// <param name="cancellationToken"></param>
+    /// <exception cref="NotImplementedException"></exception>
+    public void SubscribeAsynchronously(string queue, CancellationToken cancellationToken) 
+        => throw new NotImplementedException();
 }

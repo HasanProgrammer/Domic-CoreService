@@ -108,6 +108,45 @@ public class AsyncCommandBroker : IAsyncCommandBroker
         }
     }
 
+    public void SubscribeAsynchronously(string queue, CancellationToken cancellationToken)
+    {
+        try
+        {
+            _RegisterAllAsyncCommandQueuesInMessageBroker();
+            
+            var channel = _connection.CreateModel();
+            
+            var consumer = new AsyncEventingBasicConsumer(channel);
+
+            consumer.Received += async (sender, args) => {
+                
+                //ScopeServices trigger
+                using IServiceScope serviceScope = _serviceScopeFactory.CreateScope();
+                
+                var message = Encoding.UTF8.GetString(args.Body.ToArray());
+                
+                await _CommandOfQueueHandleAsync(channel, args, message, NameOfService, serviceScope.ServiceProvider, 
+                    cancellationToken
+                );
+                
+            };
+
+            channel.BasicConsume(queue: queue, consumer: consumer);
+        }
+        catch (Exception e)
+        {
+            e.FileLogger(_hostEnvironment, _dateTime);
+            
+            e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, NameOfService, 
+                NameOfAction
+            );
+            
+            e.CentralExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _messageBroker, _dateTime, 
+                NameOfService, NameOfAction
+            );
+        }
+    }
+
     public void Dispose()
     {
         _connection.Close();
@@ -250,6 +289,207 @@ public class AsyncCommandBroker : IAsyncCommandBroker
                 }
                 else
                     resultInvokeCommand = commandBusHandlerTypeMethod.Invoke(commandBusHandler, new object[] { command });
+
+                #endregion
+                
+                _CleanCache(commandBusHandlerTypeMethod, serviceProvider, service, 
+                    commandBusHandlerType is not null ? commandBusHandlerType.Name : NameOfAction
+                );
+                
+                _PushSuccessNotification(connectionId?.ToString(), commandType.BaseType?.Name, resultInvokeCommand, 
+                    service, commandBusHandlerType is not null ? commandBusHandlerType.Name : NameOfAction
+                );
+
+                _TrySendAckMessage(channel, args, service, 
+                    commandBusHandlerType is not null ? commandBusHandlerType.Name : NameOfAction
+                );
+            }
+        }
+        catch (DomainException e)
+        {
+            var payload = new Payload {
+                Code    = _configuration.GetErrorStatusCode(),
+                Message = e.Message ?? _configuration.GetModelValidationMessage(),
+                Body    = new { }
+            };
+            
+            _PushValidationNotification(channel, args, unitOfWork, connectionId?.ToString(), payload, service, 
+                commandBusHandlerType is not null ? commandBusHandlerType.Name : NameOfAction
+            );
+        }
+        catch (UseCaseException e)
+        {
+            var payload = new Payload {
+                Code    = _configuration.GetErrorStatusCode(),
+                Message = e.Message,
+                Body    = new { }
+            };
+            
+            _PushValidationNotification(channel, args, unitOfWork, connectionId?.ToString(), payload, service, 
+                commandBusHandlerType is not null ? commandBusHandlerType.Name : NameOfAction
+            );
+        }
+        catch (Exception e)
+        {
+            #region Logger
+
+            e.FileLogger(_hostEnvironment, _dateTime);
+            
+            e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, 
+                NameOfService, NameOfAction
+            );
+            
+            e.CentralExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _messageBroker, _dateTime, service, 
+                commandBusHandlerType is not null ? commandBusHandlerType.Name : NameOfAction
+            );
+
+            #endregion
+
+            unitOfWork?.Rollback();
+
+            _RequeueMessageAsDeadLetter(channel, args, service, 
+                commandBusHandlerType is not null ? commandBusHandlerType.Name : NameOfAction
+            );
+        }
+    }
+    
+    private async Task _CommandOfQueueHandleAsync(IModel channel, BasicDeliverEventArgs args, string message, 
+        string service, IServiceProvider serviceProvider, CancellationToken cancellationToken
+    )
+    {
+        Type commandBusHandlerType = null;
+        ICoreUnitOfWork unitOfWork = null;
+        object connectionId        = null;
+
+        try
+        {
+            var nameOfCommand =
+                Encoding.UTF8.GetString(
+                    args.BasicProperties.Headers?.FirstOrDefault(header => header.Key.Equals("Command")).Value as byte[]
+                );
+            
+            var nameSpaceOfCommand =
+                Encoding.UTF8.GetString(
+                    args.BasicProperties.Headers?.FirstOrDefault(header => header.Key.Equals("Namespace")).Value as byte[]
+                );
+            
+            var useCaseTypes = Assembly.Load(new AssemblyName("Domic.UseCase")).GetTypes();
+            
+            var targetConsumerCommandBusHandlerType = useCaseTypes.FirstOrDefault(
+                type => type.GetInterfaces().Any(
+                    i => i.IsGenericType &&
+                         i.GetGenericTypeDefinition() == typeof(IConsumerCommandBusHandler<,>) &&
+                         i.GetGenericArguments().Any(arg => 
+                             arg.Name.Equals(nameOfCommand) && arg.Namespace.Equals(nameSpaceOfCommand)
+                         )
+                )
+            );
+        
+            var resultType = targetConsumerCommandBusHandlerType?.GetInterfaces()
+                                                                 .Select(i => i.GetGenericArguments()[1])
+                                                                 .FirstOrDefault();
+            
+            var commandType = targetConsumerCommandBusHandlerType?.GetInterfaces()
+                                                                  .Select(i => i.GetGenericArguments()[0])
+                                                                  .FirstOrDefault();
+
+            var command  = JsonConvert.DeserializeObject(message, commandType);
+            connectionId = commandType.GetProperty("ConnectionId")?.GetValue(command);
+            
+            var fullContractOfConsumerType =
+                typeof(IConsumerCommandBusHandler<,>).MakeGenericType(commandType, resultType);
+        
+            var commandBusHandler = serviceProvider.GetRequiredService(fullContractOfConsumerType);
+            commandBusHandlerType = commandBusHandler.GetType();
+            
+            var commandBusHandlerTypeMethod =
+                commandBusHandlerType.GetMethod("HandleAsync") ?? throw new Exception("HandleAsync function not found !");
+            
+            var retryAttr =
+                commandBusHandlerTypeMethod.GetCustomAttribute(typeof(WithMaxRetryAttribute)) as WithMaxRetryAttribute;
+
+            if (_IsMaxRetryMessage(args, retryAttr))
+            {
+                if (retryAttr.HasAfterMaxRetryHandle)
+                {
+                    var afterMaxRetryHandlerMethod =
+                        commandBusHandlerType.GetMethod("AfterMaxRetryHandleAsync") ?? throw new Exception("AfterMaxRetryHandleAsync function not found !");
+                    
+                    await (Task)afterMaxRetryHandlerMethod.Invoke(commandBusHandler, new object[] { message, cancellationToken });
+                }
+                
+                _TrySendAckMessage(channel, args, service, 
+                    commandBusHandlerType is not null ? commandBusHandlerType.Name : NameOfAction
+                );
+            }
+            else
+            {
+                #region Validator
+
+                //If the validation of this part is false, an exception will be thrown and the code will not be executed .
+
+                if (commandBusHandlerTypeMethod.GetCustomAttribute(typeof(WithValidationAttribute)) is not null)
+                {
+                    var validatorType = useCaseTypes.FirstOrDefault(
+                        type => type.GetInterfaces().Any(
+                            i => i.IsGenericType &&
+                                 i.GetGenericTypeDefinition() == typeof(IAsyncValidator<>) &&
+                                 i.GetGenericArguments().Any(arg =>
+                                     arg.Name.Equals(nameOfCommand) && arg.Namespace.Equals(nameSpaceOfCommand)
+                                 )
+                        )
+                    );
+                    
+                    var validatorArgType = validatorType?.GetInterfaces()
+                                                         .Select(i => i.GetGenericArguments()[0])
+                                                         .FirstOrDefault();
+                    
+                    Type fullContractValidatorType = typeof(IAsyncValidator<>).MakeGenericType(validatorArgType);
+                    
+                    var validator = serviceProvider.GetRequiredService(fullContractValidatorType);
+                    
+                    var validatorValidateMethod =
+                        validator.GetType().GetMethod("ValidateAsync") ?? throw new Exception("ValidateAsync function not found !");
+
+                    object validationResult =
+                        await (Task<object>)validatorValidateMethod.Invoke(validator, new[] { command, cancellationToken });
+                
+                    var fieldValidationResult =
+                        commandBusHandlerType.GetField("_validationResult", BindingFlags.NonPublic | BindingFlags.Instance);
+                
+                    if (fieldValidationResult is not null)
+                    {
+                        if (
+                            !fieldValidationResult.IsPrivate  || 
+                            !fieldValidationResult.IsInitOnly ||
+                            fieldValidationResult.FieldType != typeof(object)
+                        )
+                            throw new Exception("The [ _validationResult ] field must be private and readonly & return an object");
+                    
+                        fieldValidationResult.SetValue(commandBusHandler, validationResult);
+                    }
+                }
+
+                #endregion
+
+                #region Transaction
+
+                object resultInvokeCommand;
+                
+                if (commandBusHandlerTypeMethod.GetCustomAttribute(typeof(WithTransactionAttribute)) is WithTransactionAttribute transactionAttr)
+                {
+                    unitOfWork = serviceProvider.GetRequiredService(_GetTypeOfCommandUnitOfWork()) as ICoreUnitOfWork;
+                    
+                    unitOfWork.Transaction(transactionAttr.IsolationLevel);
+
+                    resultInvokeCommand =
+                        await (Task<object>)commandBusHandlerTypeMethod.Invoke(commandBusHandler, new []{ command, cancellationToken });
+
+                    unitOfWork.Commit();
+                }
+                else
+                    resultInvokeCommand =
+                        await (Task<object>)commandBusHandlerTypeMethod.Invoke(commandBusHandler, new []{ command, cancellationToken });
 
                 #endregion
                 

@@ -35,7 +35,10 @@ public class EventConsumerJob : IHostedService
         var allValidQueues = allQueues.Where(queue => !string.IsNullOrEmpty(queue)).Distinct();
 
         foreach (var queue in allValidQueues)
-            _messageBroker.Subscribe(queue);
+            if(_configuration.GetValue<bool>("IsAsyncConsumeOfMessages"))
+                _messageBroker.SubscribeAsynchronously(queue, cancellationToken);
+            else
+                _messageBroker.Subscribe(queue);
 
         return Task.CompletedTask;
     }

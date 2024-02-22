@@ -34,7 +34,10 @@ public class CommandConsumerJob : IHostedService
         var allValidQueues = allQueues.Where(queue => !string.IsNullOrEmpty(queue)).Distinct();
 
         foreach (var queue in allValidQueues)
-            _commandBroker.Subscribe(queue);
+            if(_configuration.GetValue<bool>("IsAsyncConsumeOfMessages")) 
+                _commandBroker.SubscribeAsynchronously(queue, cancellationToken);
+            else
+                _commandBroker.Subscribe(queue);
 
         return Task.CompletedTask;
     }
