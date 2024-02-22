@@ -29,8 +29,7 @@ public class MessageBroker : IMessageBroker
     private readonly IGlobalUniqueIdGenerator _globalUniqueIdGenerator;
 
     public MessageBroker(IConfiguration configuration, IHostEnvironment hostEnvironment, 
-        IServiceScopeFactory serviceScopeFactory, IDateTime dateTime, IGlobalUniqueIdGenerator globalUniqueIdGenerator,
-        bool dispatchConsumersAsync = true
+        IServiceScopeFactory serviceScopeFactory, IDateTime dateTime, IGlobalUniqueIdGenerator globalUniqueIdGenerator
     )
     {
         _hostEnvironment         = hostEnvironment;
@@ -45,7 +44,7 @@ public class MessageBroker : IMessageBroker
             Port     = configuration.GetExternalRabbitPort() 
         };
 
-        factory.DispatchConsumersAsync = dispatchConsumersAsync;
+        factory.DispatchConsumersAsync = configuration.GetValue<bool>("IsBrokerConsumingAsync");
         
         _connection = factory.CreateConnection();
     }
@@ -316,7 +315,9 @@ public class MessageBroker : IMessageBroker
                 
                 var @event = Encoding.UTF8.GetString(args.Body.ToArray()).DeSerialize<Event>();
                 
-               await _EventOfQueueHandleAsync(channel, args, @event, NameOfService, serviceScope.ServiceProvider, cancellationToken);
+               await _EventOfQueueHandleAsync(channel, args, @event, NameOfService, serviceScope.ServiceProvider, 
+                   cancellationToken
+                );
                 
             };
 

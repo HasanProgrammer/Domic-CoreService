@@ -34,13 +34,29 @@ public class CommandConsumerJob : IHostedService
         var allValidQueues = allQueues.Where(queue => !string.IsNullOrEmpty(queue)).Distinct();
 
         foreach (var queue in allValidQueues)
-            if(_configuration.GetValue<bool>("IsAsyncConsumeOfMessages")) 
-                _commandBroker.SubscribeAsynchronously(queue, cancellationToken);
+            if(_configuration.GetValue<bool>("IsBrokerConsumingAsync"))
+                _LongRunningListenerAsNonBlocking(queue, cancellationToken);
             else
-                _commandBroker.Subscribe(queue);
+                _LongRunningListenerAsNonBlocking(queue);
 
         return Task.CompletedTask;
     }
 
     public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+    
+    /*---------------------------------------------------------------*/
+
+    private void _LongRunningListenerAsNonBlocking(string queue)
+    {
+        Task.Factory.StartNew(() => _commandBroker.Subscribe(queue),
+            TaskCreationOptions.LongRunning
+        );
+    }
+    
+    private void _LongRunningListenerAsNonBlocking(string queue, CancellationToken cancellationToken)
+    {
+        Task.Factory.StartNew(() => _commandBroker.SubscribeAsynchronously(queue, cancellationToken),
+            TaskCreationOptions.LongRunning
+        );
+    }
 }

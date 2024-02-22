@@ -40,13 +40,29 @@ public class MessageConsumersJob : IHostedService
 
         foreach (var info in handlerInfo)
             if(info.Queue is not null)
-                if(_configuration.GetValue<bool>("IsAsyncConsumeOfMessages"))
-                    _messageBroker.SubscribeAsynchronously(info.Queue, info.MessageType, cancellationToken);
+                if(_configuration.GetValue<bool>("IsBrokerConsumingAsync"))
+                    _LongRunningListenerAsNonBlocking(info.Queue, info.MessageType, cancellationToken);
                 else
-                    _messageBroker.Subscribe(info.Queue, info.MessageType);
+                    _LongRunningListenerAsNonBlocking(info.Queue, info.MessageType);
 
         return Task.CompletedTask;
     }
 
     public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+    
+    /*---------------------------------------------------------------*/
+
+    private void _LongRunningListenerAsNonBlocking(string queue, Type messageType)
+    {
+        Task.Factory.StartNew(() => _messageBroker.Subscribe(queue, messageType),
+            TaskCreationOptions.LongRunning
+        );
+    }
+    
+    private void _LongRunningListenerAsNonBlocking(string queue, Type messageType, CancellationToken cancellationToken)
+    {
+        Task.Factory.StartNew(() => _messageBroker.SubscribeAsynchronously(queue, messageType, cancellationToken),
+            TaskCreationOptions.LongRunning
+        );
+    }
 }

@@ -48,6 +48,8 @@ public class AsyncCommandBroker : IAsyncCommandBroker
             Port     = configuration.GetInternalRabbitPort() 
         };
         
+        factory.DispatchConsumersAsync = configuration.GetValue<bool>("IsBrokerConsumingAsync");
+        
         _connection = factory.CreateConnection();
     }
 

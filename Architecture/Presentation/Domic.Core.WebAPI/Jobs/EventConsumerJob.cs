@@ -35,13 +35,29 @@ public class EventConsumerJob : IHostedService
         var allValidQueues = allQueues.Where(queue => !string.IsNullOrEmpty(queue)).Distinct();
 
         foreach (var queue in allValidQueues)
-            if(_configuration.GetValue<bool>("IsAsyncConsumeOfMessages"))
-                _messageBroker.SubscribeAsynchronously(queue, cancellationToken);
+            if(_configuration.GetValue<bool>("IsBrokerConsumingAsync"))
+                _LongRunningListenerAsNonBlocking(queue, cancellationToken);
             else
-                _messageBroker.Subscribe(queue);
+                _LongRunningListenerAsNonBlocking(queue);
 
         return Task.CompletedTask;
     }
 
     public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+    
+    /*---------------------------------------------------------------*/
+
+    private void _LongRunningListenerAsNonBlocking(string queue)
+    {
+        Task.Factory.StartNew(() => _messageBroker.Subscribe(queue),
+            TaskCreationOptions.LongRunning
+        );
+    }
+    
+    private void _LongRunningListenerAsNonBlocking(string queue, CancellationToken cancellationToken)
+    {
+        Task.Factory.StartNew(() => _messageBroker.SubscribeAsynchronously(queue, cancellationToken),
+            TaskCreationOptions.LongRunning
+        );
+    }
 }
