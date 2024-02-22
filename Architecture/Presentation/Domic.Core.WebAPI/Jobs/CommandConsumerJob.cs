@@ -34,7 +34,7 @@ public class CommandConsumerJob : IHostedService
         var allValidQueues = allQueues.Where(queue => !string.IsNullOrEmpty(queue)).Distinct();
 
         foreach (var queue in allValidQueues)
-            if(_configuration.GetValue<bool>("IsBrokerConsumingAsync"))
+            if(_configuration.GetValue<bool>("IsInternalBrokerConsumingAsync"))
                 _LongRunningListenerAsNonBlocking(queue, cancellationToken);
             else
                 _LongRunningListenerAsNonBlocking(queue);

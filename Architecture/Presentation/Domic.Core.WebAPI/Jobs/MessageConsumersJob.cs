@@ -40,7 +40,7 @@ public class MessageConsumersJob : IHostedService
 
         foreach (var info in handlerInfo)
             if(info.Queue is not null)
-                if(_configuration.GetValue<bool>("IsBrokerConsumingAsync"))
+                if(_configuration.GetValue<bool>("IsExternalBrokerConsumingAsync"))
                     _LongRunningListenerAsNonBlocking(info.Queue, info.MessageType, cancellationToken);
                 else
                     _LongRunningListenerAsNonBlocking(info.Queue, info.MessageType);

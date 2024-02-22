@@ -44,7 +44,7 @@ public class MessageBroker : IMessageBroker
             Port     = configuration.GetExternalRabbitPort() 
         };
 
-        factory.DispatchConsumersAsync = configuration.GetValue<bool>("IsBrokerConsumingAsync");
+        factory.DispatchConsumersAsync = configuration.GetValue<bool>("IsExternalBrokerConsumingAsync");
         
         _connection = factory.CreateConnection();
     }
