@@ -1,5 +1,6 @@
 ﻿using Domic.Core.WebAPI.Middlewares;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.Extensions.Configuration;
 
 namespace Domic.Core.WebAPI.Extensions;
 
@@ -9,6 +10,6 @@ public static class IApplicationBuilderExtension
     /// 
     /// </summary>
     /// <param name="builder"></param>
-    public static void UseCoreExceptionHandler(this IApplicationBuilder builder) 
-        => builder.UseMiddleware<ExceptionHandler>();
+    public static void UseCoreExceptionHandler(this IApplicationBuilder builder, IConfiguration configuration) 
+        => builder.UseMiddleware<ExceptionHandler>(configuration);
 }
