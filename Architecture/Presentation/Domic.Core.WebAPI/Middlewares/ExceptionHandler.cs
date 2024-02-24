@@ -31,7 +31,11 @@ public class ExceptionHandler
     /// 
     /// </summary>
     /// <param name="next"></param>
-    public ExceptionHandler(RequestDelegate next) => _next = next;
+    public ExceptionHandler(RequestDelegate next, IConfiguration configuration)
+    {
+        _next = next;
+        _configuration = configuration;
+    }
 
     public async Task Invoke(HttpContext context)
     {
