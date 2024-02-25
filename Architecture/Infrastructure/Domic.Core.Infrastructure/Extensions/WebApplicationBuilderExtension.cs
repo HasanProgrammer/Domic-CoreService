@@ -160,28 +160,22 @@ public static class WebApplicationBuilderExtension
     /// <returns></returns>
     public static void RegisterRedisCaching(this WebApplicationBuilder builder)
     {
-        Type[] useCaseAssemblyTypes = Assembly.Load(new AssemblyName("Domic.UseCase")).GetTypes();
+        Type[] useCaseAssemblyTypes     = Assembly.Load(new AssemblyName("Domic.UseCase")).GetTypes();
+        Type[] coreUseCaseAssemblyTypes = Assembly.Load(new AssemblyName("Domic.Core.UseCase")).GetTypes();
         
         //Third party ( Redis )
         builder.Services.AddScoped<IConnectionMultiplexer>(
-            Provider => ConnectionMultiplexer.Connect(
-                builder.Configuration.GetRedisConnectionString() 
-            )
+            Provider => ConnectionMultiplexer.Connect( builder.Configuration.GetRedisConnectionString() )
         );
         
         //Pure
-        builder.Services.AddScoped(
-            typeof(IRedisCache),
-            typeof(RedisCache)
-        );
+        builder.Services.AddScoped(typeof(IRedisCache), typeof(RedisCache));
         
         //Pure ( Mediator for cache )
-        builder.Services.AddTransient(
-            typeof(ICacheService),
-            typeof(CacheService)
-        );
+        builder.Services.AddTransient(typeof(ICacheService), typeof(CacheService));
         
         RegisterAllCachesHandler(builder.Services, useCaseAssemblyTypes);
+        RegisterAllCachesHandler(builder.Services, coreUseCaseAssemblyTypes);
     }
     
     /// <summary>
