@@ -5,11 +5,14 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>disable</Nullable>
     <PackageId>Domic.Core.Package</PackageId>
-    <PackageVersion>2.0.0</PackageVersion>
+    <PackageVersion>3.0.0</PackageVersion>
     <Authors>Karami.Domic</Authors>
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Abstracta.JmeterDsl" Version="0.4.0" />
+    <PackageReference Include="Abstracta.JmeterDsl.BlazeMeter" Version="0.4.0" />
+    
     <PackageReference Include="EntityFrameworkProfiler.Appender" Version="6.0.6040" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="6.0.0" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer.Design" Version="1.1.6" />
