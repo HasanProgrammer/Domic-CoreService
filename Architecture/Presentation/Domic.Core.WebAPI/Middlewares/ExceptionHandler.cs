@@ -48,7 +48,7 @@ public class ExceptionHandler
             _dateTime                = context.RequestServices.GetRequiredService<IDateTime>();
             _messageBroker           = context.RequestServices.GetRequiredService<IMessageBroker>(); 
             _globalUniqueIdGenerator = context.RequestServices.GetRequiredService<IGlobalUniqueIdGenerator>();
-
+            
             context.CentralRequestLoggerAsync(_hostEnvironment, _globalUniqueIdGenerator, _messageBroker, _dateTime, 
                 serviceName, default
             );
