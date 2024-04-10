@@ -160,8 +160,7 @@ public static class WebApplicationBuilderExtension
     /// <returns></returns>
     public static void RegisterRedisCaching(this WebApplicationBuilder builder)
     {
-        Type[] useCaseAssemblyTypes     = Assembly.Load(new AssemblyName("Domic.UseCase")).GetTypes();
-        Type[] coreUseCaseAssemblyTypes = Assembly.Load(new AssemblyName("Domic.Core.UseCase")).GetTypes();
+        Type[] useCaseAssemblyTypes = Assembly.Load(new AssemblyName("Domic.UseCase")).GetTypes();
         
         //Third party ( Redis )
         builder.Services.AddScoped<IConnectionMultiplexer>(
@@ -175,7 +174,6 @@ public static class WebApplicationBuilderExtension
         builder.Services.AddTransient(typeof(ICacheService), typeof(CacheService));
         
         RegisterAllCachesHandler(builder.Services, useCaseAssemblyTypes);
-        RegisterAllCachesHandler(builder.Services, coreUseCaseAssemblyTypes);
     }
     
     /// <summary>
@@ -305,6 +303,10 @@ public static class WebApplicationBuilderExtension
     /// <param name="builder"></param>
     public static void RegisterServiceDiscovery(this WebApplicationBuilder builder)
     {
+        Type[] coreUseCaseAssemblyTypes = Assembly.Load(new AssemblyName("Domic.Core.UseCase")).GetTypes();
+        
+        RegisterAllCachesHandler(builder.Services, coreUseCaseAssemblyTypes);
+        
         builder.Services.AddScoped(typeof(IServiceDiscovery), typeof(ServiceDiscovery));
 
         builder.Services.AddGrpcClient<DiscoveryService.DiscoveryServiceClient>(options => {

@@ -1,11 +1,11 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net7.0</TargetFramework>
+    <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>disable</Nullable>
     <PackageId>Domic.Architecture.Domain</PackageId>
-    <PackageVersion>2.0.0</PackageVersion>
+    <PackageVersion>3.0.0</PackageVersion>
     <Authors>Karami.Domic</Authors>
   </PropertyGroup>
 
