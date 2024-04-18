@@ -424,6 +424,19 @@ public static class WebApplicationBuilderExtension
         RegisterAllConsumerEventBusHandler(builder.Services, useCaseAssemblyTypes);
     }
     
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="builder"></param>
+    public static void RegisterEventStreamBroker(this WebApplicationBuilder builder)
+    {
+        builder.Services.AddSingleton(typeof(IEventStreamBroker), typeof(EventStreamBroker));
+
+        Type[] useCaseAssemblyTypes = Assembly.Load(new AssemblyName("Domic.UseCase")).GetTypes();
+        
+        RegisterAllConsumerEventStreamHandler(builder.Services, useCaseAssemblyTypes);
+    }
+    
     /*---------------------------------------------------------------*/
 
     #region AutoRegisterCQRSHandlers
@@ -589,6 +602,38 @@ public static class WebApplicationBuilderExtension
             serviceCollection.AddScoped(
                 typeof(IConsumerEventBusHandler<>).MakeGenericType(eventHandlerTypeValue),
                 eventHandlerType
+            );
+                
+        }
+    }
+
+    #endregion
+
+    #region AutoRegisterEventStreamBroker
+    
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="serviceCollection"></param>
+    /// <param name="useCaseAssemblyTypes"></param>
+    private static void RegisterAllConsumerEventStreamHandler(IServiceCollection serviceCollection, 
+        Type[] useCaseAssemblyTypes
+    )
+    {
+        IEnumerable<Type> eventStreamHandlerTypes = useCaseAssemblyTypes.Where(
+            type => type.GetInterfaces().Any(
+                i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IConsumerEventStreamHandler<>)
+            )
+        );
+
+        foreach (Type eventStreamHandlerType in eventStreamHandlerTypes) {
+                
+            Type eventStreamHandlerTypeValue =
+                eventStreamHandlerType.GetInterfaces().FirstOrDefault().GetGenericArguments().FirstOrDefault();
+                
+            serviceCollection.AddScoped(
+                typeof(IConsumerEventStreamHandler<>).MakeGenericType(eventStreamHandlerTypeValue),
+                eventStreamHandlerType
             );
                 
         }
