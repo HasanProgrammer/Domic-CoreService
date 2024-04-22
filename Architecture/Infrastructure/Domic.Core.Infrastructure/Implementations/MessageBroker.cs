@@ -21,22 +21,25 @@ namespace Domic.Core.Infrastructure.Implementations;
 public class MessageBroker : IMessageBroker
 {
     private static object _lock = new();
-    
-    private readonly IConnection              _connection;
-    private readonly IHostEnvironment         _hostEnvironment;
-    private readonly IServiceScopeFactory     _serviceScopeFactory;
-    private readonly IDateTime                _dateTime;
+
+    private readonly IConnection _connection;
+    private readonly IHostEnvironment _hostEnvironment;
+    private readonly IServiceScopeFactory _serviceScopeFactory;
+    private readonly IDateTime _dateTime;
     private readonly IGlobalUniqueIdGenerator _globalUniqueIdGenerator;
+    private readonly IIdempotentConsumerEventQueryRepository _idempotentConsumerEventQueryRepository;
 
     public MessageBroker(IConfiguration configuration, IHostEnvironment hostEnvironment, 
-        IServiceScopeFactory serviceScopeFactory, IDateTime dateTime, IGlobalUniqueIdGenerator globalUniqueIdGenerator
+        IServiceScopeFactory serviceScopeFactory, IDateTime dateTime, IGlobalUniqueIdGenerator globalUniqueIdGenerator,
+        IIdempotentConsumerEventQueryRepository idempotentConsumerEventQueryRepository
     )
     {
-        _hostEnvironment         = hostEnvironment;
-        _serviceScopeFactory     = serviceScopeFactory;
-        _dateTime                = dateTime;
+        _hostEnvironment = hostEnvironment;
+        _serviceScopeFactory = serviceScopeFactory;
+        _dateTime = dateTime;
         _globalUniqueIdGenerator = globalUniqueIdGenerator;
-        
+        _idempotentConsumerEventQueryRepository = idempotentConsumerEventQueryRepository;
+
         var factory = new ConnectionFactory {
             HostName = configuration.GetExternalRabbitHostName(),
             UserName = configuration.GetExternalRabbitUsername(),
@@ -317,7 +320,7 @@ public class MessageBroker : IMessageBroker
                 
                await _EventOfQueueHandleAsync(channel, args, @event, NameOfService, serviceScope.ServiceProvider, 
                    cancellationToken
-                );
+               );
                 
             };
 
@@ -685,18 +688,41 @@ public class MessageBroker : IMessageBroker
                 }
                 else
                 {
-                    if (eventBusHandlerMethod.GetCustomAttribute(typeof(WithTransactionAttribute)) is WithTransactionAttribute transactionAttr)
+                    if (eventBusHandlerMethod.GetCustomAttribute(typeof(WithIdempotencyPolicy)) is WithIdempotencyPolicy idempotencyPolicy)
                     {
+                        //persist event payload in database for outbox consuming
+                        
                         unitOfWork = serviceProvider.GetRequiredService(_GetTypeOfUnitOfWork()) as ICoreUnitOfWork;
-                    
-                        unitOfWork.Transaction(transactionAttr.IsolationLevel);
+                        
+                        unitOfWork.Transaction(idempotencyPolicy.TransactionIsolationLevel);
 
-                        eventBusHandlerMethod.Invoke(eventBusHandler, new[] { payload });
+                        _idempotentConsumerEventQueryRepository.Add(new IdemponentConsumerEvent {
+                            Id = @event.Id,
+                            Type = @event.Type,
+                            Payload = @event.Payload,
+                            CreatedAt_EnglishDate = @event.CreatedAt_EnglishDate,
+                            CreatedAt_PersianDate = @event.CreatedAt_PersianDate,
+                            UpdatedAt_EnglishDate = @event.UpdatedAt_EnglishDate,
+                            UpdatedAt_PersianDate = @event.UpdatedAt_PersianDate
+                        });
 
                         unitOfWork.Commit();
                     }
                     else
-                        eventBusHandlerMethod.Invoke(eventBusHandler, new[] { payload });
+                    {
+                        if (eventBusHandlerMethod.GetCustomAttribute(typeof(WithTransactionAttribute)) is WithTransactionAttribute transactionAttr)
+                        {
+                            unitOfWork = serviceProvider.GetRequiredService(_GetTypeOfUnitOfWork()) as ICoreUnitOfWork;
+                    
+                            unitOfWork.Transaction(transactionAttr.IsolationLevel);
+
+                            eventBusHandlerMethod.Invoke(eventBusHandler, new[] { payload });
+
+                            unitOfWork.Commit();
+                        }
+                        else
+                            eventBusHandlerMethod.Invoke(eventBusHandler, new[] { payload });
+                    }
 
                     _CleanCache(eventBusHandlerMethod, serviceProvider);
                     
@@ -728,7 +754,7 @@ public class MessageBroker : IMessageBroker
         string service, IServiceProvider serviceProvider, CancellationToken cancellationToken
     )
     {
-        Type eventBusHandlerType   = null;
+        Type eventBusHandlerType = null;
         ICoreUnitOfWork unitOfWork = null;
 
         try
@@ -776,18 +802,41 @@ public class MessageBroker : IMessageBroker
                 }
                 else
                 {
-                    if (eventBusHandlerMethod.GetCustomAttribute(typeof(WithTransactionAttribute)) is WithTransactionAttribute transactionAttr)
+                    if (eventBusHandlerMethod.GetCustomAttribute(typeof(WithIdempotencyPolicy)) is WithIdempotencyPolicy idempotencyPolicy)
                     {
+                        //persist event payload in database for outbox consuming
+                        
                         unitOfWork = serviceProvider.GetRequiredService(_GetTypeOfUnitOfWork()) as ICoreUnitOfWork;
-                    
-                        unitOfWork.Transaction(transactionAttr.IsolationLevel);
+                        
+                        unitOfWork.Transaction(idempotencyPolicy.TransactionIsolationLevel);
 
-                        await (Task)eventBusHandlerMethod.Invoke(eventBusHandler, new[] { payload, cancellationToken });
+                        _idempotentConsumerEventQueryRepository.Add(new IdemponentConsumerEvent {
+                            Id = @event.Id,
+                            Type = @event.Type,
+                            Payload = @event.Payload,
+                            CreatedAt_EnglishDate = @event.CreatedAt_EnglishDate,
+                            CreatedAt_PersianDate = @event.CreatedAt_PersianDate,
+                            UpdatedAt_EnglishDate = @event.UpdatedAt_EnglishDate,
+                            UpdatedAt_PersianDate = @event.UpdatedAt_PersianDate
+                        });
 
                         unitOfWork.Commit();
                     }
                     else
-                        await (Task)eventBusHandlerMethod.Invoke(eventBusHandler, new[] { payload, cancellationToken });
+                    {
+                        if (eventBusHandlerMethod.GetCustomAttribute(typeof(WithTransactionAttribute)) is WithTransactionAttribute transactionAttr)
+                        {
+                            unitOfWork = serviceProvider.GetRequiredService(_GetTypeOfUnitOfWork()) as ICoreUnitOfWork;
+                    
+                            unitOfWork.Transaction(transactionAttr.IsolationLevel);
+
+                            await (Task)eventBusHandlerMethod.Invoke(eventBusHandler, new[] { payload, cancellationToken });
+
+                            unitOfWork.Commit();
+                        }
+                        else
+                            await (Task)eventBusHandlerMethod.Invoke(eventBusHandler, new[] { payload, cancellationToken });
+                    }
 
                     _CleanCache(eventBusHandlerMethod, serviceProvider);
                     
