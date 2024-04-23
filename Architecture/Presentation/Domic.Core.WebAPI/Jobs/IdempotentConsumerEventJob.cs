@@ -116,6 +116,7 @@ public class IdempotentConsumerEventJob : IHostedService, IDisposable
                     var fullContractOfConsumerType = typeof(IConsumerEventBusHandler<>).MakeGenericType(eventType);
                 
                     var eventBusHandler = scope.ServiceProvider.GetRequiredService(fullContractOfConsumerType);
+                    
                     var eventBusHandlerType = eventBusHandler.GetType();
                     
                     var payload = JsonConvert.DeserializeObject(@event.Payload, eventType);
