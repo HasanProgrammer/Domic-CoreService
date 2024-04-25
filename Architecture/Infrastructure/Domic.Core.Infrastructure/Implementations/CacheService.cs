@@ -77,11 +77,12 @@ public class CacheService : ICacheService
                 await redisCache.SetCacheValueAsync(
                     new KeyValuePair<string, string>(cacheHandlerMethodAttr.Key, base64 ) ,
                     TimeSpan.FromMinutes( cacheHandlerMethodAttr.Ttl ) ,
-                    cancellationToken
+                    cancellationToken: cancellationToken
                 );
             else
                 await redisCache.SetCacheValueAsync(
-                    new KeyValuePair<string, string>(cacheHandlerMethodAttr.Key, base64 ), cancellationToken
+                    new KeyValuePair<string, string>(cacheHandlerMethodAttr.Key, base64 ), 
+                    cancellationToken: cancellationToken
                 );
 
             return result;

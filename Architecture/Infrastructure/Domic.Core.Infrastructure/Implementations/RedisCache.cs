@@ -1,3 +1,4 @@
+using Domic.Core.Common.ClassEnums;
 using Domic.Core.UseCase.Contracts.Interfaces;
 using StackExchange.Redis;
 
@@ -14,23 +15,26 @@ public class RedisCache : IRedisCache
     public async Task<string> GetCacheValueAsync(string key, CancellationToken cancellationToken) 
         => await _redisContext.StringGetAsync(key);
 
-    public void SetCacheValue(KeyValuePair<string, string> keyValue, TimeSpan time) 
-        => _redisContext.StringSet(keyValue.Key, keyValue.Value, time);
+    public bool SetCacheValue(KeyValuePair<string, string> keyValue, TimeSpan time, 
+        CacheSetType cacheSetType = CacheSetType.Always
+    ) => _redisContext.StringSet(keyValue.Key, keyValue.Value, time, (When)cacheSetType);
 
-    public void SetCacheValue(KeyValuePair<string, string> keyValue)
+    public bool SetCacheValue(KeyValuePair<string, string> keyValue, CacheSetType cacheSetType = CacheSetType.Always)
     {
         _redisContext.KeyPersist(keyValue.Key);
-        _redisContext.StringSet(keyValue.Key, keyValue.Value);
+        return _redisContext.StringSet(keyValue.Key, keyValue.Value, when: (When)cacheSetType);
     }
 
-    public async Task SetCacheValueAsync(KeyValuePair<string, string> keyValue, TimeSpan time, 
-        CancellationToken cancellationToken
-    ) => await _redisContext.StringSetAsync(keyValue.Key, keyValue.Value, time);
+    public Task<bool> SetCacheValueAsync(KeyValuePair<string, string> keyValue, TimeSpan time, 
+        CacheSetType cacheSetType = CacheSetType.Always, CancellationToken cancellationToken = default
+    ) => _redisContext.StringSetAsync(keyValue.Key, keyValue.Value, time, (When)cacheSetType);
 
-    public async Task SetCacheValueAsync(KeyValuePair<string, string> keyValue, CancellationToken cancellationToken)
+    public async Task<bool> SetCacheValueAsync(KeyValuePair<string, string> keyValue, 
+        CacheSetType cacheSetType = CacheSetType.Always, CancellationToken cancellationToken = default
+    )
     {
         await _redisContext.KeyPersistAsync(keyValue.Key);
-        await _redisContext.StringSetAsync(keyValue.Key, keyValue.Value);
+        return await _redisContext.StringSetAsync(keyValue.Key, keyValue.Value, when: (When)cacheSetType);
     }
 
     public bool DeleteKey(string key) => GetCacheValue(key) is not null && _redisContext.KeyDelete(key);

@@ -72,11 +72,8 @@ public static class WebApplicationBuilderExtension
     /// 
     /// </summary>
     /// <param name="builder"></param>
-    public static void RegisterEventsSubscriber(this WebApplicationBuilder builder)
-    {
-        builder.Services.AddHostedService<EventConsumerJob>();
-        builder.Services.AddHostedService<IdempotentConsumerEventJob>();
-    }
+    public static void RegisterEventsSubscriber(this WebApplicationBuilder builder) 
+        => builder.Services.AddHostedService<EventConsumerJob>();
     
     /// <summary>
     /// 

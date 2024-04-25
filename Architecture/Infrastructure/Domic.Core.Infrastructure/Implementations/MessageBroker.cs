@@ -27,17 +27,19 @@ public class MessageBroker : IMessageBroker
     private readonly IServiceScopeFactory _serviceScopeFactory;
     private readonly IDateTime _dateTime;
     private readonly IGlobalUniqueIdGenerator _globalUniqueIdGenerator;
+    private readonly IRedisCache _redisCache;
     private readonly IIdempotentConsumerEventQueryRepository _idempotentConsumerEventQueryRepository;
 
     public MessageBroker(IConfiguration configuration, IHostEnvironment hostEnvironment, 
         IServiceScopeFactory serviceScopeFactory, IDateTime dateTime, IGlobalUniqueIdGenerator globalUniqueIdGenerator,
-        IIdempotentConsumerEventQueryRepository idempotentConsumerEventQueryRepository
+        IRedisCache redisCache, IIdempotentConsumerEventQueryRepository idempotentConsumerEventQueryRepository
     )
     {
         _hostEnvironment = hostEnvironment;
         _serviceScopeFactory = serviceScopeFactory;
         _dateTime = dateTime;
         _globalUniqueIdGenerator = globalUniqueIdGenerator;
+        _redisCache = redisCache;
         _idempotentConsumerEventQueryRepository = idempotentConsumerEventQueryRepository;
 
         var factory = new ConnectionFactory {
@@ -688,43 +690,39 @@ public class MessageBroker : IMessageBroker
                 }
                 else
                 {
-                    if (eventBusHandlerMethod.GetCustomAttribute(typeof(WithIdempotencyPolicy)) is WithIdempotencyPolicy idempotencyPolicy)
+                    var consumerEvent = _idempotentConsumerEventQueryRepository.FindById(@event.Id);
+                        
+                    if (consumerEvent is null)
                     {
-                        //persist event payload in database for outbox consuming
-                        
                         unitOfWork = serviceProvider.GetRequiredService(_GetTypeOfUnitOfWork()) as ICoreUnitOfWork;
-                        
-                        unitOfWork.Transaction(idempotencyPolicy.TransactionIsolationLevel);
 
-                        _idempotentConsumerEventQueryRepository.Add(new IdemponentConsumerEvent {
+                        if(eventBusHandlerMethod.GetCustomAttribute(typeof(WithTransactionAttribute)) is WithTransactionAttribute transactionAttr)
+                            unitOfWork.Transaction(transactionAttr.IsolationLevel);
+                        else 
+                            unitOfWork.Transaction();
+
+                        #region IdempotentConsumerPattern
+                        
+                        consumerEvent = new IdempotentConsumerEvent {
                             Id = @event.Id,
                             Type = @event.Type,
-                            Payload = @event.Payload,
-                            CreatedAt_EnglishDate = @event.CreatedAt_EnglishDate,
-                            CreatedAt_PersianDate = @event.CreatedAt_PersianDate,
-                            UpdatedAt_EnglishDate = @event.UpdatedAt_EnglishDate,
-                            UpdatedAt_PersianDate = @event.UpdatedAt_PersianDate
-                        });
+                            CreatedAt_EnglishDate = DateTime.Now
+                        };
+                                
+                        _idempotentConsumerEventQueryRepository.Add(consumerEvent);
+
+                        #endregion
+            
+                        eventBusHandlerMethod.Invoke(eventBusHandler, new[] { payload });
 
                         unitOfWork.Commit();
-                    }
-                    else
-                    {
-                        if (eventBusHandlerMethod.GetCustomAttribute(typeof(WithTransactionAttribute)) is WithTransactionAttribute transactionAttr)
-                        {
-                            unitOfWork = serviceProvider.GetRequiredService(_GetTypeOfUnitOfWork()) as ICoreUnitOfWork;
+        
+                        _CleanCache(eventBusHandlerMethod, serviceProvider);
                     
-                            unitOfWork.Transaction(transactionAttr.IsolationLevel);
-
-                            eventBusHandlerMethod.Invoke(eventBusHandler, new[] { payload });
-
-                            unitOfWork.Commit();
-                        }
-                        else
-                            eventBusHandlerMethod.Invoke(eventBusHandler, new[] { payload });
+                        _TrySendAckMessage(channel, args);
+                            
+                        return;
                     }
-
-                    _CleanCache(eventBusHandlerMethod, serviceProvider);
                     
                     _TrySendAckMessage(channel, args);
                 }
@@ -802,43 +800,40 @@ public class MessageBroker : IMessageBroker
                 }
                 else
                 {
-                    if (eventBusHandlerMethod.GetCustomAttribute(typeof(WithIdempotencyPolicy)) is WithIdempotencyPolicy idempotencyPolicy)
+                    var consumerEvent =
+                        await _idempotentConsumerEventQueryRepository.FindByIdAsync(@event.Id, cancellationToken);
+                        
+                    if (consumerEvent is null)
                     {
-                        //persist event payload in database for outbox consuming
-                        
                         unitOfWork = serviceProvider.GetRequiredService(_GetTypeOfUnitOfWork()) as ICoreUnitOfWork;
-                        
-                        unitOfWork.Transaction(idempotencyPolicy.TransactionIsolationLevel);
 
-                        _idempotentConsumerEventQueryRepository.Add(new IdemponentConsumerEvent {
+                        if(eventBusHandlerMethod.GetCustomAttribute(typeof(WithTransactionAttribute)) is WithTransactionAttribute transactionAttr)
+                            unitOfWork.Transaction(transactionAttr.IsolationLevel);
+                        else 
+                            unitOfWork.Transaction();
+
+                        #region IdempotentConsumerPattern
+                        
+                        consumerEvent = new IdempotentConsumerEvent {
                             Id = @event.Id,
                             Type = @event.Type,
-                            Payload = @event.Payload,
-                            CreatedAt_EnglishDate = @event.CreatedAt_EnglishDate,
-                            CreatedAt_PersianDate = @event.CreatedAt_PersianDate,
-                            UpdatedAt_EnglishDate = @event.UpdatedAt_EnglishDate,
-                            UpdatedAt_PersianDate = @event.UpdatedAt_PersianDate
-                        });
+                            CreatedAt_EnglishDate = DateTime.Now
+                        };
+                                
+                        _idempotentConsumerEventQueryRepository.Add(consumerEvent);
+
+                        #endregion
+            
+                        await (Task)eventBusHandlerMethod.Invoke(eventBusHandler, new[] { payload, cancellationToken });
 
                         unitOfWork.Commit();
-                    }
-                    else
-                    {
-                        if (eventBusHandlerMethod.GetCustomAttribute(typeof(WithTransactionAttribute)) is WithTransactionAttribute transactionAttr)
-                        {
-                            unitOfWork = serviceProvider.GetRequiredService(_GetTypeOfUnitOfWork()) as ICoreUnitOfWork;
+        
+                        _CleanCache(eventBusHandlerMethod, serviceProvider);
                     
-                            unitOfWork.Transaction(transactionAttr.IsolationLevel);
-
-                            await (Task)eventBusHandlerMethod.Invoke(eventBusHandler, new[] { payload, cancellationToken });
-
-                            unitOfWork.Commit();
-                        }
-                        else
-                            await (Task)eventBusHandlerMethod.Invoke(eventBusHandler, new[] { payload, cancellationToken });
+                        _TrySendAckMessage(channel, args);
+                            
+                        return;
                     }
-
-                    _CleanCache(eventBusHandlerMethod, serviceProvider);
                     
                     _TrySendAckMessage(channel, args);
                 }

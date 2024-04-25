@@ -1,3 +1,5 @@
+using Domic.Core.Common.ClassEnums;
+
 namespace Domic.Core.UseCase.Contracts.Interfaces;
 
 public interface IRedisCache
@@ -25,38 +27,45 @@ public interface IRedisCache
     /// </summary>
     /// <param name="keyValue"></param>
     /// <param name="time"></param>
+    /// <param name="cacheSetType"></param>
     /// <exception cref="NotImplementedException"></exception>
-    public void SetCacheValue(KeyValuePair<string, string> keyValue, TimeSpan time) 
-        => throw new NotImplementedException();
-    
-    /// <summary>
-    /// 
-    /// </summary>
-    /// <param name="keyValue"></param>
-    /// <exception cref="NotImplementedException"></exception>
-    public void SetCacheValue(KeyValuePair<string, string> keyValue) => throw new NotImplementedException();
-    
-    /// <summary>
-    /// 
-    /// </summary>
-    /// <param name="keyValue"></param>
-    /// <param name="time"></param>
-    /// <param name="cancellationToken"></param>
-    /// <returns></returns>
-    /// <exception cref="NotImplementedException"></exception>
-    public Task SetCacheValueAsync(KeyValuePair<string, string> keyValue, TimeSpan time,
-        CancellationToken cancellationToken
+    public bool SetCacheValue(KeyValuePair<string, string> keyValue, TimeSpan time, 
+        CacheSetType cacheSetType = CacheSetType.Always
     ) => throw new NotImplementedException();
     
     /// <summary>
     /// 
     /// </summary>
     /// <param name="keyValue"></param>
+    /// <param name="cacheSetType"></param>
+    /// <exception cref="NotImplementedException"></exception>
+    public bool SetCacheValue(KeyValuePair<string, string> keyValue, CacheSetType cacheSetType = CacheSetType.Always) 
+        => throw new NotImplementedException();
+    
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="keyValue"></param>
+    /// <param name="time"></param>
+    /// <param name="cacheSetType"></param>
     /// <param name="cancellationToken"></param>
     /// <returns></returns>
     /// <exception cref="NotImplementedException"></exception>
-    public Task SetCacheValueAsync(KeyValuePair<string, string> keyValue, CancellationToken cancellationToken) 
-        => throw new NotImplementedException();
+    public Task<bool> SetCacheValueAsync(KeyValuePair<string, string> keyValue, TimeSpan time, 
+        CacheSetType cacheSetType = CacheSetType.Always, CancellationToken cancellationToken = default
+    ) => throw new NotImplementedException();
+    
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="keyValue"></param>
+    /// <param name="cacheSetType"></param>
+    /// <param name="cancellationToken"></param>
+    /// <returns></returns>
+    /// <exception cref="NotImplementedException"></exception>
+    public Task<bool> SetCacheValueAsync(KeyValuePair<string, string> keyValue, 
+        CacheSetType cacheSetType = CacheSetType.Always, CancellationToken cancellationToken = default
+    ) => throw new NotImplementedException();
     
     /// <summary>
     /// 
