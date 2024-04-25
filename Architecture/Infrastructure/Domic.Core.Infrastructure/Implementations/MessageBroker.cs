@@ -28,11 +28,11 @@ public class MessageBroker : IMessageBroker
     private readonly IDateTime _dateTime;
     private readonly IGlobalUniqueIdGenerator _globalUniqueIdGenerator;
     private readonly IRedisCache _redisCache;
-    private readonly IIdempotentConsumerEventQueryRepository _idempotentConsumerEventQueryRepository;
+    private readonly IConsumerEventQueryRepository _consumerEventQueryRepository;
 
     public MessageBroker(IConfiguration configuration, IHostEnvironment hostEnvironment, 
         IServiceScopeFactory serviceScopeFactory, IDateTime dateTime, IGlobalUniqueIdGenerator globalUniqueIdGenerator,
-        IRedisCache redisCache, IIdempotentConsumerEventQueryRepository idempotentConsumerEventQueryRepository
+        IRedisCache redisCache, IConsumerEventQueryRepository consumerEventQueryRepository
     )
     {
         _hostEnvironment = hostEnvironment;
@@ -40,7 +40,7 @@ public class MessageBroker : IMessageBroker
         _dateTime = dateTime;
         _globalUniqueIdGenerator = globalUniqueIdGenerator;
         _redisCache = redisCache;
-        _idempotentConsumerEventQueryRepository = idempotentConsumerEventQueryRepository;
+        _consumerEventQueryRepository = consumerEventQueryRepository;
 
         var factory = new ConnectionFactory {
             HostName = configuration.GetExternalRabbitHostName(),
@@ -690,26 +690,29 @@ public class MessageBroker : IMessageBroker
                 }
                 else
                 {
-                    var consumerEvent = _idempotentConsumerEventQueryRepository.FindById(@event.Id);
+                    var consumerEvent = _consumerEventQueryRepository.FindById(@event.Id);
                         
                     if (consumerEvent is null)
                     {
                         unitOfWork = serviceProvider.GetRequiredService(_GetTypeOfUnitOfWork()) as ICoreUnitOfWork;
 
-                        if(eventBusHandlerMethod.GetCustomAttribute(typeof(WithTransactionAttribute)) is WithTransactionAttribute transactionAttr)
-                            unitOfWork.Transaction(transactionAttr.IsolationLevel);
+                        if(eventBusHandlerMethod.GetCustomAttribute(typeof(TransactionIsolationLevelAttribute)) is TransactionIsolationLevelAttribute transactionAttr)
+                            unitOfWork.Transaction(transactionAttr.Level);
                         else 
                             unitOfWork.Transaction();
 
                         #region IdempotentConsumerPattern
+
+                        var nowDateTime = DateTime.Now;
                         
-                        consumerEvent = new IdempotentConsumerEvent {
+                        consumerEvent = new ConsumerEvent {
                             Id = @event.Id,
                             Type = @event.Type,
-                            CreatedAt_EnglishDate = DateTime.Now
+                            CreatedAt_EnglishDate = nowDateTime,
+                            CreatedAt_PersianDate = _dateTime.ToPersianShortDate(nowDateTime)
                         };
                                 
-                        _idempotentConsumerEventQueryRepository.Add(consumerEvent);
+                        _consumerEventQueryRepository.Add(consumerEvent);
 
                         #endregion
             
@@ -801,26 +804,29 @@ public class MessageBroker : IMessageBroker
                 else
                 {
                     var consumerEvent =
-                        await _idempotentConsumerEventQueryRepository.FindByIdAsync(@event.Id, cancellationToken);
+                        await _consumerEventQueryRepository.FindByIdAsync(@event.Id, cancellationToken);
                         
                     if (consumerEvent is null)
                     {
                         unitOfWork = serviceProvider.GetRequiredService(_GetTypeOfUnitOfWork()) as ICoreUnitOfWork;
 
-                        if(eventBusHandlerMethod.GetCustomAttribute(typeof(WithTransactionAttribute)) is WithTransactionAttribute transactionAttr)
-                            unitOfWork.Transaction(transactionAttr.IsolationLevel);
+                        if(eventBusHandlerMethod.GetCustomAttribute(typeof(TransactionIsolationLevelAttribute)) is TransactionIsolationLevelAttribute transactionAttr)
+                            unitOfWork.Transaction(transactionAttr.Level);
                         else 
                             unitOfWork.Transaction();
 
                         #region IdempotentConsumerPattern
+
+                        var nowDateTime = DateTime.Now;
                         
-                        consumerEvent = new IdempotentConsumerEvent {
+                        consumerEvent = new ConsumerEvent {
                             Id = @event.Id,
                             Type = @event.Type,
-                            CreatedAt_EnglishDate = DateTime.Now
+                            CreatedAt_EnglishDate = nowDateTime,
+                            CreatedAt_PersianDate = _dateTime.ToPersianShortDate(nowDateTime)
                         };
                                 
-                        _idempotentConsumerEventQueryRepository.Add(consumerEvent);
+                        _consumerEventQueryRepository.Add(consumerEvent);
 
                         #endregion
             

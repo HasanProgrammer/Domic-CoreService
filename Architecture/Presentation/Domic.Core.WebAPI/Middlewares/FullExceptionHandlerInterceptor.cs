@@ -80,6 +80,34 @@ public class FullExceptionHandlerInterceptor : Interceptor
             
             context.CheckLicense(_configuration);
             
+            #region IdempotentReceiverPattern
+
+            var idempotentKey = context.GetHttpContext().Request.Headers.IdempotentKey();
+
+            if (!string.IsNullOrEmpty(idempotentKey))
+            {
+                var redisCache = context.GetHttpContext().RequestServices.GetRequiredService<IRedisCache>();
+                var serializer = context.GetHttpContext().RequestServices.GetRequiredService<ISerializer>();
+                
+                var idempotentResponse =
+                    await redisCache.GetCacheValueAsync($"RequestId-{idempotentKey}", context.CancellationToken);
+
+                if (!string.IsNullOrEmpty(idempotentResponse))
+                    return serializer.DeSerialize<TResponse>(idempotentResponse);
+                
+                var response = await continuation(request, context);
+
+                await redisCache.SetCacheValueAsync(
+                    new KeyValuePair<string, string>($"RequestId-{idempotentKey}", serializer.Serialize(response)),
+                    time: TimeSpan.FromMinutes(5),
+                    cancellationToken: context.CancellationToken
+                );
+            
+                return response;
+            }
+                
+            #endregion
+            
             return await continuation(request, context);
         }
         catch (DomainException e) //For command side

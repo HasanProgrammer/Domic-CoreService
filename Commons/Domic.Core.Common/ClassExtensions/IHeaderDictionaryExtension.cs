@@ -18,4 +18,11 @@ public static class IHeaderDictionaryExtension
     /// <param name="header"></param>
     /// <returns></returns>
     public static string Token(this IHeaderDictionary header) => header[Header.Token];
+    
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="header"></param>
+    /// <returns></returns>
+    public static string IdempotentKey(this IHeaderDictionary header) => header[Header.IdempotentKey];
 }

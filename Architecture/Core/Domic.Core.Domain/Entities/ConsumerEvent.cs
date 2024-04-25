@@ -2,7 +2,7 @@
 
 namespace Domic.Core.Domain.Entities;
 
-public class IdempotentConsumerEvent : BaseEntityQuery<string>
+public class ConsumerEvent : BaseEntityQuery<string>
 {
     public new string Id { get; set; }
     public string Type { get; set; }

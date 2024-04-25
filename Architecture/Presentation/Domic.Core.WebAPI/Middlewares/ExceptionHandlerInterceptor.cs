@@ -63,7 +63,7 @@ public class ExceptionHandlerInterceptor : Interceptor
             _messageBroker           = context.GetHttpContext().RequestServices.GetRequiredService<IMessageBroker>();
             _globalUniqueIdGenerator = context.GetHttpContext().RequestServices.GetRequiredService<IGlobalUniqueIdGenerator>();
             
-            context.CentralRequestLoggerAsync(_hostEnvironment, _globalUniqueIdGenerator, _messageBroker, _dateTime, 
+            context.CentralRequestLoggerAsync(_hostEnvironment, _globalUniqueIdGenerator, _messageBroker, _dateTime,
                 serviceName, request, context.CancellationToken
             );
             
