@@ -28,20 +28,15 @@ public class MessageBroker : IMessageBroker
     private readonly IServiceScopeFactory _serviceScopeFactory;
     private readonly IDateTime _dateTime;
     private readonly IGlobalUniqueIdGenerator _globalUniqueIdGenerator;
-    private readonly IRedisCache _redisCache;
-    private readonly IConsumerEventQueryRepository _consumerEventQueryRepository;
 
     public MessageBroker(IConfiguration configuration, IHostEnvironment hostEnvironment, 
-        IServiceScopeFactory serviceScopeFactory, IDateTime dateTime, IGlobalUniqueIdGenerator globalUniqueIdGenerator,
-        IRedisCache redisCache, IConsumerEventQueryRepository consumerEventQueryRepository
+        IServiceScopeFactory serviceScopeFactory, IDateTime dateTime, IGlobalUniqueIdGenerator globalUniqueIdGenerator
     )
     {
         _hostEnvironment = hostEnvironment;
         _serviceScopeFactory = serviceScopeFactory;
         _dateTime = dateTime;
         _globalUniqueIdGenerator = globalUniqueIdGenerator;
-        _redisCache = redisCache;
-        _consumerEventQueryRepository = consumerEventQueryRepository;
 
         var factory = new ConnectionFactory {
             HostName = configuration.GetExternalRabbitHostName(),
@@ -226,12 +221,15 @@ public class MessageBroker : IMessageBroker
             var commandUnitOfWork =
                 serviceScope.ServiceProvider.GetRequiredService(_GetTypeOfCommandUnitOfWork()) as ICoreCommandUnitOfWork;
 
+            var redisCache = serviceScope.ServiceProvider.GetRequiredService<IRedisCache>();
             var eventCommandRepository = serviceScope.ServiceProvider.GetRequiredService<IEventCommandRepository>();
 
-            var channel = _connection.CreateModel();
+            IModel channel = default;
             
             try
             {
+                channel = _connection.CreateModel();
+                
                 var eventLocks = new List<string>();
                 
                 commandUnitOfWork.Transaction();
@@ -243,10 +241,10 @@ public class MessageBroker : IMessageBroker
                     var lockEventKey = $"LockEventId-{targetEvent.Id}";
                     
                     //ReleaseLock
-                    _redisCache.DeleteKey(lockEventKey);
+                    redisCache.DeleteKey(lockEventKey);
                     
                     //AcquireLock
-                    var lockEventSuccessfully = _redisCache.SetCacheValue(
+                    var lockEventSuccessfully = redisCache.SetCacheValue(
                         new KeyValuePair<string, string>(lockEventKey, targetEvent.Id), CacheSetType.NotExists
                     );
 
@@ -277,7 +275,7 @@ public class MessageBroker : IMessageBroker
                 commandUnitOfWork.Commit();
                 
                 //ReleaseLocks
-                eventLocks.ForEach(@event => _redisCache.DeleteKey(@event));
+                eventLocks.ForEach(@event => redisCache.DeleteKey(@event));
             }
             catch (Exception e)
             {
@@ -297,7 +295,7 @@ public class MessageBroker : IMessageBroker
             {
                 try
                 {
-                    channel.Dispose();
+                    channel?.Dispose();
                 }
                 catch (Exception e){}
             }
@@ -694,8 +692,10 @@ public class MessageBroker : IMessageBroker
                                                                  .FirstOrDefault();
         
                 var fullContractOfConsumerType = typeof(IConsumerEventBusHandler<>).MakeGenericType(eventType);
-            
+
                 var eventBusHandler = serviceProvider.GetRequiredService(fullContractOfConsumerType);
+                var consumerEventQueryRepository = serviceProvider.GetRequiredService<IConsumerEventQueryRepository>();
+                
                 eventBusHandlerType = eventBusHandler.GetType();
                 
                 var payload = JsonConvert.DeserializeObject(@event.Payload, eventType);
@@ -720,7 +720,7 @@ public class MessageBroker : IMessageBroker
                 }
                 else
                 {
-                    var consumerEvent = _consumerEventQueryRepository.FindById(@event.Id);
+                    var consumerEvent = consumerEventQueryRepository.FindById(@event.Id);
                         
                     if (consumerEvent is null)
                     {
@@ -742,7 +742,7 @@ public class MessageBroker : IMessageBroker
                             CreatedAt_PersianDate = _dateTime.ToPersianShortDate(nowDateTime)
                         };
                                 
-                        _consumerEventQueryRepository.Add(consumerEvent);
+                        consumerEventQueryRepository.Add(consumerEvent);
 
                         #endregion
             
@@ -809,6 +809,8 @@ public class MessageBroker : IMessageBroker
                 var fullContractOfConsumerType = typeof(IConsumerEventBusHandler<>).MakeGenericType(eventType);
             
                 var eventBusHandler = serviceProvider.GetRequiredService(fullContractOfConsumerType);
+                var consumerEventQueryRepository = serviceProvider.GetRequiredService<IConsumerEventQueryRepository>();
+                
                 eventBusHandlerType = eventBusHandler.GetType();
                 
                 var payload = JsonConvert.DeserializeObject(@event.Payload, eventType);
@@ -834,7 +836,7 @@ public class MessageBroker : IMessageBroker
                 else
                 {
                     var consumerEvent =
-                        await _consumerEventQueryRepository.FindByIdAsync(@event.Id, cancellationToken);
+                        await consumerEventQueryRepository.FindByIdAsync(@event.Id, cancellationToken);
                         
                     if (consumerEvent is null)
                     {
@@ -856,7 +858,7 @@ public class MessageBroker : IMessageBroker
                             CreatedAt_PersianDate = _dateTime.ToPersianShortDate(nowDateTime)
                         };
                                 
-                        _consumerEventQueryRepository.Add(consumerEvent);
+                        consumerEventQueryRepository.Add(consumerEvent);
 
                         #endregion
             
