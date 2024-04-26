@@ -242,6 +242,9 @@ public class MessageBroker : IMessageBroker
 
                     var lockEventKey = $"LockEventId-{targetEvent.Id}";
                     
+                    //ReleaseLock
+                    _redisCache.DeleteKey(lockEventKey);
+                    
                     //AcquireLock
                     var lockEventSuccessfully = _redisCache.SetCacheValue(
                         new KeyValuePair<string, string>(lockEventKey, targetEvent.Id), CacheSetType.NotExists
@@ -292,7 +295,11 @@ public class MessageBroker : IMessageBroker
             }
             finally
             {
-                channel.Dispose();
+                try
+                {
+                    channel.Dispose();
+                }
+                catch (Exception e){}
             }
         }
     }
