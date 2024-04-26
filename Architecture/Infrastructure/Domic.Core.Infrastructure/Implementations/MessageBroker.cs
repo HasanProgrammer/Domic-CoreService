@@ -1,5 +1,6 @@
 ﻿using System.Reflection;
 using System.Text;
+using Domic.Core.Common.ClassEnums;
 using Domic.Core.Domain.Attributes;
 using Domic.Core.Domain.Contracts.Interfaces;
 using Domic.Core.Domain.Entities;
@@ -216,6 +217,7 @@ public class MessageBroker : IMessageBroker
     
     public void Publish()
     {
+        //just one worker ( Task ) in current machine ( instance ) can process outbox events => lock
         lock (_lock)
         {
             //ScopeServices trigger
@@ -227,31 +229,52 @@ public class MessageBroker : IMessageBroker
             var eventCommandRepository = serviceScope.ServiceProvider.GetRequiredService<IEventCommandRepository>();
 
             var channel = _connection.CreateModel();
-
+            
             try
             {
+                var eventLocks = new List<string>();
+                
                 commandUnitOfWork.Transaction();
-
+                
                 foreach (Event targetEvent in eventCommandRepository.FindAllWithOrdering(Order.Date))
                 {
-                    if (targetEvent.IsActive == IsActive.Active)
+                    #region DistributedLock
+
+                    var lockEventKey = $"LockEventId-{targetEvent.Id}";
+                    
+                    //AcquireLock
+                    var lockEventSuccessfully = _redisCache.SetCacheValue(
+                        new KeyValuePair<string, string>(lockEventKey, targetEvent.Id), CacheSetType.NotExists
+                    );
+
+                    #endregion
+
+                    if (lockEventSuccessfully)
                     {
-                        _EventPublishHandler(channel, targetEvent);
+                        eventLocks.Add(lockEventKey);
+                        
+                        if (targetEvent.IsActive == IsActive.Active)
+                        {
+                            _EventPublishHandler(channel, targetEvent);
 
-                        var nowDateTime        = DateTime.Now;
-                        var nowPersianDateTime = _dateTime.ToPersianShortDate(nowDateTime);
+                            var nowDateTime        = DateTime.Now;
+                            var nowPersianDateTime = _dateTime.ToPersianShortDate(nowDateTime);
 
-                        targetEvent.IsActive              = IsActive.InActive;
-                        targetEvent.UpdatedAt_EnglishDate = nowDateTime;
-                        targetEvent.UpdatedAt_PersianDate = nowPersianDateTime;
+                            targetEvent.IsActive              = IsActive.InActive;
+                            targetEvent.UpdatedAt_EnglishDate = nowDateTime;
+                            targetEvent.UpdatedAt_PersianDate = nowPersianDateTime;
 
-                        eventCommandRepository.Change(targetEvent);
+                            eventCommandRepository.Change(targetEvent);
+                        }
+                        else
+                            eventCommandRepository.Remove(targetEvent);
                     }
-                    else
-                        eventCommandRepository.Remove(targetEvent);
                 }
 
                 commandUnitOfWork.Commit();
+                
+                //ReleaseLocks
+                eventLocks.ForEach(@event => _redisCache.DeleteKey(@event));
             }
             catch (Exception e)
             {
