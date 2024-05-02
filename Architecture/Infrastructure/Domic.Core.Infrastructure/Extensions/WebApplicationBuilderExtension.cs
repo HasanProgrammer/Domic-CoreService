@@ -57,6 +57,7 @@ public static class WebApplicationBuilderExtension
     public static void RegisterELK(this WebApplicationBuilder builder)
     {
         var elasticUri      = Environment.GetEnvironmentVariable("Elastic-Host");
+        var elasticIndex    = Environment.GetEnvironmentVariable("Elastic-Index");
         var elasticUsername = Environment.GetEnvironmentVariable("Elastic-Username");
         var elasticPassword = Environment.GetEnvironmentVariable("Elastic-Password");
         
@@ -80,12 +81,11 @@ public static class WebApplicationBuilderExtension
 
         #region Serilog&Kibana
 
-        var indexPart_1 = Assembly.GetExecutingAssembly().GetName().Name.ToLower().Replace(".", "-");
-        var indexPart_2 = environment?.ToLower().Replace(".", "-");
+        var indexOfEnvironment = environment?.ToLower().Replace(".", "-");
         
         var elOptions = new ElasticsearchSinkOptions( new Uri(elasticUri) ) {
             AutoRegisterTemplate = true,
-            IndexFormat = $"{indexPart_1}-{indexPart_2}-{DateTime.UtcNow:yyyy-MM}"
+            IndexFormat = $"{elasticIndex}-{indexOfEnvironment}-{DateTime.UtcNow:yyyy-MM}"
         };
 
         Log.Logger = new LoggerConfiguration().Enrich.FromLogContext()
