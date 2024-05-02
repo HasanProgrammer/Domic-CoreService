@@ -1,7 +1,7 @@
 ﻿using Domic.Core.Domain.Contracts.Interfaces;
 using MD.PersianDateTime.Standard;
 
-namespace Domic.Core.Infrastructure.Implementations;
+namespace Domic.Core.Infrastructure.Concretes;
 
 public class DomicDateTime : IDateTime
 {

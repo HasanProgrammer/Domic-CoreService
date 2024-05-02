@@ -17,7 +17,7 @@ using Newtonsoft.Json;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 
-namespace Domic.Core.Infrastructure.Implementations;
+namespace Domic.Core.Infrastructure.Concretes;
 
 public class AsyncCommandBroker : IAsyncCommandBroker
 {

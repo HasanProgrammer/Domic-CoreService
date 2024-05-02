@@ -1,5 +1,6 @@
 ﻿using System.Reflection;
 using System.Text;
+using Domic.Core.Common.ClassConsts;
 using Domic.Core.Common.ClassEnums;
 using Domic.Core.Domain.Attributes;
 using Domic.Core.Domain.Contracts.Interfaces;
@@ -14,10 +15,11 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Newtonsoft.Json;
+using NSubstitute.Exceptions;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 
-namespace Domic.Core.Infrastructure.Implementations;
+namespace Domic.Core.Infrastructure.Concretes;
 
 public class MessageBroker : IMessageBroker
 {
@@ -439,18 +441,17 @@ public class MessageBroker : IMessageBroker
             }
             else
             {
-                if (messageBusHandlerMethod.GetCustomAttribute(typeof(WithTransactionAttribute)) is WithTransactionAttribute transactionAttr)
-                {
-                    unitOfWork = serviceProvider.GetRequiredService(_GetTypeOfUnitOfWork()) as ICoreUnitOfWork;
-                    
-                    unitOfWork.Transaction(transactionAttr.IsolationLevel);
+                var transactionConfig =
+                    messageBusHandlerMethod.GetCustomAttribute(typeof(TransactionConfigAttribute)) as TransactionConfigAttribute;
 
-                    messageBusHandlerMethod.Invoke(messageBusHandler, new object[] { message });
+                unitOfWork =
+                    serviceProvider.GetRequiredService(_GetTypeOfUnitOfWork(transactionConfig.Type)) as ICoreUnitOfWork;
 
-                    unitOfWork.Commit();
-                }
-                else
-                    messageBusHandlerMethod.Invoke(messageBusHandler, new object[] { message });
+                unitOfWork.Transaction(transactionConfig.IsolationLevel);
+                
+                messageBusHandlerMethod.Invoke(messageBusHandler, new object[] { message });
+                
+                unitOfWork.Commit();
 
                 _CleanCache(messageBusHandlerMethod, serviceProvider);
             
@@ -502,18 +503,17 @@ public class MessageBroker : IMessageBroker
             }
             else
             {
-                if (messageBusHandlerMethod.GetCustomAttribute(typeof(WithTransactionAttribute)) is WithTransactionAttribute transactionAttr)
-                {
-                    unitOfWork = serviceProvider.GetRequiredService(_GetTypeOfUnitOfWork()) as ICoreUnitOfWork;
-                    
-                    unitOfWork.Transaction(transactionAttr.IsolationLevel);
+                var transactionConfig =
+                    messageBusHandlerMethod.GetCustomAttribute(typeof(TransactionConfigAttribute)) as TransactionConfigAttribute;
 
-                    await (Task)messageBusHandlerMethod.Invoke(messageBusHandler, new object[] { message, cancellationToken });
+                unitOfWork =
+                    serviceProvider.GetRequiredService(_GetTypeOfUnitOfWork(transactionConfig.Type)) as ICoreUnitOfWork;
 
-                    unitOfWork.Commit();
-                }
-                else
-                    await (Task)messageBusHandlerMethod.Invoke(messageBusHandler, new object[] { message, cancellationToken });
+                unitOfWork.Transaction(transactionConfig.IsolationLevel);
+                
+                await (Task)messageBusHandlerMethod.Invoke(messageBusHandler, new object[] { message, cancellationToken });
+                
+                unitOfWork.Commit();
 
                 _CleanCache(messageBusHandlerMethod, serviceProvider);
             
@@ -568,18 +568,17 @@ public class MessageBroker : IMessageBroker
             }
             else
             {
-                if (messageBusHandlerMethod.GetCustomAttribute(typeof(WithTransactionAttribute)) is WithTransactionAttribute transactionAttr)
-                {
-                    unitOfWork = serviceProvider.GetRequiredService(_GetTypeOfUnitOfWork()) as ICoreUnitOfWork;
-                    
-                    unitOfWork.Transaction(transactionAttr.IsolationLevel);
+                var transactionConfig =
+                    messageBusHandlerMethod.GetCustomAttribute(typeof(TransactionConfigAttribute)) as TransactionConfigAttribute;
 
-                    messageBusHandlerMethod.Invoke(messageBusHandler, new[] { message });
+                unitOfWork =
+                    serviceProvider.GetRequiredService(_GetTypeOfUnitOfWork(transactionConfig.Type)) as ICoreUnitOfWork;
 
-                    unitOfWork.Commit();
-                }
-                else
-                    messageBusHandlerMethod.Invoke(messageBusHandler, new[] { message });
+                unitOfWork.Transaction(transactionConfig.IsolationLevel);
+                
+                messageBusHandlerMethod.Invoke(messageBusHandler, new[] { message });
+                
+                unitOfWork.Commit();
 
                 _CleanCache(messageBusHandlerMethod, serviceProvider);
             
@@ -634,18 +633,17 @@ public class MessageBroker : IMessageBroker
             }
             else
             {
-                if (messageBusHandlerMethod.GetCustomAttribute(typeof(WithTransactionAttribute)) is WithTransactionAttribute transactionAttr)
-                {
-                    unitOfWork = serviceProvider.GetRequiredService(_GetTypeOfUnitOfWork()) as ICoreUnitOfWork;
-                    
-                    unitOfWork.Transaction(transactionAttr.IsolationLevel);
+                var transactionConfig =
+                    messageBusHandlerMethod.GetCustomAttribute(typeof(TransactionConfigAttribute)) as TransactionConfigAttribute;
 
-                    await (Task)messageBusHandlerMethod.Invoke(messageBusHandler, new[] { message, cancellationToken });
+                unitOfWork =
+                    serviceProvider.GetRequiredService(_GetTypeOfUnitOfWork(transactionConfig.Type)) as ICoreUnitOfWork;
 
-                    unitOfWork.Commit();
-                }
-                else
-                    await (Task)messageBusHandlerMethod.Invoke(messageBusHandler, new[] { message, cancellationToken });
+                unitOfWork.Transaction(transactionConfig.IsolationLevel);
+                
+                await (Task)messageBusHandlerMethod.Invoke(messageBusHandler, new[] { message, cancellationToken });
+                
+                unitOfWork.Commit();
 
                 _CleanCache(messageBusHandlerMethod, serviceProvider);
             
@@ -694,7 +692,7 @@ public class MessageBroker : IMessageBroker
                 var fullContractOfConsumerType = typeof(IConsumerEventBusHandler<>).MakeGenericType(eventType);
 
                 var eventBusHandler = serviceProvider.GetRequiredService(fullContractOfConsumerType);
-                var consumerEventQueryRepository = serviceProvider.GetRequiredService<IConsumerEventQueryRepository>();
+                var consumerEventRepository = serviceProvider.GetRequiredService<IConsumerEventRepository>();
                 
                 eventBusHandlerType = eventBusHandler.GetType();
                 
@@ -720,16 +718,17 @@ public class MessageBroker : IMessageBroker
                 }
                 else
                 {
-                    var consumerEvent = consumerEventQueryRepository.FindById(@event.Id);
+                    var consumerEvent = consumerEventRepository.FindById(@event.Id);
                         
                     if (consumerEvent is null)
                     {
-                        unitOfWork = serviceProvider.GetRequiredService(_GetTypeOfUnitOfWork()) as ICoreUnitOfWork;
+                        var transactionConfig =
+                            eventBusHandlerMethod.GetCustomAttribute(typeof(TransactionConfigAttribute)) as TransactionConfigAttribute;
 
-                        if(eventBusHandlerMethod.GetCustomAttribute(typeof(TransactionIsolationLevelAttribute)) is TransactionIsolationLevelAttribute transactionAttr)
-                            unitOfWork.Transaction(transactionAttr.Level);
-                        else 
-                            unitOfWork.Transaction();
+                        unitOfWork =
+                            serviceProvider.GetRequiredService(_GetTypeOfUnitOfWork(transactionConfig.Type)) as ICoreUnitOfWork;
+
+                        unitOfWork.Transaction(transactionConfig.IsolationLevel);
 
                         #region IdempotentConsumerPattern
 
@@ -742,7 +741,7 @@ public class MessageBroker : IMessageBroker
                             CreatedAt_PersianDate = _dateTime.ToPersianShortDate(nowDateTime)
                         };
                                 
-                        consumerEventQueryRepository.Add(consumerEvent);
+                        consumerEventRepository.Add(consumerEvent);
 
                         #endregion
             
@@ -809,7 +808,7 @@ public class MessageBroker : IMessageBroker
                 var fullContractOfConsumerType = typeof(IConsumerEventBusHandler<>).MakeGenericType(eventType);
             
                 var eventBusHandler = serviceProvider.GetRequiredService(fullContractOfConsumerType);
-                var consumerEventQueryRepository = serviceProvider.GetRequiredService<IConsumerEventQueryRepository>();
+                var consumerEventRepository = serviceProvider.GetRequiredService<IConsumerEventRepository>();
                 
                 eventBusHandlerType = eventBusHandler.GetType();
                 
@@ -835,17 +834,17 @@ public class MessageBroker : IMessageBroker
                 }
                 else
                 {
-                    var consumerEvent =
-                        await consumerEventQueryRepository.FindByIdAsync(@event.Id, cancellationToken);
+                    var consumerEvent = await consumerEventRepository.FindByIdAsync(@event.Id, cancellationToken);
                         
                     if (consumerEvent is null)
                     {
-                        unitOfWork = serviceProvider.GetRequiredService(_GetTypeOfUnitOfWork()) as ICoreUnitOfWork;
+                        var transactionConfig =
+                            eventBusHandlerMethod.GetCustomAttribute(typeof(TransactionConfigAttribute)) as TransactionConfigAttribute;
 
-                        if(eventBusHandlerMethod.GetCustomAttribute(typeof(TransactionIsolationLevelAttribute)) is TransactionIsolationLevelAttribute transactionAttr)
-                            unitOfWork.Transaction(transactionAttr.Level);
-                        else 
-                            unitOfWork.Transaction();
+                        unitOfWork =
+                            serviceProvider.GetRequiredService(_GetTypeOfUnitOfWork(transactionConfig.Type)) as ICoreUnitOfWork;
+
+                        unitOfWork.Transaction(transactionConfig.IsolationLevel);
 
                         #region IdempotentConsumerPattern
 
@@ -858,7 +857,7 @@ public class MessageBroker : IMessageBroker
                             CreatedAt_PersianDate = _dateTime.ToPersianShortDate(nowDateTime)
                         };
                                 
-                        consumerEventQueryRepository.Add(consumerEvent);
+                        consumerEventRepository.Add(consumerEvent);
 
                         #endregion
             
@@ -940,15 +939,17 @@ public class MessageBroker : IMessageBroker
         }
     }
     
-    private Type _GetTypeOfUnitOfWork()
+    private Type _GetTypeOfUnitOfWork(TransactionType transactionType)
     {
         var domainTypes = Assembly.Load(new AssemblyName("Domic.Domain")).GetTypes();
 
-        return domainTypes.FirstOrDefault(
-            type => type.GetInterfaces().Any(i => i == typeof(ICoreQueryUnitOfWork))
-        ) ?? domainTypes.FirstOrDefault(
-            type => type.GetInterfaces().Any(i => i == typeof(ICoreCommandUnitOfWork))
-        );
+        return transactionType switch {
+            TransactionType.Query => 
+                domainTypes.FirstOrDefault(type => type.GetInterfaces().Any(i => i == typeof(ICoreQueryUnitOfWork))),
+            TransactionType.Command => 
+                domainTypes.FirstOrDefault(type => type.GetInterfaces().Any(i => i == typeof(ICoreCommandUnitOfWork))),
+            _ => throw new ArgumentNotFoundException("Must be defined transaction type!")
+        };
     }
     
     private Type _GetTypeOfCommandUnitOfWork()

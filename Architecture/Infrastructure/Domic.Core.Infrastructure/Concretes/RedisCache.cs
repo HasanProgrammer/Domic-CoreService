@@ -2,7 +2,7 @@ using Domic.Core.Common.ClassEnums;
 using Domic.Core.UseCase.Contracts.Interfaces;
 using StackExchange.Redis;
 
-namespace Domic.Core.Infrastructure.Implementations;
+namespace Domic.Core.Infrastructure.Concretes;
 
 public class RedisCache : IRedisCache
 {

@@ -5,7 +5,7 @@ using Microsoft.Extensions.Hosting;
 
 using String = Domic.Core.Service.Grpc.String;
 
-namespace Domic.Core.Infrastructure.Implementations;
+namespace Domic.Core.Infrastructure.Concretes;
 
 public class ServiceDiscovery : IServiceDiscovery
 {

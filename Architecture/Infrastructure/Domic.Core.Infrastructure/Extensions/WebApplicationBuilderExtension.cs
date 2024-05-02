@@ -2,7 +2,7 @@
 using System.Text;
 using Domic.Core.Domain.Contracts.Interfaces;
 using Domic.Core.Infrastructure.Attributes;
-using Domic.Core.Infrastructure.Implementations;
+using Domic.Core.Infrastructure.Concretes;
 using Grpc.Core;
 using Grpc.Net.Client.Configuration;
 using Hangfire;

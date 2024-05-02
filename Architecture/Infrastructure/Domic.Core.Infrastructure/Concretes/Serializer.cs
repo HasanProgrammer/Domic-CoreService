@@ -1,7 +1,7 @@
 ﻿using Domic.Core.Domain.Contracts.Interfaces;
 using Newtonsoft.Json;
 
-namespace Domic.Core.Infrastructure.Implementations;
+namespace Domic.Core.Infrastructure.Concretes;
 
 public class Serializer : ISerializer
 {

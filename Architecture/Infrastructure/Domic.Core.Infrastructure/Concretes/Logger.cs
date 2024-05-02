@@ -5,7 +5,7 @@ using Domic.Core.Domain.Enumerations;
 using Domic.Core.UseCase.Contracts.Interfaces;
 using Domic.Core.UseCase.DTOs;
 
-namespace Domic.Core.Infrastructure.Implementations;
+namespace Domic.Core.Infrastructure.Concretes;
 
 public class Logger : ILogger
 {

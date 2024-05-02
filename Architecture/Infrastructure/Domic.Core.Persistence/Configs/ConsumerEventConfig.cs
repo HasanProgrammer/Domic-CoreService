@@ -15,13 +15,6 @@ public class ConsumerEventConfig : IEntityTypeConfiguration<ConsumerEvent>
         /*-----------------------------------------------------------*/
         
         //Configs
-
-        builder.Ignore(entity => entity.CreatedBy);
-        builder.Ignore(entity => entity.CreatedRole);
-        builder.Ignore(entity => entity.UpdatedBy);
-        builder.Ignore(entity => entity.UpdatedRole);
-        builder.Ignore(entity => entity.IsDeleted);
-        builder.Ignore(entity => entity.Version);
         
         builder.Property(entity => entity.CreatedAt_EnglishDate).IsRequired();
         builder.Property(entity => entity.CreatedAt_PersianDate).IsRequired();

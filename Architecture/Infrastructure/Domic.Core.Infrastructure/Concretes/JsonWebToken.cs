@@ -5,7 +5,7 @@ using Domic.Core.UseCase.Contracts.Interfaces;
 using Domic.Core.UseCase.DTOs;
 using Microsoft.IdentityModel.Tokens;
 
-namespace Domic.Core.Infrastructure.Implementations;
+namespace Domic.Core.Infrastructure.Concretes;
 
 public class JsonWebToken : IJsonWebToken
 {
