@@ -48,6 +48,29 @@ public static class WebApplicationBuilderExtension
         builder.Services.AddSingleton(typeof(IGlobalUniqueIdGenerator), typeof(GlobalUniqueIdGenerator));
         
         builder.Services.AddScoped(typeof(ILogger), typeof(Logger));
+        
+        //register global repository ( like: ConsumerEventRepository )
+        
+        var infrastructureAssemblyTypes = Assembly.Load(new AssemblyName("Domic.Infrastructure")).GetTypes();
+        
+        IEnumerable<Type> repositoryTypes = infrastructureAssemblyTypes.Where(
+            type => type.GetInterfaces().Any(i =>
+                i.GetInterfaces()
+                    .Any(ii =>
+                        ii.IsGenericType && 
+                        ii.GetGenericTypeDefinition() == typeof(Domain.Contracts.Interfaces.IRepository<>)
+                    )
+            )
+        );
+
+        foreach (Type repositoryType in repositoryTypes) {
+            
+            Type contractType = repositoryType.GetInterfaces().FirstOrDefault();
+            
+            if(repositoryType.GetCustomAttribute(typeof(OutdatedAttribute)) is null)
+                builder.Services.AddScoped(contractType, repositoryType);
+            
+        }
     }
 
     /// <summary>
