@@ -436,8 +436,6 @@ public class MessageBroker : IMessageBroker
                     
                     afterMaxRetryHandlerMethod.Invoke(messageBusHandler, new object[] { message });
                 }
-                
-                _TrySendAckMessage(channel, args);
             }
             else
             {
@@ -454,9 +452,9 @@ public class MessageBroker : IMessageBroker
                 unitOfWork.Commit();
 
                 _CleanCache(messageBusHandlerMethod, serviceProvider);
-            
-                _TrySendAckMessage(channel, args);
             }
+            
+            _TrySendAckMessage(channel, args);
         }
         catch (Exception e)
         {
@@ -498,8 +496,6 @@ public class MessageBroker : IMessageBroker
                     
                     await (Task)afterMaxRetryHandlerMethod.Invoke(messageBusHandler, new object[] { message, cancellationToken });
                 }
-                
-                _TrySendAckMessage(channel, args);
             }
             else
             {
@@ -516,9 +512,9 @@ public class MessageBroker : IMessageBroker
                 unitOfWork.Commit();
 
                 _CleanCache(messageBusHandlerMethod, serviceProvider);
-            
-                _TrySendAckMessage(channel, args);
             }
+            
+            _TrySendAckMessage(channel, args);
         }
         catch (Exception e)
         {
@@ -563,8 +559,6 @@ public class MessageBroker : IMessageBroker
                     
                     afterMaxRetryHandlerMethod.Invoke(messageBusHandler, new[] { message });
                 }
-                
-                _TrySendAckMessage(channel, args);
             }
             else
             {
@@ -581,9 +575,9 @@ public class MessageBroker : IMessageBroker
                 unitOfWork.Commit();
 
                 _CleanCache(messageBusHandlerMethod, serviceProvider);
-            
-                _TrySendAckMessage(channel, args);
             }
+            
+            _TrySendAckMessage(channel, args);
         }
         catch (Exception e)
         {
@@ -628,8 +622,6 @@ public class MessageBroker : IMessageBroker
                     
                     await (Task)afterMaxRetryHandlerMethod.Invoke(messageBusHandler, new[] { message, cancellationToken });
                 }
-                
-                _TrySendAckMessage(channel, args);
             }
             else
             {
@@ -646,9 +638,9 @@ public class MessageBroker : IMessageBroker
                 unitOfWork.Commit();
 
                 _CleanCache(messageBusHandlerMethod, serviceProvider);
-            
-                _TrySendAckMessage(channel, args);
             }
+            
+            _TrySendAckMessage(channel, args);
         }
         catch (Exception e)
         {
@@ -692,7 +684,6 @@ public class MessageBroker : IMessageBroker
                 var fullContractOfConsumerType = typeof(IConsumerEventBusHandler<>).MakeGenericType(eventType);
 
                 var eventBusHandler = serviceProvider.GetRequiredService(fullContractOfConsumerType);
-                var consumerEventRepository = serviceProvider.GetRequiredService<IConsumerEventRepository>();
                 
                 eventBusHandlerType = eventBusHandler.GetType();
                 
@@ -713,54 +704,92 @@ public class MessageBroker : IMessageBroker
                         
                         afterMaxRetryHandlerMethod.Invoke(eventBusHandler, new[] { payload });
                     }
-                    
-                    _TrySendAckMessage(channel, args);
                 }
                 else
                 {
-                    var consumerEvent = consumerEventRepository.FindById(@event.Id);
-                        
-                    if (consumerEvent is null)
+                    var transactionConfig =
+                        eventBusHandlerMethod.GetCustomAttribute(typeof(TransactionConfigAttribute)) as TransactionConfigAttribute;
+
+                    //for query side event processing
+                    if (transactionConfig.Type == TransactionType.Query)
                     {
-                        var transactionConfig =
-                            eventBusHandlerMethod.GetCustomAttribute(typeof(TransactionConfigAttribute)) as TransactionConfigAttribute;
-
-                        unitOfWork =
-                            serviceProvider.GetRequiredService(_GetTypeOfUnitOfWork(transactionConfig.Type)) as ICoreUnitOfWork;
-
-                        unitOfWork.Transaction(transactionConfig.IsolationLevel);
-
-                        #region IdempotentConsumerPattern
-
-                        var nowDateTime = DateTime.Now;
+                        var queryConsumerEventRepository =
+                            serviceProvider.GetRequiredService<IQueryConsumerEventRepository>();
                         
-                        consumerEvent = new ConsumerEvent {
-                            Id = @event.Id,
-                            Type = @event.Type,
-                            CreatedAt_EnglishDate = nowDateTime,
-                            CreatedAt_PersianDate = _dateTime.ToPersianShortDate(nowDateTime)
-                        };
+                        var consumerEvent = queryConsumerEventRepository.FindById(@event.Id);
+                        
+                        if (consumerEvent is null)
+                        {
+                            unitOfWork =
+                                serviceProvider.GetRequiredService(_GetTypeOfUnitOfWork(transactionConfig.Type)) as ICoreUnitOfWork;
+
+                            unitOfWork.Transaction(transactionConfig.IsolationLevel);
+
+                            #region IdempotentConsumerPattern
+
+                            var nowDateTime = DateTime.Now;
+                        
+                            consumerEvent = new ConsumerEventQuery {
+                                Id = @event.Id,
+                                Type = @event.Type,
+                                CreatedAt_EnglishDate = nowDateTime,
+                                CreatedAt_PersianDate = _dateTime.ToPersianShortDate(nowDateTime)
+                            };
                                 
-                        consumerEventRepository.Add(consumerEvent);
+                            queryConsumerEventRepository.Add(consumerEvent);
 
-                        #endregion
+                            #endregion
             
-                        eventBusHandlerMethod.Invoke(eventBusHandler, new[] { payload });
+                            eventBusHandlerMethod.Invoke(eventBusHandler, new[] { payload });
 
-                        unitOfWork.Commit();
+                            unitOfWork.Commit();
         
-                        _CleanCache(eventBusHandlerMethod, serviceProvider);
-                    
-                        _TrySendAckMessage(channel, args);
-                            
-                        return;
+                            _CleanCache(eventBusHandlerMethod, serviceProvider);
+                        }
                     }
-                    
-                    _TrySendAckMessage(channel, args);
+                    //for command side event processing
+                    else if (transactionConfig.Type == TransactionType.Command)
+                    {
+                        var commandConsumerEventRepository =
+                            serviceProvider.GetRequiredService<ICommandConsumerEventRepository>();
+
+                        var consumerEvent = commandConsumerEventRepository.FindById(@event.Id);
+
+                        if (consumerEvent is null)
+                        {
+                            unitOfWork =
+                                serviceProvider.GetRequiredService(_GetTypeOfUnitOfWork(transactionConfig.Type)) as ICoreUnitOfWork;
+
+                            unitOfWork.Transaction(transactionConfig.IsolationLevel);
+
+                            #region IdempotentConsumerPattern
+
+                            var nowDateTime = DateTime.Now;
+
+                            consumerEvent = new ConsumerEvent {
+                                Id = @event.Id,
+                                Type = @event.Type,
+                                CreatedAt_EnglishDate = nowDateTime,
+                                CreatedAt_PersianDate = _dateTime.ToPersianShortDate(nowDateTime)
+                            };
+
+                            commandConsumerEventRepository.Add(consumerEvent);
+
+                            #endregion
+
+                            eventBusHandlerMethod.Invoke(eventBusHandler, new[] { payload });
+
+                            unitOfWork.Commit();
+
+                            _CleanCache(eventBusHandlerMethod, serviceProvider);
+                        }
+                    }
+                    else 
+                        throw new Exception("Must be defined transaction type!");
                 }
             }
-            else
-                _TrySendAckMessage(channel, args);
+            
+            _TrySendAckMessage(channel, args);
         }
         catch (Exception e)
         {
@@ -808,7 +837,6 @@ public class MessageBroker : IMessageBroker
                 var fullContractOfConsumerType = typeof(IConsumerEventBusHandler<>).MakeGenericType(eventType);
             
                 var eventBusHandler = serviceProvider.GetRequiredService(fullContractOfConsumerType);
-                var consumerEventRepository = serviceProvider.GetRequiredService<IConsumerEventRepository>();
                 
                 eventBusHandlerType = eventBusHandler.GetType();
                 
@@ -829,54 +857,94 @@ public class MessageBroker : IMessageBroker
                         
                         await (Task)afterMaxRetryHandlerMethod.Invoke(eventBusHandler, new[] { payload, cancellationToken });
                     }
-                    
-                    _TrySendAckMessage(channel, args);
                 }
                 else
                 {
-                    var consumerEvent = await consumerEventRepository.FindByIdAsync(@event.Id, cancellationToken);
-                        
-                    if (consumerEvent is null)
+                    var transactionConfig =
+                        eventBusHandlerMethod.GetCustomAttribute(typeof(TransactionConfigAttribute)) as TransactionConfigAttribute;
+
+                    //for query side event processing
+                    if (transactionConfig.Type == TransactionType.Query)
                     {
-                        var transactionConfig =
-                            eventBusHandlerMethod.GetCustomAttribute(typeof(TransactionConfigAttribute)) as TransactionConfigAttribute;
-
-                        unitOfWork =
-                            serviceProvider.GetRequiredService(_GetTypeOfUnitOfWork(transactionConfig.Type)) as ICoreUnitOfWork;
-
-                        unitOfWork.Transaction(transactionConfig.IsolationLevel);
-
-                        #region IdempotentConsumerPattern
-
-                        var nowDateTime = DateTime.Now;
+                        var queryConsumerEventRepository =
+                            serviceProvider.GetRequiredService<IQueryConsumerEventRepository>();
                         
-                        consumerEvent = new ConsumerEvent {
-                            Id = @event.Id,
-                            Type = @event.Type,
-                            CreatedAt_EnglishDate = nowDateTime,
-                            CreatedAt_PersianDate = _dateTime.ToPersianShortDate(nowDateTime)
-                        };
+                        var consumerEvent =
+                            await queryConsumerEventRepository.FindByIdAsync(@event.Id, cancellationToken);
+                        
+                        if (consumerEvent is null)
+                        {
+                            unitOfWork =
+                                serviceProvider.GetRequiredService(_GetTypeOfUnitOfWork(transactionConfig.Type)) as ICoreUnitOfWork;
+
+                            unitOfWork.Transaction(transactionConfig.IsolationLevel);
+
+                            #region IdempotentConsumerPattern
+
+                            var nowDateTime = DateTime.Now;
+                        
+                            consumerEvent = new ConsumerEventQuery {
+                                Id = @event.Id,
+                                Type = @event.Type,
+                                CreatedAt_EnglishDate = nowDateTime,
+                                CreatedAt_PersianDate = _dateTime.ToPersianShortDate(nowDateTime)
+                            };
                                 
-                        consumerEventRepository.Add(consumerEvent);
+                            queryConsumerEventRepository.Add(consumerEvent);
 
-                        #endregion
+                            #endregion
             
-                        await (Task)eventBusHandlerMethod.Invoke(eventBusHandler, new[] { payload, cancellationToken });
+                            await (Task)eventBusHandlerMethod.Invoke(eventBusHandler, new[] { payload, cancellationToken });
 
-                        unitOfWork.Commit();
+                            unitOfWork.Commit();
         
-                        _CleanCache(eventBusHandlerMethod, serviceProvider);
-                    
-                        _TrySendAckMessage(channel, args);
-                            
-                        return;
+                            _CleanCache(eventBusHandlerMethod, serviceProvider);
+                        }
                     }
-                    
-                    _TrySendAckMessage(channel, args);
+                    //for command side event processing
+                    else if (transactionConfig.Type == TransactionType.Command)
+                    {
+                        var commandConsumerEventRepository =
+                            serviceProvider.GetRequiredService<ICommandConsumerEventRepository>();
+
+                        var consumerEvent =
+                            await commandConsumerEventRepository.FindByIdAsync(@event.Id, cancellationToken);
+
+                        if (consumerEvent is null)
+                        {
+                            unitOfWork =
+                                serviceProvider.GetRequiredService(_GetTypeOfUnitOfWork(transactionConfig.Type)) as ICoreUnitOfWork;
+
+                            unitOfWork.Transaction(transactionConfig.IsolationLevel);
+
+                            #region IdempotentConsumerPattern
+
+                            var nowDateTime = DateTime.Now;
+
+                            consumerEvent = new ConsumerEvent {
+                                Id = @event.Id,
+                                Type = @event.Type,
+                                CreatedAt_EnglishDate = nowDateTime,
+                                CreatedAt_PersianDate = _dateTime.ToPersianShortDate(nowDateTime)
+                            };
+
+                            commandConsumerEventRepository.Add(consumerEvent);
+
+                            #endregion
+
+                            await (Task)eventBusHandlerMethod.Invoke(eventBusHandler, new[] { payload, cancellationToken });
+
+                            unitOfWork.Commit();
+
+                            _CleanCache(eventBusHandlerMethod, serviceProvider);
+                        }
+                    }
+                    else 
+                        throw new Exception("Must be defined transaction type!");
                 }
             }
-            else
-                _TrySendAckMessage(channel, args);
+                
+            _TrySendAckMessage(channel, args);
         }
         catch (Exception e)
         {
