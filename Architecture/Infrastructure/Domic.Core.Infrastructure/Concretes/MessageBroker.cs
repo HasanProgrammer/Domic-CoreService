@@ -714,7 +714,7 @@ public class MessageBroker : IMessageBroker
                     if (transactionConfig.Type == TransactionType.Query)
                     {
                         var queryConsumerEventRepository =
-                            serviceProvider.GetRequiredService<IQueryConsumerEventRepository>();
+                            serviceProvider.GetRequiredService<IConsumerEventQueryRepository>();
                         
                         var consumerEvent = queryConsumerEventRepository.FindById(@event.Id);
                         
@@ -751,7 +751,7 @@ public class MessageBroker : IMessageBroker
                     else if (transactionConfig.Type == TransactionType.Command)
                     {
                         var commandConsumerEventRepository =
-                            serviceProvider.GetRequiredService<ICommandConsumerEventRepository>();
+                            serviceProvider.GetRequiredService<IConsumerEventCommandRepository>();
 
                         var consumerEvent = commandConsumerEventRepository.FindById(@event.Id);
 
@@ -867,7 +867,7 @@ public class MessageBroker : IMessageBroker
                     if (transactionConfig.Type == TransactionType.Query)
                     {
                         var queryConsumerEventRepository =
-                            serviceProvider.GetRequiredService<IQueryConsumerEventRepository>();
+                            serviceProvider.GetRequiredService<IConsumerEventQueryRepository>();
                         
                         var consumerEvent =
                             await queryConsumerEventRepository.FindByIdAsync(@event.Id, cancellationToken);
@@ -905,7 +905,7 @@ public class MessageBroker : IMessageBroker
                     else if (transactionConfig.Type == TransactionType.Command)
                     {
                         var commandConsumerEventRepository =
-                            serviceProvider.GetRequiredService<ICommandConsumerEventRepository>();
+                            serviceProvider.GetRequiredService<IConsumerEventCommandRepository>();
 
                         var consumerEvent =
                             await commandConsumerEventRepository.FindByIdAsync(@event.Id, cancellationToken);
