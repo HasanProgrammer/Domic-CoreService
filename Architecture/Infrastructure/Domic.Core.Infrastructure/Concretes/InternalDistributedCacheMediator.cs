@@ -7,15 +7,15 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Domic.Core.Infrastructure.Concretes;
 
-public class CacheService : ICacheService
+public class DistributedCacheMediator : IDistributedCacheMediator
 {
     private readonly IServiceProvider _serviceProvider;
 
-    public CacheService(IServiceProvider serviceProvider) => _serviceProvider = serviceProvider;
+    public DistributedCacheMediator(IServiceProvider serviceProvider) => _serviceProvider = serviceProvider;
     
     public TResult Get<TResult>()
     {
-        object cacheHandler = _serviceProvider.GetRequiredService<IMemoryCacheSetter<TResult>>();
+        object cacheHandler = _serviceProvider.GetRequiredService<IInternalDistributedCacheHandler<TResult>>();
 
         var cacheHandlerType   = cacheHandler.GetType();
         var cacheHandlerMethod = cacheHandlerType.GetMethod("Set") ?? throw new Exception("Set function not found !");
@@ -24,24 +24,25 @@ public class CacheService : ICacheService
                                      ?? 
                                      throw new Exception("CachingAttribute's attribute for set function not found !");
         
+        var internalDistributedCache = _serviceProvider.GetRequiredService<IInternalDistributedCache>();
         
-        var redisCache = _serviceProvider.GetRequiredService<IRedisCache>();
+        var cachedData = internalDistributedCache.GetCacheValue(cacheHandlerMethodAttr.Key);
         
-        var cachedData = redisCache.GetCacheValue(cacheHandlerMethodAttr.Key);
         if (cachedData is null)
         {
             var result = (TResult)cacheHandlerMethod.Invoke(cacheHandler, null);
-            
             var bytes  = Encoding.UTF8.GetBytes(result.Serialize());
             var base64 = Convert.ToBase64String(bytes);
 
             if (cacheHandlerMethodAttr.Ttl is not 0)
-                redisCache.SetCacheValue(
+                internalDistributedCache.SetCacheValue(
                     new KeyValuePair<string, string>(cacheHandlerMethodAttr.Key, base64 ) ,
                     TimeSpan.FromMinutes( cacheHandlerMethodAttr.Ttl )
                 );
             else
-                redisCache.SetCacheValue( new KeyValuePair<string, string>(cacheHandlerMethodAttr.Key, base64 ) );
+                internalDistributedCache.SetCacheValue(
+                    new KeyValuePair<string, string>(cacheHandlerMethodAttr.Key, base64 ) 
+                );
 
             return result;
         }
@@ -51,10 +52,11 @@ public class CacheService : ICacheService
 
     public async Task<TResult> GetAsync<TResult>(CancellationToken cancellationToken)
     {
-        object cacheHandler = _serviceProvider.GetRequiredService<IMemoryCacheSetter<TResult>>();
+        object cacheHandler = _serviceProvider.GetRequiredService<IInternalDistributedCacheHandler<TResult>>();
 
-        var cacheHandlerType   = cacheHandler.GetType();
-        var cacheHandlerMethod = 
+        var cacheHandlerType = cacheHandler.GetType();
+        
+        var cacheHandlerMethod =
             cacheHandlerType.GetMethod("SetAsync") ?? throw new Exception("SetAsync function not found !");
 
         var cacheHandlerMethodAttr = cacheHandlerMethod.GetCustomAttribute(typeof(ConfigAttribute)) as ConfigAttribute
@@ -62,9 +64,11 @@ public class CacheService : ICacheService
                                      throw new Exception("CachingAttribute's attribute for set function not found !");
         
         
-        var redisCache = _serviceProvider.GetRequiredService<IRedisCache>();
+        var internalDistributedCache = _serviceProvider.GetRequiredService<IInternalDistributedCache>();
         
-        var cachedData = await redisCache.GetCacheValueAsync(cacheHandlerMethodAttr.Key, cancellationToken);
+        var cachedData =
+            await internalDistributedCache.GetCacheValueAsync(cacheHandlerMethodAttr.Key, cancellationToken);
+        
         if (cachedData is null)
         {
             var result =
@@ -74,13 +78,13 @@ public class CacheService : ICacheService
             var base64 = Convert.ToBase64String(bytes);
             
             if(cacheHandlerMethodAttr.Ttl is not 0)
-                await redisCache.SetCacheValueAsync(
+                await internalDistributedCache.SetCacheValueAsync(
                     new KeyValuePair<string, string>(cacheHandlerMethodAttr.Key, base64 ) ,
                     TimeSpan.FromMinutes( cacheHandlerMethodAttr.Ttl ) ,
                     cancellationToken: cancellationToken
                 );
             else
-                await redisCache.SetCacheValueAsync(
+                await internalDistributedCache.SetCacheValueAsync(
                     new KeyValuePair<string, string>(cacheHandlerMethodAttr.Key, base64 ), 
                     cancellationToken: cancellationToken
                 );

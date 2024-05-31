@@ -4,13 +4,14 @@ using Domic.Core.Common.ClassModels;
 
 namespace Domic.Core.UseCase.Caches;
 
-public class FetchServicesInfoInMemoryCache : IMemoryCacheSetter<List<ServiceStatus>>
+public class FetchServicesInfoExternalDistributedCacheHandler : IExternalDistributedCacheHandler<List<ServiceStatus>>
 {
     private readonly IServiceDiscovery _serviceDiscovery;
 
-    public FetchServicesInfoInMemoryCache(IServiceDiscovery serviceDiscovery) => _serviceDiscovery = serviceDiscovery;
+    public FetchServicesInfoExternalDistributedCacheHandler(IServiceDiscovery serviceDiscovery) 
+        => _serviceDiscovery = serviceDiscovery;
 
-    [Config(Key = "ServicesInfo", Ttl = 1)]
+    [Config(Key = "ServicesInfo")]
     public Task<List<ServiceStatus>> SetAsync(CancellationToken cancellationToken)
         => _serviceDiscovery.FetchAllServicesInfoAsync(cancellationToken);
 }

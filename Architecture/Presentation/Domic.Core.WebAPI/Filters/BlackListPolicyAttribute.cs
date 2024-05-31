@@ -17,18 +17,22 @@ public class BlackListPolicyAttribute : ActionFilterAttribute
     
     public override async Task OnActionExecutionAsync(ActionExecutingContext context, ActionExecutionDelegate next)
     {
-        if 
-        (
-            IgnoreActions.Split("|").All(
-                ignore => string.IsNullOrEmpty(context.ActionDescriptor.DisplayName.Search(ignore))
-            )
-        )
+        var ignoreCondition = IgnoreActions.Split("|").All(
+            ignore => string.IsNullOrEmpty(context.ActionDescriptor.DisplayName.Search(ignore))
+        );
+        
+        if (ignoreCondition)
         {
-            var username   = context.HttpContext.RequestServices.GetRequiredService<IJsonWebToken>().GetUsername(context.HttpContext.GetRowToken());
-            var redisCache = context.HttpContext.RequestServices.GetRequiredService(typeof(IRedisCache)) as IRedisCache;
-
-            if ( redisCache.GetCacheValue("BlackList-Auth")?.DeSerialize<List<string>>().Contains(username) ?? false )
-                throw new PresentationException("شما سطح دسترسی لازم برای ورود به این قسمت را دارا نمی باشید !");
+            var redisCache   = context.HttpContext.RequestServices.GetRequiredService<IInternalDistributedCache>();
+            var jsonWebToken = context.HttpContext.RequestServices.GetRequiredService<IJsonWebToken>();
+            
+            var blackListCondition =
+                redisCache.GetCacheValue("BlackList-Auth")?
+                          .DeSerialize<List<string>>()
+                          .Contains( jsonWebToken.GetUsername(context.HttpContext.GetRowToken()) ) ?? false;
+            
+            if (blackListCondition)
+                throw new PresentationException("شما مجوز ورود به سامانه را دارا نمی باشید !");
         }
 
         await next();

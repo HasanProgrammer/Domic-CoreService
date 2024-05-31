@@ -86,7 +86,7 @@ public class FullExceptionHandlerInterceptor : Interceptor
 
             if (!string.IsNullOrEmpty(idempotentKey))
             {
-                var redisCache = context.GetHttpContext().RequestServices.GetRequiredService<IRedisCache>();
+                var redisCache = context.GetHttpContext().RequestServices.GetRequiredService<IInternalDistributedCache>();
                 var serializer = context.GetHttpContext().RequestServices.GetRequiredService<ISerializer>();
                 
                 var idempotentResponse =
