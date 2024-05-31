@@ -10,22 +10,23 @@ namespace Domic.Core.Infrastructure.Concretes;
 public class ServiceDiscovery : IServiceDiscovery
 {
     private readonly IHostEnvironment                        _hostEnvironment;
-    private readonly ICacheService                           _cacheService;
+    private readonly IExternalDistributedCacheMediator       _externalDistributedCacheMediator;
     private readonly DiscoveryService.DiscoveryServiceClient _discoveryServiceClient;
 
     public ServiceDiscovery(DiscoveryService.DiscoveryServiceClient discoveryServiceClient, 
-        IHostEnvironment hostEnvironment, ICacheService cacheService
+        IHostEnvironment hostEnvironment, IExternalDistributedCacheMediator externalDistributedCacheMediator
     )
     {
-        _hostEnvironment        = hostEnvironment;
-        _cacheService           = cacheService;
-        _discoveryServiceClient = discoveryServiceClient;
+        _hostEnvironment                  = hostEnvironment;
+        _discoveryServiceClient           = discoveryServiceClient;
+        _externalDistributedCacheMediator = externalDistributedCacheMediator;
     }
 
     public async Task<List<ServiceStatus>> FetchAllServicesInfoAsync(CancellationToken cancellationToken)
     {
         var request = new ReadAllRequest();
 
+        //all of instances that status = true
         var result = await _discoveryServiceClient.ReadAllAsync(request, cancellationToken: cancellationToken);
 
         if (result?.Code != 200)
@@ -46,26 +47,29 @@ public class ServiceDiscovery : IServiceDiscovery
 
     public async Task<string> LoadAddressInMemoryAsync(string serviceName, CancellationToken cancellationToken)
     {
-        var servicesInfo = await _cacheService.GetAsync<List<ServiceStatus>>(cancellationToken);
+        var servicesInfo = await _LoadServicesInfoAsync(cancellationToken);
 
         var currentServiceInstancesInfo = servicesInfo.Where(service => service.Name.Equals(serviceName)).ToList();
 
         #region LoadBalance
 
-        //ToDo : ( Tech Debt ) -> Should be used thread safty way for [Random]
-        
-        var random = new Random();
+        var targetInstance = currentServiceInstancesInfo.MinBy(status => status.ResponseTime);
 
-        var targetInstanceOfServiceIndex = random.Next(currentServiceInstancesInfo.Count);
+        if (targetInstance is null)
+        {
+            var random = new Random(); //ToDo : ( Tech Debt ) -> Should be used thread safty way for [Random]
 
-        var targetInstanceOfService = currentServiceInstancesInfo[targetInstanceOfServiceIndex];
+            var targetInstanceOfServiceIndex = random.Next(currentServiceInstancesInfo.Count);
+
+            targetInstance = currentServiceInstancesInfo[targetInstanceOfServiceIndex];
+        }
 
         #endregion
         
         var endpoint =
-            _hostEnvironment.IsProduction() ? targetInstanceOfService.IPAddress : targetInstanceOfService.Host;
+            _hostEnvironment.IsProduction() ? targetInstance.IPAddress : targetInstance.Host;
 
-        return $"https://{endpoint}:{targetInstanceOfService.Port}";
+        return $"https://{endpoint}:{targetInstance.Port}";
     }
 
     public async Task<string> LoadAddressAsync(string serviceName, CancellationToken cancellationToken)
@@ -109,4 +113,22 @@ public class ServiceDiscovery : IServiceDiscovery
     }
 
     public void Dispose(){}
+    
+    /*---------------------------------------------------------------*/
+
+    private async Task<List<ServiceStatus>> _LoadServicesInfoAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            var servicesInfo = await _externalDistributedCacheMediator.GetAsync<List<ServiceStatus>>(cancellationToken);
+
+            return servicesInfo;
+        }
+        catch (Exception e)
+        {
+            //ToDo : ( Tech Debt ) => Should be used log in here!
+        }
+
+        return await FetchAllServicesInfoAsync(cancellationToken);
+    }
 }

@@ -104,8 +104,16 @@ public static partial class IConfigurationExtension
     /// <param name="configuration"></param>
     /// <param name="hostEnvironment"></param>
     /// <returns></returns>
-    public static string GetRedisConnectionString(this IConfiguration configuration) 
-        => Environment.GetEnvironmentVariable("RedisConnectionString");
+    public static string GetInternalRedisConnectionString(this IConfiguration configuration) 
+        => Environment.GetEnvironmentVariable("InternalRedisConnectionString");
+    
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="configuration"></param>
+    /// <returns></returns>
+    public static string GetExternalRedisConnectionString(this IConfiguration configuration) 
+        => Environment.GetEnvironmentVariable("ExternalRedisConnectionString");
 }
 
 //Webservice

@@ -1,6 +1,6 @@
 ﻿namespace Domic.Core.UseCase.Contracts.Interfaces;
 
-public interface IDistributedCacheHandler<TResult>
+public interface IInternalDistributedCacheHandler<TResult>
 {
     /// <summary>
     /// 

@@ -1,6 +1,3 @@
 ﻿namespace Domic.Core.UseCase.Contracts.Interfaces;
 
-public interface ICommand<TResult>
-{
-    
-}
+public interface ICommand<TResult>;

@@ -223,7 +223,7 @@ public class MessageBroker : IMessageBroker
             var commandUnitOfWork =
                 serviceScope.ServiceProvider.GetRequiredService(_GetTypeOfCommandUnitOfWork()) as ICoreCommandUnitOfWork;
 
-            var redisCache = serviceScope.ServiceProvider.GetRequiredService<IRedisCache>();
+            var redisCache = serviceScope.ServiceProvider.GetRequiredService<IInternalDistributedCache>();
             var eventCommandRepository = serviceScope.ServiceProvider.GetRequiredService<IEventCommandRepository>();
 
             IModel channel = default;
@@ -1035,7 +1035,7 @@ public class MessageBroker : IMessageBroker
         {
             if (eventBusHandlerMethod.GetCustomAttribute(typeof(WithCleanCacheAttribute)) is WithCleanCacheAttribute withCleanCacheAttribute)
             {
-                var redisCache = serviceProvider.GetRequiredService<IRedisCache>();
+                var redisCache = serviceProvider.GetRequiredService<IInternalDistributedCache>();
 
                 foreach (var key in withCleanCacheAttribute.Keies.Split("|"))
                     redisCache.DeleteKey(key);

@@ -7,15 +7,15 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Domic.Core.Infrastructure.Concretes;
 
-public class InternalDistributedCacheMediator : IInternalDistributedCacheMediator
+public class ExternalDistributedCacheMediator : IExternalDistributedCacheMediator
 {
     private readonly IServiceProvider _serviceProvider;
 
-    public InternalDistributedCacheMediator(IServiceProvider serviceProvider) => _serviceProvider = serviceProvider;
+    public ExternalDistributedCacheMediator(IServiceProvider serviceProvider) => _serviceProvider = serviceProvider;
     
     public TResult Get<TResult>()
     {
-        object cacheHandler = _serviceProvider.GetRequiredService<IInternalDistributedCacheHandler<TResult>>();
+        object cacheHandler = _serviceProvider.GetRequiredService<IExternalDistributedCacheHandler<TResult>>();
 
         var cacheHandlerType   = cacheHandler.GetType();
         var cacheHandlerMethod = cacheHandlerType.GetMethod("Set") ?? throw new Exception("Set function not found !");
@@ -24,9 +24,9 @@ public class InternalDistributedCacheMediator : IInternalDistributedCacheMediato
                                      ?? 
                                      throw new Exception("CachingAttribute's attribute for set function not found !");
         
-        var internalDistributedCache = _serviceProvider.GetRequiredService<IInternalDistributedCache>();
+        var externalDistributedCache = _serviceProvider.GetRequiredService<IExternalDistributedCache>();
         
-        var cachedData = internalDistributedCache.GetCacheValue(cacheHandlerMethodAttr.Key);
+        var cachedData = externalDistributedCache.GetCacheValue(cacheHandlerMethodAttr.Key);
         
         if (cachedData is null)
         {
@@ -35,12 +35,12 @@ public class InternalDistributedCacheMediator : IInternalDistributedCacheMediato
             var base64 = Convert.ToBase64String(bytes);
 
             if (cacheHandlerMethodAttr.Ttl is not 0)
-                internalDistributedCache.SetCacheValue(
+                externalDistributedCache.SetCacheValue(
                     new KeyValuePair<string, string>(cacheHandlerMethodAttr.Key, base64 ) ,
                     TimeSpan.FromMinutes( cacheHandlerMethodAttr.Ttl )
                 );
             else
-                internalDistributedCache.SetCacheValue(
+                externalDistributedCache.SetCacheValue(
                     new KeyValuePair<string, string>(cacheHandlerMethodAttr.Key, base64 ) 
                 );
 
@@ -52,7 +52,7 @@ public class InternalDistributedCacheMediator : IInternalDistributedCacheMediato
 
     public async Task<TResult> GetAsync<TResult>(CancellationToken cancellationToken)
     {
-        object cacheHandler = _serviceProvider.GetRequiredService<IInternalDistributedCacheHandler<TResult>>();
+        object cacheHandler = _serviceProvider.GetRequiredService<IExternalDistributedCacheHandler<TResult>>();
 
         var cacheHandlerType = cacheHandler.GetType();
         
@@ -64,10 +64,10 @@ public class InternalDistributedCacheMediator : IInternalDistributedCacheMediato
                                      throw new Exception("CachingAttribute's attribute for set function not found !");
         
         
-        var internalDistributedCache = _serviceProvider.GetRequiredService<IInternalDistributedCache>();
+        var externalDistributedCache = _serviceProvider.GetRequiredService<IExternalDistributedCache>();
         
         var cachedData =
-            await internalDistributedCache.GetCacheValueAsync(cacheHandlerMethodAttr.Key, cancellationToken);
+            await externalDistributedCache.GetCacheValueAsync(cacheHandlerMethodAttr.Key, cancellationToken);
         
         if (cachedData is null)
         {
@@ -78,13 +78,13 @@ public class InternalDistributedCacheMediator : IInternalDistributedCacheMediato
             var base64 = Convert.ToBase64String(bytes);
             
             if(cacheHandlerMethodAttr.Ttl is not 0)
-                await internalDistributedCache.SetCacheValueAsync(
+                await externalDistributedCache.SetCacheValueAsync(
                     new KeyValuePair<string, string>(cacheHandlerMethodAttr.Key, base64 ) ,
                     TimeSpan.FromMinutes( cacheHandlerMethodAttr.Ttl ) ,
                     cancellationToken: cancellationToken
                 );
             else
-                await internalDistributedCache.SetCacheValueAsync(
+                await externalDistributedCache.SetCacheValueAsync(
                     new KeyValuePair<string, string>(cacheHandlerMethodAttr.Key, base64 ), 
                     cancellationToken: cancellationToken
                 );

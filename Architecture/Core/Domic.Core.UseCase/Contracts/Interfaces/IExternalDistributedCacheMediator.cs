@@ -1,6 +1,6 @@
 ﻿namespace Domic.Core.UseCase.Contracts.Interfaces;
 
-public interface IInternalDistributedCacheMediator
+public interface IExternalDistributedCacheMediator
 {
     /// <summary>
     /// 

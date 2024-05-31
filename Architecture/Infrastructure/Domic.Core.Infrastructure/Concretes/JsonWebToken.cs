@@ -67,12 +67,13 @@ public class JsonWebToken : IJsonWebToken
         List<Claim> claimsObject = claims.Select(claim => new Claim(claim.Key, claim.Value)).ToList();
 
         var tokenDescriptor = new SecurityTokenDescriptor {
-            Issuer             = tokenParameter.Issuer                  ,
-            Audience           = tokenParameter.Audience                , 
+            Issuer             = tokenParameter.Issuer            ,
+            Audience           = tokenParameter.Audience          , 
             Subject            = new ClaimsIdentity(claimsObject) ,
             Expires            = DateTime.UtcNow.AddMinutes(tokenParameter.Expires),
             SigningCredentials = new SigningCredentials(
-                new SymmetricSecurityKey(Encoding.UTF8.GetBytes(tokenParameter.Key)), SecurityAlgorithms.HmacSha256Signature
+                new SymmetricSecurityKey(Encoding.UTF8.GetBytes(tokenParameter.Key)), 
+                SecurityAlgorithms.HmacSha256Signature
             )
         };
 

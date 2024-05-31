@@ -664,7 +664,7 @@ public class AsyncCommandBroker : IAsyncCommandBroker
         {
             if (eventBusHandlerMethod.GetCustomAttribute(typeof(WithCleanCacheAttribute)) is WithCleanCacheAttribute withCleanCacheAttribute)
             {
-                var redisCache = serviceProvider.GetRequiredService<IRedisCache>();
+                var redisCache = serviceProvider.GetRequiredService<IInternalDistributedCache>();
 
                 foreach (var key in withCleanCacheAttribute.Keies.Split("|"))
                     redisCache.DeleteKey(key);

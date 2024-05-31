@@ -163,17 +163,29 @@ public static class WebApplicationBuilderExtension
         Type[] useCaseAssemblyTypes = Assembly.Load(new AssemblyName("Domic.UseCase")).GetTypes();
         
         //Third party ( Redis )
-        builder.Services.AddScoped<IConnectionMultiplexer>(
-            Provider => ConnectionMultiplexer.Connect( builder.Configuration.GetRedisConnectionString() )
+        builder.Services.AddKeyedScoped<IConnectionMultiplexer>("InternalRedis",
+            (_, _) => ConnectionMultiplexer.Connect(builder.Configuration.GetInternalRedisConnectionString())
+        );
+        
+        builder.Services.AddKeyedScoped<IConnectionMultiplexer>("ExternalRedis",
+            (_, _) => ConnectionMultiplexer.Connect(builder.Configuration.GetExternalRedisConnectionString())
         );
         
         //Pure
-        builder.Services.AddScoped(typeof(IRedisCache), typeof(RedisCache));
+        builder.Services.AddScoped(typeof(IInternalDistributedCache), typeof(InternalDistributedCache));
+        builder.Services.AddScoped(typeof(IExternalDistributedCache), typeof(ExternalDistributedCache));
         
         //Pure ( Mediator for cache )
-        builder.Services.AddTransient(typeof(ICacheService), typeof(CacheService));
+        builder.Services.AddTransient(
+            typeof(IInternalDistributedCacheMediator), typeof(InternalDistributedCacheMediator)
+        );
         
-        RegisterAllCachesHandler(builder.Services, useCaseAssemblyTypes);
+        builder.Services.AddTransient(
+            typeof(IExternalDistributedCacheMediator), typeof(ExternalDistributedCacheMediator)
+        );
+        
+        RegisterAllInternalDistributedCachesHandler(builder.Services, useCaseAssemblyTypes);
+        RegisterAllExternalDistributedCachesHandler(builder.Services, useCaseAssemblyTypes);
     }
     
     /// <summary>
@@ -305,7 +317,7 @@ public static class WebApplicationBuilderExtension
     {
         Type[] coreUseCaseAssemblyTypes = Assembly.Load(new AssemblyName("Domic.Core.UseCase")).GetTypes();
         
-        RegisterAllCachesHandler(builder.Services, coreUseCaseAssemblyTypes);
+        RegisterAllInternalDistributedCachesHandler(builder.Services, coreUseCaseAssemblyTypes);
         
         builder.Services.AddScoped(typeof(IServiceDiscovery), typeof(ServiceDiscovery));
 
@@ -648,18 +660,51 @@ public static class WebApplicationBuilderExtension
     /// </summary>
     /// <param name="serviceCollection"></param>
     /// <param name="useCaseAssemblyTypes"></param>
-    private static void RegisterAllCachesHandler(IServiceCollection serviceCollection, Type[] useCaseAssemblyTypes)
+    private static void RegisterAllInternalDistributedCachesHandler(IServiceCollection serviceCollection, 
+        Type[] useCaseAssemblyTypes
+    )
     {
         var cacheHandlerTypes = useCaseAssemblyTypes.Where(
-            type => type.GetInterfaces().Any(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IMemoryCacheSetter<>))
+            type => type.GetInterfaces().Any(i => 
+                i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IInternalDistributedCacheHandler<>)
+            )
         );
 
         foreach (Type cacheHandlerType in cacheHandlerTypes) {
                 
-            Type cacheHandlerTypeValue = cacheHandlerType.GetInterfaces().FirstOrDefault().GetGenericArguments().FirstOrDefault();
+            Type cacheHandlerTypeValue =
+                cacheHandlerType.GetInterfaces().FirstOrDefault().GetGenericArguments().FirstOrDefault();
                 
             serviceCollection.AddTransient(
-                typeof(IMemoryCacheSetter<>).MakeGenericType(cacheHandlerTypeValue),
+                typeof(IInternalDistributedCacheHandler<>).MakeGenericType(cacheHandlerTypeValue),
+                cacheHandlerType
+            );
+            
+        }
+    }
+    
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="serviceCollection"></param>
+    /// <param name="useCaseAssemblyTypes"></param>
+    private static void RegisterAllExternalDistributedCachesHandler(IServiceCollection serviceCollection, 
+        Type[] useCaseAssemblyTypes
+    )
+    {
+        var cacheHandlerTypes = useCaseAssemblyTypes.Where(
+            type => type.GetInterfaces().Any(i => 
+                i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IExternalDistributedCacheHandler<>)
+            )
+        );
+
+        foreach (Type cacheHandlerType in cacheHandlerTypes) {
+                
+            Type cacheHandlerTypeValue =
+                cacheHandlerType.GetInterfaces().FirstOrDefault().GetGenericArguments().FirstOrDefault();
+                
+            serviceCollection.AddTransient(
+                typeof(IExternalDistributedCacheHandler<>).MakeGenericType(cacheHandlerTypeValue),
                 cacheHandlerType
             );
             

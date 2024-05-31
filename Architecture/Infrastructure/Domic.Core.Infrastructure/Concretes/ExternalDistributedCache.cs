@@ -5,11 +5,11 @@ using StackExchange.Redis;
 
 namespace Domic.Core.Infrastructure.Concretes;
 
-public class InternalDistributedCache : IInternalDistributedCache
+public class ExternalDistributedCache : IExternalDistributedCache
 {
     private readonly IDatabase _redisContext;
         
-    public InternalDistributedCache([FromKeyedServices("InternalRedis")] IConnectionMultiplexer connection) 
+    public ExternalDistributedCache([FromKeyedServices("ExternalRedis")] IConnectionMultiplexer connection) 
         => _redisContext = connection.GetDatabase();
 
     public string GetCacheValue(string key) => _redisContext.StringGet(key);

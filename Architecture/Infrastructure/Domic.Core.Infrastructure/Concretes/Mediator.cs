@@ -176,7 +176,7 @@ public class Mediator : IMediator
         
         if (queryHandlerMethod.GetCustomAttribute(typeof(WithCachingAttribute)) is WithCachingAttribute cacheAttribute)
         {
-            var redisCache = _serviceProvider.GetRequiredService<IRedisCache>();
+            var redisCache = _serviceProvider.GetRequiredService<IInternalDistributedCache>();
             
             var cachedData = redisCache.GetCacheValue(cacheAttribute.Key);
             if (cachedData is null)
@@ -249,7 +249,7 @@ public class Mediator : IMediator
 
         if (queryHandlerMethod.GetCustomAttribute(typeof(WithCachingAttribute)) is WithCachingAttribute cacheAttribute)
         {
-            var redisCache = _serviceProvider.GetRequiredService<IRedisCache>();
+            var redisCache = _serviceProvider.GetRequiredService<IInternalDistributedCache>();
             
             var cachedData = redisCache.GetCacheValue(cacheAttribute.Key);
             if (cachedData is null)
@@ -354,7 +354,7 @@ public class Mediator : IMediator
     {
         if (commandHandlerMethod.GetCustomAttribute(typeof(WithCleanCacheAttribute)) is WithCleanCacheAttribute cacheAttribute)
         {
-            var redisCache = _serviceProvider.GetRequiredService<IRedisCache>();
+            var redisCache = _serviceProvider.GetRequiredService<IInternalDistributedCache>();
 
             foreach (var key in cacheAttribute.Keies.Split("|")) 
                 redisCache.DeleteKey(key);

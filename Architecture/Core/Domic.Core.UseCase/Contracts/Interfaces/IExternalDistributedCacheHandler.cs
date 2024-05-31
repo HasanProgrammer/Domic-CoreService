@@ -1,21 +1,19 @@
 ﻿namespace Domic.Core.UseCase.Contracts.Interfaces;
 
-public interface IInternalDistributedCacheMediator
+public interface IExternalDistributedCacheHandler<TResult>
 {
     /// <summary>
     /// 
     /// </summary>
-    /// <typeparam name="TResult"></typeparam>
     /// <returns></returns>
     /// <exception cref="NotImplementedException"></exception>
-    public TResult Get<TResult>() => throw new NotImplementedException();
+    public TResult Set() => throw new NotImplementedException();
     
     /// <summary>
     /// 
     /// </summary>
     /// <param name="cancellationToken"></param>
-    /// <typeparam name="TResult"></typeparam>
     /// <returns></returns>
     /// <exception cref="NotImplementedException"></exception>
-    public Task<TResult> GetAsync<TResult>(CancellationToken cancellationToken) => throw new NotImplementedException();
+    public Task<TResult> SetAsync(CancellationToken cancellationToken) => throw new NotImplementedException();
 }
