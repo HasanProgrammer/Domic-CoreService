@@ -4,7 +4,4 @@ namespace Domic.Core.Domain.Contracts.Interfaces;
 
 //Read side operations
 
-public interface IQueryRepository<TEntity, TIdentity> : IRepository<TEntity> where TEntity : BaseEntityQuery<TIdentity>
-{
-    
-}
+public interface IQueryRepository<TEntity, TIdentity> : IRepository<TEntity> where TEntity : BaseEntityQuery<TIdentity>;

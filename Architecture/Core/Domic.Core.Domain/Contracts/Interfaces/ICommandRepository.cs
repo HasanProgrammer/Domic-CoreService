@@ -4,7 +4,4 @@ namespace Domic.Core.Domain.Contracts.Interfaces;
 
 //Write side operations
 
-public interface ICommandRepository<TEntity, TIdentity> : IRepository<TEntity> where TEntity : BaseEntity<TIdentity>
-{
-    
-}
+public interface ICommandRepository<TEntity, TIdentity> : IRepository<TEntity> where TEntity : BaseEntity<TIdentity>;

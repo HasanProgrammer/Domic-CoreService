@@ -221,7 +221,7 @@ public class MessageBroker : IMessageBroker
             using IServiceScope serviceScope = _serviceScopeFactory.CreateScope();
 
             var commandUnitOfWork =
-                serviceScope.ServiceProvider.GetRequiredService(_GetTypeOfCommandUnitOfWork()) as ICoreCommandUnitOfWork;
+                serviceScope.ServiceProvider.GetRequiredService(_GetTypeOfCommandUnitOfWork()) as ICommandUnitOfWork;
 
             var redisCache = serviceScope.ServiceProvider.GetRequiredService<IInternalDistributedCache>();
             var eventCommandRepository = serviceScope.ServiceProvider.GetRequiredService<IEventCommandRepository>();
@@ -375,7 +375,15 @@ public class MessageBroker : IMessageBroker
         _connection.Close();
         _connection.Dispose();
     }
-    
+
+    public ValueTask DisposeAsync()
+    {
+        _connection.Close();
+        _connection.Dispose();
+        
+        return ValueTask.CompletedTask;
+    }
+
     /*---------------------------------------------------------------*/
 
     private void _EventPublishHandler(IModel channel, Event @event)
@@ -414,10 +422,12 @@ public class MessageBroker : IMessageBroker
         IServiceProvider serviceProvider
     ) where TMessage : class
     {
-        ICoreUnitOfWork unitOfWork = null;
+        IUnitOfWork unitOfWork = null;
 
         try
         {
+            var messageType = message.GetType();
+            
             var messageBusHandler     = serviceProvider.GetRequiredService(typeof(IConsumerMessageBusHandler<TMessage>));
             var messageBusHandlerType = messageBusHandler.GetType();
             
@@ -427,7 +437,9 @@ public class MessageBroker : IMessageBroker
             var retryAttr =
                 messageBusHandlerMethod.GetCustomAttribute(typeof(WithMaxRetryAttribute)) as WithMaxRetryAttribute;
 
-            if (_IsMaxRetryMessage(args, retryAttr))
+            var maxRetryInfo = _IsMaxRetryMessage(args, retryAttr);
+            
+            if (maxRetryInfo.result)
             {
                 if (retryAttr.HasAfterMaxRetryHandle)
                 {
@@ -443,15 +455,40 @@ public class MessageBroker : IMessageBroker
                     messageBusHandlerMethod.GetCustomAttribute(typeof(TransactionConfigAttribute)) as TransactionConfigAttribute;
 
                 unitOfWork =
-                    serviceProvider.GetRequiredService(_GetTypeOfUnitOfWork(transactionConfig.Type)) as ICoreUnitOfWork;
+                    serviceProvider.GetRequiredService(_GetTypeOfUnitOfWork(transactionConfig.Type)) as IUnitOfWork;
 
-                unitOfWork.Transaction(transactionConfig.IsolationLevel);
-                
-                messageBusHandlerMethod.Invoke(messageBusHandler, new object[] { message });
-                
-                unitOfWork.Commit();
+                var consumerEventQueryRepository = serviceProvider.GetRequiredService<IConsumerEventQueryRepository>();
 
-                _CleanCache(messageBusHandlerMethod, serviceProvider);
+                var messageId = messageType.GetProperty("Id").GetValue(message);
+                
+                var consumerEventQuery = consumerEventQueryRepository.FindById(messageId);
+
+                if (consumerEventQuery is null)
+                {
+                    unitOfWork.Transaction(transactionConfig.IsolationLevel);
+                    
+                    #region IdempotentConsumerPattern
+                
+                    var nowDateTime = DateTime.Now;
+
+                    consumerEventQuery = new ConsumerEventQuery {
+                        Id = messageId.ToString(),
+                        Type = nameof(message),
+                        CountOfRetry = maxRetryInfo.countOfRetry,
+                        CreatedAt_EnglishDate = nowDateTime,
+                        CreatedAt_PersianDate = _dateTime.ToPersianShortDate(nowDateTime)
+                    };
+
+                    consumerEventQueryRepository.Add(consumerEventQuery);
+
+                    #endregion
+                
+                    messageBusHandlerMethod.Invoke(messageBusHandler, new object[] { message });
+                
+                    unitOfWork.Commit();
+
+                    _CleanCache(messageBusHandlerMethod, serviceProvider);
+                }
             }
             
             _TrySendAckMessage(channel, args);
@@ -474,10 +511,12 @@ public class MessageBroker : IMessageBroker
         IServiceProvider serviceProvider, CancellationToken cancellationToken
     ) where TMessage : class
     {
-        ICoreUnitOfWork unitOfWork = null;
+        IUnitOfWork unitOfWork = null;
 
         try
         {
+            var messageType = message.GetType();
+            
             var messageBusHandler     = serviceProvider.GetRequiredService(typeof(IConsumerMessageBusHandler<TMessage>));
             var messageBusHandlerType = messageBusHandler.GetType();
             
@@ -487,7 +526,7 @@ public class MessageBroker : IMessageBroker
             var retryAttr =
                 messageBusHandlerMethod.GetCustomAttribute(typeof(WithMaxRetryAttribute)) as WithMaxRetryAttribute;
 
-            if (_IsMaxRetryMessage(args, retryAttr))
+            if (_IsMaxRetryMessage(args, retryAttr).result)
             {
                 if (retryAttr.HasAfterMaxRetryHandle)
                 {
@@ -503,15 +542,24 @@ public class MessageBroker : IMessageBroker
                     messageBusHandlerMethod.GetCustomAttribute(typeof(TransactionConfigAttribute)) as TransactionConfigAttribute;
 
                 unitOfWork =
-                    serviceProvider.GetRequiredService(_GetTypeOfUnitOfWork(transactionConfig.Type)) as ICoreUnitOfWork;
+                    serviceProvider.GetRequiredService(_GetTypeOfUnitOfWork(transactionConfig.Type)) as IUnitOfWork;
 
-                unitOfWork.Transaction(transactionConfig.IsolationLevel);
-                
-                await (Task)messageBusHandlerMethod.Invoke(messageBusHandler, new object[] { message, cancellationToken });
-                
-                unitOfWork.Commit();
+                var consumerEventQueryRepository = serviceProvider.GetRequiredService<IConsumerEventQueryRepository>();
 
-                _CleanCache(messageBusHandlerMethod, serviceProvider);
+                var messageId = messageType.GetProperty("Id").GetValue(message);
+                
+                var consumerEventQuery = await consumerEventQueryRepository.FindByIdAsync(messageId, cancellationToken);
+
+                if (consumerEventQuery is null)
+                {
+                    await unitOfWork.TransactionAsync(transactionConfig.IsolationLevel, cancellationToken);
+                
+                    await (Task)messageBusHandlerMethod.Invoke(messageBusHandler, new object[] { message, cancellationToken });
+                
+                    await unitOfWork.CommitAsync(cancellationToken);
+
+                    _CleanCache(messageBusHandlerMethod, serviceProvider);
+                }
             }
             
             _TrySendAckMessage(channel, args);
@@ -524,7 +572,7 @@ public class MessageBroker : IMessageBroker
                 NameOfService, NameOfAction
             );
             
-            unitOfWork?.Rollback();
+            if(unitOfWork is not null) await unitOfWork.RollbackAsync(cancellationToken);
 
             _RequeueMessageAsDeadLetter(channel, args);
         }
@@ -534,12 +582,14 @@ public class MessageBroker : IMessageBroker
         IServiceProvider serviceProvider
     )
     {
-       ICoreUnitOfWork unitOfWork = null;
+       IUnitOfWork unitOfWork = null;
 
         try
         {
+            var messageType = message.GetType();
+            
             var consumerMessageBusHandlerContract =
-                typeof(IConsumerMessageBusHandler<>).MakeGenericType(message.GetType());
+                typeof(IConsumerMessageBusHandler<>).MakeGenericType(messageType);
                 
             var messageBusHandler     = serviceProvider.GetRequiredService(consumerMessageBusHandlerContract);
             var messageBusHandlerType = messageBusHandler.GetType();
@@ -550,7 +600,9 @@ public class MessageBroker : IMessageBroker
             var retryAttr =
                 messageBusHandlerMethod.GetCustomAttribute(typeof(WithMaxRetryAttribute)) as WithMaxRetryAttribute;
 
-            if (_IsMaxRetryMessage(args, retryAttr))
+            var maxRetryInfo = _IsMaxRetryMessage(args, retryAttr);
+            
+            if (maxRetryInfo.result)
             {
                 if (retryAttr.HasAfterMaxRetryHandle)
                 {
@@ -566,15 +618,40 @@ public class MessageBroker : IMessageBroker
                     messageBusHandlerMethod.GetCustomAttribute(typeof(TransactionConfigAttribute)) as TransactionConfigAttribute;
 
                 unitOfWork =
-                    serviceProvider.GetRequiredService(_GetTypeOfUnitOfWork(transactionConfig.Type)) as ICoreUnitOfWork;
+                    serviceProvider.GetRequiredService(_GetTypeOfUnitOfWork(transactionConfig.Type)) as IUnitOfWork;
 
-                unitOfWork.Transaction(transactionConfig.IsolationLevel);
-                
-                messageBusHandlerMethod.Invoke(messageBusHandler, new[] { message });
-                
-                unitOfWork.Commit();
+                var consumerEventQueryRepository = serviceProvider.GetRequiredService<IConsumerEventQueryRepository>();
 
-                _CleanCache(messageBusHandlerMethod, serviceProvider);
+                var messageId = messageType.GetProperty("Id").GetValue(message);
+                
+                var consumerEventQuery = consumerEventQueryRepository.FindById(messageId);
+
+                if (consumerEventQuery is null)
+                {
+                    unitOfWork.Transaction(transactionConfig.IsolationLevel);
+                    
+                    #region IdempotentConsumerPattern
+                
+                    var nowDateTime = DateTime.Now;
+
+                    consumerEventQuery = new ConsumerEventQuery {
+                        Id = messageId.ToString(),
+                        Type = nameof(message),
+                        CountOfRetry = maxRetryInfo.countOfRetry,
+                        CreatedAt_EnglishDate = nowDateTime,
+                        CreatedAt_PersianDate = _dateTime.ToPersianShortDate(nowDateTime)
+                    };
+
+                    consumerEventQueryRepository.Add(consumerEventQuery);
+
+                    #endregion
+                
+                    messageBusHandlerMethod.Invoke(messageBusHandler, new[] { message });
+                
+                    unitOfWork.Commit();
+
+                    _CleanCache(messageBusHandlerMethod, serviceProvider);
+                }
             }
             
             _TrySendAckMessage(channel, args);
@@ -597,12 +674,14 @@ public class MessageBroker : IMessageBroker
         IServiceProvider serviceProvider, CancellationToken cancellationToken
     )
     {
-       ICoreUnitOfWork unitOfWork = null;
+       IUnitOfWork unitOfWork = null;
 
         try
         {
+            var messageType = message.GetType();
+            
             var consumerMessageBusHandlerContract =
-                typeof(IConsumerMessageBusHandler<>).MakeGenericType(message.GetType());
+                typeof(IConsumerMessageBusHandler<>).MakeGenericType(messageType);
                 
             var messageBusHandler     = serviceProvider.GetRequiredService(consumerMessageBusHandlerContract);
             var messageBusHandlerType = messageBusHandler.GetType();
@@ -613,7 +692,9 @@ public class MessageBroker : IMessageBroker
             var retryAttr =
                 messageBusHandlerMethod.GetCustomAttribute(typeof(WithMaxRetryAttribute)) as WithMaxRetryAttribute;
 
-            if (_IsMaxRetryMessage(args, retryAttr))
+            var maxRetryInfo = _IsMaxRetryMessage(args, retryAttr);
+            
+            if (maxRetryInfo.result)
             {
                 if (retryAttr.HasAfterMaxRetryHandle)
                 {
@@ -629,15 +710,40 @@ public class MessageBroker : IMessageBroker
                     messageBusHandlerMethod.GetCustomAttribute(typeof(TransactionConfigAttribute)) as TransactionConfigAttribute;
 
                 unitOfWork =
-                    serviceProvider.GetRequiredService(_GetTypeOfUnitOfWork(transactionConfig.Type)) as ICoreUnitOfWork;
-
-                unitOfWork.Transaction(transactionConfig.IsolationLevel);
+                    serviceProvider.GetRequiredService(_GetTypeOfUnitOfWork(transactionConfig.Type)) as IUnitOfWork;
                 
-                await (Task)messageBusHandlerMethod.Invoke(messageBusHandler, new[] { message, cancellationToken });
-                
-                unitOfWork.Commit();
+                var consumerEventQueryRepository = serviceProvider.GetRequiredService<IConsumerEventQueryRepository>();
 
-                _CleanCache(messageBusHandlerMethod, serviceProvider);
+                var messageId = messageType.GetProperty("Id").GetValue(message);
+                
+                var consumerEventQuery = await consumerEventQueryRepository.FindByIdAsync(messageId, cancellationToken);
+
+                if (consumerEventQuery is null)
+                {
+                    await unitOfWork.TransactionAsync(transactionConfig.IsolationLevel, cancellationToken);
+                
+                    #region IdempotentConsumerPattern
+                
+                    var nowDateTime = DateTime.Now;
+
+                    consumerEventQuery = new ConsumerEventQuery {
+                        Id = messageId.ToString(),
+                        Type = nameof(message),
+                        CountOfRetry = maxRetryInfo.countOfRetry,
+                        CreatedAt_EnglishDate = nowDateTime,
+                        CreatedAt_PersianDate = _dateTime.ToPersianShortDate(nowDateTime)
+                    };
+
+                    consumerEventQueryRepository.Add(consumerEventQuery);
+
+                    #endregion
+                
+                    await (Task)messageBusHandlerMethod.Invoke(messageBusHandler, new[] { message, cancellationToken });
+                
+                    await unitOfWork.CommitAsync(cancellationToken);
+
+                    _CleanCache(messageBusHandlerMethod, serviceProvider);
+                }
             }
             
             _TrySendAckMessage(channel, args);
@@ -650,7 +756,7 @@ public class MessageBroker : IMessageBroker
                 NameOfService, NameOfAction
             );
             
-            unitOfWork?.Rollback();
+            if(unitOfWork is not null) await unitOfWork.RollbackAsync(cancellationToken);
 
             _RequeueMessageAsDeadLetter(channel, args);
         }
@@ -660,8 +766,8 @@ public class MessageBroker : IMessageBroker
         IServiceProvider serviceProvider
     )
     {
-        Type eventBusHandlerType   = null;
-        ICoreUnitOfWork unitOfWork = null;
+        IUnitOfWork unitOfWork   = null;
+        Type eventBusHandlerType = null;
 
         try
         {
@@ -695,7 +801,9 @@ public class MessageBroker : IMessageBroker
                 var retryAttr =
                     eventBusHandlerMethod.GetCustomAttribute(typeof(WithMaxRetryAttribute)) as WithMaxRetryAttribute;
 
-                if (_IsMaxRetryMessage(args, retryAttr))
+                var maxRetryInfo = _IsMaxRetryMessage(args, retryAttr);
+                
+                if (maxRetryInfo.result)
                 {
                     if (retryAttr.HasAfterMaxRetryHandle)
                     {
@@ -713,15 +821,15 @@ public class MessageBroker : IMessageBroker
                     //for query side event processing
                     if (transactionConfig.Type == TransactionType.Query)
                     {
-                        var queryConsumerEventRepository =
+                        var consumerEventQueryRepository =
                             serviceProvider.GetRequiredService<IConsumerEventQueryRepository>();
                         
-                        var consumerEvent = queryConsumerEventRepository.FindById(@event.Id);
+                        var consumerEventQuery = consumerEventQueryRepository.FindById(@event.Id);
                         
-                        if (consumerEvent is null)
+                        if (consumerEventQuery is null)
                         {
                             unitOfWork =
-                                serviceProvider.GetRequiredService(_GetTypeOfUnitOfWork(transactionConfig.Type)) as ICoreUnitOfWork;
+                                serviceProvider.GetRequiredService(_GetTypeOfUnitOfWork(transactionConfig.Type)) as IUnitOfWork;
 
                             unitOfWork.Transaction(transactionConfig.IsolationLevel);
 
@@ -729,14 +837,15 @@ public class MessageBroker : IMessageBroker
 
                             var nowDateTime = DateTime.Now;
                         
-                            consumerEvent = new ConsumerEventQuery {
+                            consumerEventQuery = new ConsumerEventQuery {
                                 Id = @event.Id,
                                 Type = @event.Type,
+                                CountOfRetry = maxRetryInfo.countOfRetry,
                                 CreatedAt_EnglishDate = nowDateTime,
                                 CreatedAt_PersianDate = _dateTime.ToPersianShortDate(nowDateTime)
                             };
                                 
-                            queryConsumerEventRepository.Add(consumerEvent);
+                            consumerEventQueryRepository.Add(consumerEventQuery);
 
                             #endregion
             
@@ -750,15 +859,15 @@ public class MessageBroker : IMessageBroker
                     //for command side event processing
                     else if (transactionConfig.Type == TransactionType.Command)
                     {
-                        var commandConsumerEventRepository =
+                        var consumerEventCommandRepository =
                             serviceProvider.GetRequiredService<IConsumerEventCommandRepository>();
 
-                        var consumerEvent = commandConsumerEventRepository.FindById(@event.Id);
+                        var consumerEventCommand = consumerEventCommandRepository.FindById(@event.Id);
 
-                        if (consumerEvent is null)
+                        if (consumerEventCommand is null)
                         {
                             unitOfWork =
-                                serviceProvider.GetRequiredService(_GetTypeOfUnitOfWork(transactionConfig.Type)) as ICoreUnitOfWork;
+                                serviceProvider.GetRequiredService(_GetTypeOfUnitOfWork(transactionConfig.Type)) as IUnitOfWork;
 
                             unitOfWork.Transaction(transactionConfig.IsolationLevel);
 
@@ -766,14 +875,15 @@ public class MessageBroker : IMessageBroker
 
                             var nowDateTime = DateTime.Now;
 
-                            consumerEvent = new ConsumerEvent {
+                            consumerEventCommand = new ConsumerEvent {
                                 Id = @event.Id,
                                 Type = @event.Type,
+                                CountOfRetry = maxRetryInfo.countOfRetry,
                                 CreatedAt_EnglishDate = nowDateTime,
                                 CreatedAt_PersianDate = _dateTime.ToPersianShortDate(nowDateTime)
                             };
 
-                            commandConsumerEventRepository.Add(consumerEvent);
+                            consumerEventCommandRepository.Add(consumerEventCommand);
 
                             #endregion
 
@@ -814,7 +924,7 @@ public class MessageBroker : IMessageBroker
     )
     {
         Type eventBusHandlerType = null;
-        ICoreUnitOfWork unitOfWork = null;
+        IUnitOfWork unitOfWork = null;
 
         try
         {
@@ -848,7 +958,9 @@ public class MessageBroker : IMessageBroker
                 var retryAttr =
                     eventBusHandlerMethod.GetCustomAttribute(typeof(WithMaxRetryAttribute)) as WithMaxRetryAttribute;
 
-                if (_IsMaxRetryMessage(args, retryAttr))
+                var maxRetryInfo = _IsMaxRetryMessage(args, retryAttr);
+                
+                if (maxRetryInfo.result)
                 {
                     if (retryAttr.HasAfterMaxRetryHandle)
                     {
@@ -866,37 +978,38 @@ public class MessageBroker : IMessageBroker
                     //for query side event processing
                     if (transactionConfig.Type == TransactionType.Query)
                     {
-                        var queryConsumerEventRepository =
+                        var consumerEventQueryRepository =
                             serviceProvider.GetRequiredService<IConsumerEventQueryRepository>();
                         
-                        var consumerEvent =
-                            await queryConsumerEventRepository.FindByIdAsync(@event.Id, cancellationToken);
+                        var consumerEventQuery =
+                            await consumerEventQueryRepository.FindByIdAsync(@event.Id, cancellationToken);
                         
-                        if (consumerEvent is null)
+                        if (consumerEventQuery is null)
                         {
                             unitOfWork =
-                                serviceProvider.GetRequiredService(_GetTypeOfUnitOfWork(transactionConfig.Type)) as ICoreUnitOfWork;
+                                serviceProvider.GetRequiredService(_GetTypeOfUnitOfWork(transactionConfig.Type)) as IUnitOfWork;
 
-                            unitOfWork.Transaction(transactionConfig.IsolationLevel);
+                            await unitOfWork.TransactionAsync(transactionConfig.IsolationLevel, cancellationToken);
 
                             #region IdempotentConsumerPattern
 
                             var nowDateTime = DateTime.Now;
                         
-                            consumerEvent = new ConsumerEventQuery {
+                            consumerEventQuery = new ConsumerEventQuery {
                                 Id = @event.Id,
                                 Type = @event.Type,
+                                CountOfRetry = maxRetryInfo.countOfRetry,
                                 CreatedAt_EnglishDate = nowDateTime,
                                 CreatedAt_PersianDate = _dateTime.ToPersianShortDate(nowDateTime)
                             };
                                 
-                            queryConsumerEventRepository.Add(consumerEvent);
+                            consumerEventQueryRepository.Add(consumerEventQuery);
 
                             #endregion
             
                             await (Task)eventBusHandlerMethod.Invoke(eventBusHandler, new[] { payload, cancellationToken });
 
-                            unitOfWork.Commit();
+                            await unitOfWork.CommitAsync(cancellationToken);
         
                             _CleanCache(eventBusHandlerMethod, serviceProvider);
                         }
@@ -904,46 +1017,46 @@ public class MessageBroker : IMessageBroker
                     //for command side event processing
                     else if (transactionConfig.Type == TransactionType.Command)
                     {
-                        var commandConsumerEventRepository =
+                        var consumerEventCommandRepository =
                             serviceProvider.GetRequiredService<IConsumerEventCommandRepository>();
 
-                        var consumerEvent =
-                            await commandConsumerEventRepository.FindByIdAsync(@event.Id, cancellationToken);
+                        var consumerEventCommand =
+                            await consumerEventCommandRepository.FindByIdAsync(@event.Id, cancellationToken);
 
-                        if (consumerEvent is null)
+                        if (consumerEventCommand is null)
                         {
                             unitOfWork =
-                                serviceProvider.GetRequiredService(_GetTypeOfUnitOfWork(transactionConfig.Type)) as ICoreUnitOfWork;
+                                serviceProvider.GetRequiredService(_GetTypeOfUnitOfWork(transactionConfig.Type)) as IUnitOfWork;
 
-                            unitOfWork.Transaction(transactionConfig.IsolationLevel);
+                            await unitOfWork.TransactionAsync(transactionConfig.IsolationLevel, cancellationToken);
 
                             #region IdempotentConsumerPattern
 
                             var nowDateTime = DateTime.Now;
 
-                            consumerEvent = new ConsumerEvent {
+                            consumerEventCommand = new ConsumerEvent {
                                 Id = @event.Id,
                                 Type = @event.Type,
+                                CountOfRetry = maxRetryInfo.countOfRetry,
                                 CreatedAt_EnglishDate = nowDateTime,
                                 CreatedAt_PersianDate = _dateTime.ToPersianShortDate(nowDateTime)
                             };
 
-                            commandConsumerEventRepository.Add(consumerEvent);
+                            consumerEventCommandRepository.Add(consumerEventCommand);
 
                             #endregion
 
                             await (Task)eventBusHandlerMethod.Invoke(eventBusHandler, new[] { payload, cancellationToken });
 
-                            unitOfWork.Commit();
+                            await unitOfWork.CommitAsync(cancellationToken);
 
                             _CleanCache(eventBusHandlerMethod, serviceProvider);
                         }
                     }
-                    else 
-                        throw new Exception("Must be defined transaction type!");
+                    else throw new Exception("Must be defined transaction type!");
                 }
             }
-                
+            
             _TrySendAckMessage(channel, args);
         }
         catch (Exception e)
@@ -958,7 +1071,7 @@ public class MessageBroker : IMessageBroker
                 eventBusHandlerType is not null ? eventBusHandlerType.Name : NameOfAction
             );
 
-            unitOfWork?.Rollback();
+            if (unitOfWork is not null) await unitOfWork.RollbackAsync(cancellationToken);
 
             _RequeueMessageAsDeadLetter(channel, args);
         }
@@ -980,7 +1093,7 @@ public class MessageBroker : IMessageBroker
         }
     }
     
-    private bool _IsMaxRetryMessage(BasicDeliverEventArgs args, WithMaxRetryAttribute maxRetryAttribute)
+    private (bool result, int countOfRetry) _IsMaxRetryMessage(BasicDeliverEventArgs args, WithMaxRetryAttribute maxRetryAttribute)
     {
         var xDeath = args.BasicProperties.Headers?.FirstOrDefault(header => header.Key.Equals("x-death")).Value;
 
@@ -988,14 +1101,14 @@ public class MessageBroker : IMessageBroker
                 
         var countRetry = xDeathInfo?.FirstOrDefault(header => header.Key.Equals("count")).Value;
 
-        return Convert.ToInt32(countRetry) > maxRetryAttribute?.Count;
+        return ( Convert.ToInt32(countRetry) > maxRetryAttribute?.Count , Convert.ToInt32(countRetry) );
     }
     
     private void _TrySendAckMessage(IModel channel, BasicDeliverEventArgs args)
     {
         try
         {
-            channel.BasicAck(args.DeliveryTag, false); //Delete this message from queue
+            channel.BasicAck(args.DeliveryTag, false); //delete this message from queue
         }
         catch (Exception e)
         {
@@ -1013,9 +1126,9 @@ public class MessageBroker : IMessageBroker
 
         return transactionType switch {
             TransactionType.Query => 
-                domainTypes.FirstOrDefault(type => type.GetInterfaces().Any(i => i == typeof(ICoreQueryUnitOfWork))),
+                domainTypes.FirstOrDefault(type => type.GetInterfaces().Any(i => i == typeof(IQueryUnitOfWork))),
             TransactionType.Command => 
-                domainTypes.FirstOrDefault(type => type.GetInterfaces().Any(i => i == typeof(ICoreCommandUnitOfWork))),
+                domainTypes.FirstOrDefault(type => type.GetInterfaces().Any(i => i == typeof(ICommandUnitOfWork))),
             _ => throw new ArgumentNotFoundException("Must be defined transaction type!")
         };
     }
@@ -1025,7 +1138,7 @@ public class MessageBroker : IMessageBroker
         var domainTypes = Assembly.Load(new AssemblyName("Domic.Domain")).GetTypes();
 
         return domainTypes.FirstOrDefault(
-            type => type.GetInterfaces().Any(i => i == typeof(ICoreCommandUnitOfWork))
+            type => type.GetInterfaces().Any(i => i == typeof(ICommandUnitOfWork))
         );
     }
     

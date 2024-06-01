@@ -2,7 +2,7 @@
 
 namespace Domic.Core.UseCase.Contracts.Interfaces;
 
-public interface IMessageBroker : IDisposable
+public interface IMessageBroker : IDisposable, IAsyncDisposable
 {
     public string NameOfAction  { get; set; }
     public string NameOfService { get; set; }

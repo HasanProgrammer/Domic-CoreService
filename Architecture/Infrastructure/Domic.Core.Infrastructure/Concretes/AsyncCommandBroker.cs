@@ -162,7 +162,7 @@ public class AsyncCommandBroker : IAsyncCommandBroker
     )
     {
         Type commandBusHandlerType = null;
-        ICoreUnitOfWork unitOfWork = null;
+        IUnitOfWork unitOfWork = null;
         object connectionId        = null;
 
         try
@@ -281,7 +281,7 @@ public class AsyncCommandBroker : IAsyncCommandBroker
                 
                 if (commandBusHandlerTypeMethod.GetCustomAttribute(typeof(WithTransactionAttribute)) is WithTransactionAttribute transactionAttr)
                 {
-                    unitOfWork = serviceProvider.GetRequiredService(_GetTypeOfCommandUnitOfWork()) as ICoreUnitOfWork;
+                    unitOfWork = serviceProvider.GetRequiredService(_GetTypeOfCommandUnitOfWork()) as IUnitOfWork;
                     
                     unitOfWork.Transaction(transactionAttr.IsolationLevel);
 
@@ -360,7 +360,7 @@ public class AsyncCommandBroker : IAsyncCommandBroker
     )
     {
         Type commandBusHandlerType = null;
-        ICoreUnitOfWork unitOfWork = null;
+        IUnitOfWork unitOfWork = null;
         object connectionId        = null;
 
         try
@@ -480,7 +480,7 @@ public class AsyncCommandBroker : IAsyncCommandBroker
                 
                 if (commandBusHandlerTypeMethod.GetCustomAttribute(typeof(WithTransactionAttribute)) is WithTransactionAttribute transactionAttr)
                 {
-                    unitOfWork = serviceProvider.GetRequiredService(_GetTypeOfCommandUnitOfWork()) as ICoreUnitOfWork;
+                    unitOfWork = serviceProvider.GetRequiredService(_GetTypeOfCommandUnitOfWork()) as IUnitOfWork;
                     
                     unitOfWork.Transaction(transactionAttr.IsolationLevel);
 
@@ -612,7 +612,7 @@ public class AsyncCommandBroker : IAsyncCommandBroker
         var domainTypes = Assembly.Load(new AssemblyName("Domic.Domain")).GetTypes();
 
         return domainTypes.FirstOrDefault(
-            type => type.GetInterfaces().Any(i => i == typeof(ICoreCommandUnitOfWork))
+            type => type.GetInterfaces().Any(i => i == typeof(ICommandUnitOfWork))
         );
     }
 
@@ -737,7 +737,7 @@ public class AsyncCommandBroker : IAsyncCommandBroker
         }
     }
     
-    private void _PushValidationNotification(IModel channel, BasicDeliverEventArgs args, ICoreUnitOfWork unitOfWork, 
+    private void _PushValidationNotification(IModel channel, BasicDeliverEventArgs args, IUnitOfWork unitOfWork, 
         string connectionId, Payload payload, string service, string action
     )
     {

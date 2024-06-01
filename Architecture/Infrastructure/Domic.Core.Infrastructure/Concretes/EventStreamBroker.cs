@@ -37,7 +37,7 @@ public class EventStreamBroker(
 
     public async Task SubscribeAsync(string topic, CancellationToken cancellationToken)
     {
-        ICoreUnitOfWork unitOfWork = null;
+        IUnitOfWork unitOfWork = null;
         
         var useCaseTypes = Assembly.Load(new AssemblyName("Domic.UseCase")).GetTypes();
 
@@ -105,7 +105,7 @@ public class EventStreamBroker(
                     {
                         if (eventStreamHandlerMethod.GetCustomAttribute(typeof(WithTransactionAttribute)) is WithTransactionAttribute transactionAttr)
                         {
-                            unitOfWork = serviceProvider.GetRequiredService(_GetTypeOfUnitOfWork()) as ICoreUnitOfWork;
+                            unitOfWork = serviceProvider.GetRequiredService(_GetTypeOfUnitOfWork()) as IUnitOfWork;
 
                             unitOfWork.Transaction(transactionAttr.IsolationLevel);
 
@@ -144,9 +144,9 @@ public class EventStreamBroker(
         var domainTypes = Assembly.Load(new AssemblyName("Domic.Domain")).GetTypes();
 
         return domainTypes.FirstOrDefault(
-            type => type.GetInterfaces().Any(i => i == typeof(ICoreQueryUnitOfWork))
+            type => type.GetInterfaces().Any(i => i == typeof(IQueryUnitOfWork))
         ) ?? domainTypes.FirstOrDefault(
-            type => type.GetInterfaces().Any(i => i == typeof(ICoreCommandUnitOfWork))
+            type => type.GetInterfaces().Any(i => i == typeof(ICommandUnitOfWork))
         );
     }
 }

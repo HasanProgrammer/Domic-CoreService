@@ -27,7 +27,7 @@ public class FullExceptionHandlerInterceptor : Interceptor
 
     private IMessageBroker           _messageBroker;
     private IDateTime                _dateTime;
-    private ICoreCommandUnitOfWork   _commandUnitOfWork;
+    private ICommandUnitOfWork   _commandUnitOfWork;
     private IGlobalUniqueIdGenerator _globalUniqueIdGenerator;
     
     /// <summary>
@@ -68,7 +68,7 @@ public class FullExceptionHandlerInterceptor : Interceptor
                 _commandUnitOfWork =
                     context.GetHttpContext()
                            .RequestServices
-                           .GetRequiredService(_iCommandUnitOfWorkType) as ICoreCommandUnitOfWork;
+                           .GetRequiredService(_iCommandUnitOfWorkType) as ICommandUnitOfWork;
             
             _dateTime                = context.GetHttpContext().RequestServices.GetRequiredService<IDateTime>();
             _messageBroker           = context.GetHttpContext().RequestServices.GetRequiredService<IMessageBroker>();

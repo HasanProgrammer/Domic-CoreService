@@ -723,7 +723,7 @@ public static class WebApplicationBuilderExtension
     private static void RegisterAllCommandRepositories(IServiceCollection serviceCollection, Type[] infrastructureAssemblyTypes)
     {
         Type commandUnitOfWorkType = infrastructureAssemblyTypes.FirstOrDefault(
-            type => type.GetInterfaces().Any(i => i.GetInterfaces().Any(ii => ii == typeof(ICoreCommandUnitOfWork)))
+            type => type.GetInterfaces().Any(i => i.GetInterfaces().Any(ii => ii == typeof(ICommandUnitOfWork)))
         );
 
         Type contractCommandUnitOfWorkType = commandUnitOfWorkType.GetInterfaces().FirstOrDefault();
@@ -761,7 +761,7 @@ public static class WebApplicationBuilderExtension
     )
     {
         Type queryUnitOfWorkType = infrastructureAssemblyTypes.FirstOrDefault(
-            type => type.GetInterfaces().Any(i => i.GetInterfaces().Any(ii => ii == typeof(ICoreQueryUnitOfWork)))
+            type => type.GetInterfaces().Any(i => i.GetInterfaces().Any(ii => ii == typeof(IQueryUnitOfWork)))
         );
 
         Type contractQueryUnitOfWorkType = queryUnitOfWorkType.GetInterfaces().FirstOrDefault();

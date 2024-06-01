@@ -108,6 +108,7 @@ public static class ExceptionExtension
                 Route        = Broker.StateTracker_Exception_Route
             };
 
+            //ToDo : ( Tech Debt ) -> Should be used retry pattern ( like polly )!
             messageBroker.Publish<SystemException>(dto);
         }
         catch (Exception exception)
