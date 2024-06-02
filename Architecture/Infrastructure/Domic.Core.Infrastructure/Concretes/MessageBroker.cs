@@ -426,8 +426,6 @@ public class MessageBroker : IMessageBroker
 
         try
         {
-            var messageType = message.GetType();
-            
             var messageBusHandler     = serviceProvider.GetRequiredService(typeof(IConsumerMessageBusHandler<TMessage>));
             var messageBusHandlerType = messageBusHandler.GetType();
             
@@ -453,13 +451,16 @@ public class MessageBroker : IMessageBroker
             {
                 var transactionConfig =
                     messageBusHandlerMethod.GetCustomAttribute(typeof(TransactionConfigAttribute)) as TransactionConfigAttribute;
+                
+                if(transactionConfig is null)
+                    throw new Exception("Must be used transaction config attribute!");
 
                 unitOfWork =
                     serviceProvider.GetRequiredService(_GetTypeOfUnitOfWork(transactionConfig.Type)) as IUnitOfWork;
 
                 var consumerEventQueryRepository = serviceProvider.GetRequiredService<IConsumerEventQueryRepository>();
 
-                var messageId = messageType.GetProperty("Id").GetValue(message);
+                var messageId = message.GetType().GetProperty("Id").GetValue(message);
                 
                 var consumerEventQuery = consumerEventQueryRepository.FindById(messageId);
 
@@ -515,8 +516,6 @@ public class MessageBroker : IMessageBroker
 
         try
         {
-            var messageType = message.GetType();
-            
             var messageBusHandler     = serviceProvider.GetRequiredService(typeof(IConsumerMessageBusHandler<TMessage>));
             var messageBusHandlerType = messageBusHandler.GetType();
             
@@ -526,7 +525,9 @@ public class MessageBroker : IMessageBroker
             var retryAttr =
                 messageBusHandlerMethod.GetCustomAttribute(typeof(WithMaxRetryAttribute)) as WithMaxRetryAttribute;
 
-            if (_IsMaxRetryMessage(args, retryAttr).result)
+            var maxRetryInfo = _IsMaxRetryMessage(args, retryAttr);
+            
+            if (maxRetryInfo.result)
             {
                 if (retryAttr.HasAfterMaxRetryHandle)
                 {
@@ -541,12 +542,15 @@ public class MessageBroker : IMessageBroker
                 var transactionConfig =
                     messageBusHandlerMethod.GetCustomAttribute(typeof(TransactionConfigAttribute)) as TransactionConfigAttribute;
 
+                if(transactionConfig is null)
+                    throw new Exception("Must be used transaction config attribute!");
+                
                 unitOfWork =
                     serviceProvider.GetRequiredService(_GetTypeOfUnitOfWork(transactionConfig.Type)) as IUnitOfWork;
 
                 var consumerEventQueryRepository = serviceProvider.GetRequiredService<IConsumerEventQueryRepository>();
 
-                var messageId = messageType.GetProperty("Id").GetValue(message);
+                var messageId = message.GetType().GetProperty("Id").GetValue(message);
                 
                 var consumerEventQuery = await consumerEventQueryRepository.FindByIdAsync(messageId, cancellationToken);
 
@@ -554,6 +558,22 @@ public class MessageBroker : IMessageBroker
                 {
                     await unitOfWork.TransactionAsync(transactionConfig.IsolationLevel, cancellationToken);
                 
+                    #region IdempotentConsumerPattern
+                
+                    var nowDateTime = DateTime.Now;
+
+                    consumerEventQuery = new ConsumerEventQuery {
+                        Id = messageId.ToString(),
+                        Type = nameof(message),
+                        CountOfRetry = maxRetryInfo.countOfRetry,
+                        CreatedAt_EnglishDate = nowDateTime,
+                        CreatedAt_PersianDate = _dateTime.ToPersianShortDate(nowDateTime)
+                    };
+
+                    consumerEventQueryRepository.Add(consumerEventQuery);
+
+                    #endregion
+                    
                     await (Task)messageBusHandlerMethod.Invoke(messageBusHandler, new object[] { message, cancellationToken });
                 
                     await unitOfWork.CommitAsync(cancellationToken);
@@ -617,6 +637,9 @@ public class MessageBroker : IMessageBroker
                 var transactionConfig =
                     messageBusHandlerMethod.GetCustomAttribute(typeof(TransactionConfigAttribute)) as TransactionConfigAttribute;
 
+                if(transactionConfig is null)
+                    throw new Exception("Must be used transaction config attribute!");
+                
                 unitOfWork =
                     serviceProvider.GetRequiredService(_GetTypeOfUnitOfWork(transactionConfig.Type)) as IUnitOfWork;
 
@@ -709,6 +732,9 @@ public class MessageBroker : IMessageBroker
                 var transactionConfig =
                     messageBusHandlerMethod.GetCustomAttribute(typeof(TransactionConfigAttribute)) as TransactionConfigAttribute;
 
+                if(transactionConfig is null)
+                    throw new Exception("Must be used transaction config attribute!");
+                
                 unitOfWork =
                     serviceProvider.GetRequiredService(_GetTypeOfUnitOfWork(transactionConfig.Type)) as IUnitOfWork;
                 
@@ -829,7 +855,7 @@ public class MessageBroker : IMessageBroker
                         if (consumerEventQuery is null)
                         {
                             unitOfWork =
-                                serviceProvider.GetRequiredService(_GetTypeOfUnitOfWork(transactionConfig.Type)) as IUnitOfWork;
+                                serviceProvider.GetRequiredService(_GetTypeOfUnitOfWork(TransactionType.Query)) as IUnitOfWork;
 
                             unitOfWork.Transaction(transactionConfig.IsolationLevel);
 
@@ -867,7 +893,7 @@ public class MessageBroker : IMessageBroker
                         if (consumerEventCommand is null)
                         {
                             unitOfWork =
-                                serviceProvider.GetRequiredService(_GetTypeOfUnitOfWork(transactionConfig.Type)) as IUnitOfWork;
+                                serviceProvider.GetRequiredService(_GetTypeOfUnitOfWork(TransactionType.Command)) as IUnitOfWork;
 
                             unitOfWork.Transaction(transactionConfig.IsolationLevel);
 
@@ -987,7 +1013,7 @@ public class MessageBroker : IMessageBroker
                         if (consumerEventQuery is null)
                         {
                             unitOfWork =
-                                serviceProvider.GetRequiredService(_GetTypeOfUnitOfWork(transactionConfig.Type)) as IUnitOfWork;
+                                serviceProvider.GetRequiredService(_GetTypeOfUnitOfWork(TransactionType.Query)) as IUnitOfWork;
 
                             await unitOfWork.TransactionAsync(transactionConfig.IsolationLevel, cancellationToken);
 
@@ -1026,7 +1052,7 @@ public class MessageBroker : IMessageBroker
                         if (consumerEventCommand is null)
                         {
                             unitOfWork =
-                                serviceProvider.GetRequiredService(_GetTypeOfUnitOfWork(transactionConfig.Type)) as IUnitOfWork;
+                                serviceProvider.GetRequiredService(_GetTypeOfUnitOfWork(TransactionType.Command)) as IUnitOfWork;
 
                             await unitOfWork.TransactionAsync(transactionConfig.IsolationLevel, cancellationToken);
 
