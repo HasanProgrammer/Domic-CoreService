@@ -1,6 +1,3 @@
 namespace Domic.Core.UseCase.DTOs.ViewModels;
 
-public class ViewModel
-{
-    
-}
+public class ViewModel;

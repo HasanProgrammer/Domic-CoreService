@@ -4,6 +4,7 @@ using Domic.Core.Domain.Contracts.Interfaces;
 using Domic.Core.Domain.Exceptions;
 using Domic.Core.Common.ClassExtensions;
 using Domic.Core.Common.ClassHelpers;
+using Domic.Core.Domain.Entities;
 using Domic.Core.Infrastructure.Extensions;
 using Domic.Core.UseCase.Attributes;
 using Domic.Core.UseCase.Contracts.Abstracts;
@@ -85,7 +86,7 @@ public class AsyncCommandBroker : IAsyncCommandBroker
 
             consumer.Received += (sender, args) => {
                 
-                //ScopeServices trigger
+                //scope services trigger
                 using IServiceScope serviceScope = _serviceScopeFactory.CreateScope();
                 
                 var message = Encoding.UTF8.GetString(args.Body.ToArray());
@@ -161,9 +162,9 @@ public class AsyncCommandBroker : IAsyncCommandBroker
         IServiceProvider serviceProvider
     )
     {
-        Type commandBusHandlerType = null;
-        IUnitOfWork unitOfWork = null;
         object connectionId        = null;
+        IUnitOfWork unitOfWork     = null;
+        Type commandBusHandlerType = null;
 
         try
         {
@@ -188,124 +189,155 @@ public class AsyncCommandBroker : IAsyncCommandBroker
                          )
                 )
             );
-        
-            var resultType = targetConsumerCommandBusHandlerType?.GetInterfaces()
+
+            if (targetConsumerCommandBusHandlerType is not null)
+            {
+                var resultType = targetConsumerCommandBusHandlerType?.GetInterfaces()
                                                                  .Select(i => i.GetGenericArguments()[1])
                                                                  .FirstOrDefault();
             
-            var commandType = targetConsumerCommandBusHandlerType?.GetInterfaces()
-                                                                  .Select(i => i.GetGenericArguments()[0])
-                                                                  .FirstOrDefault();
+                var commandType = targetConsumerCommandBusHandlerType?.GetInterfaces()
+                                                                      .Select(i => i.GetGenericArguments()[0])
+                                                                      .FirstOrDefault();
 
-            var command  = JsonConvert.DeserializeObject(message, commandType);
-            connectionId = commandType.GetProperty("ConnectionId")?.GetValue(command);
+                var command  = JsonConvert.DeserializeObject(message, commandType);
+                connectionId = commandType.GetProperty("ConnectionId")?.GetValue(command);
+                
+                var fullContractOfConsumerType =
+                    typeof(IConsumerCommandBusHandler<,>).MakeGenericType(commandType, resultType);
             
-            var fullContractOfConsumerType =
-                typeof(IConsumerCommandBusHandler<,>).MakeGenericType(commandType, resultType);
-        
-            var commandBusHandler = serviceProvider.GetRequiredService(fullContractOfConsumerType);
-            commandBusHandlerType = commandBusHandler.GetType();
-            
-            var commandBusHandlerTypeMethod =
-                commandBusHandlerType.GetMethod("Handle") ?? throw new Exception("Handle function not found !");
-            
-            var retryAttr =
-                commandBusHandlerTypeMethod.GetCustomAttribute(typeof(WithMaxRetryAttribute)) as WithMaxRetryAttribute;
+                var commandBusHandler = serviceProvider.GetRequiredService(fullContractOfConsumerType);
+                commandBusHandlerType = commandBusHandler.GetType();
+                
+                var commandBusHandlerTypeMethod =
+                    commandBusHandlerType.GetMethod("Handle") ?? throw new Exception("Handle function not found !");
+                
+                var retryAttr =
+                    commandBusHandlerTypeMethod.GetCustomAttribute(typeof(WithMaxRetryAttribute)) as WithMaxRetryAttribute;
 
-            if (_IsMaxRetryMessage(args, retryAttr))
-            {
-                if (retryAttr.HasAfterMaxRetryHandle)
+                var maxRetryInfo = _IsMaxRetryMessage(args, retryAttr);
+                
+                if (maxRetryInfo.result)
                 {
-                    var afterMaxRetryHandlerMethod =
-                        commandBusHandlerType.GetMethod("AfterMaxRetryHandle") ?? throw new Exception("AfterMaxRetryHandle function not found !");
-                    
-                    afterMaxRetryHandlerMethod.Invoke(commandBusHandler, new object[] { message });
-                }
-                
-                _TrySendAckMessage(channel, args, service, 
-                    commandBusHandlerType is not null ? commandBusHandlerType.Name : NameOfAction
-                );
-            }
-            else
-            {
-                #region Validator
-
-                //If the validation of this part is false, an exception will be thrown and the code will not be executed .
-
-                if (commandBusHandlerTypeMethod.GetCustomAttribute(typeof(WithValidationAttribute)) is not null)
-                {
-                    var validatorType = useCaseTypes.FirstOrDefault(
-                        type => type.GetInterfaces().Any(
-                            i => i.IsGenericType &&
-                                 i.GetGenericTypeDefinition() == typeof(IAsyncValidator<>) &&
-                                 i.GetGenericArguments().Any(arg => 
-                                     arg.Name.Equals(nameOfCommand) && arg.Namespace.Equals(nameSpaceOfCommand)
-                                 )
-                        )
-                    );
-                    
-                    var validatorArgType = validatorType?.GetInterfaces()
-                                                         .Select(i => i.GetGenericArguments()[0])
-                                                         .FirstOrDefault();
-                    
-                    Type fullContractValidatorType = typeof(IAsyncValidator<>).MakeGenericType(validatorArgType);
-                    
-                    var validator = serviceProvider.GetRequiredService(fullContractValidatorType);
-                    
-                    var validatorValidateMethod =
-                        validator.GetType().GetMethod("Validate") ?? throw new Exception("Validate function not found !");
-
-                    object validationResult = validatorValidateMethod.Invoke(validator, new object[] { command });
-                
-                    var fieldValidationResult =
-                        commandBusHandlerType.GetField("_validationResult", BindingFlags.NonPublic | BindingFlags.Instance);
-                
-                    if (fieldValidationResult is not null)
+                    if (retryAttr.HasAfterMaxRetryHandle)
                     {
-                        if (
-                            !fieldValidationResult.IsPrivate  || 
-                            !fieldValidationResult.IsInitOnly ||
-                            fieldValidationResult.FieldType != typeof(object)
-                        )
-                            throw new Exception("The [ _validationResult ] field must be private and readonly & return an object");
-                    
-                        fieldValidationResult.SetValue(commandBusHandler, validationResult);
+                        var afterMaxRetryHandlerMethod =
+                            commandBusHandlerType.GetMethod("AfterMaxRetryHandle") ?? throw new Exception("AfterMaxRetryHandle function not found !");
+                        
+                        afterMaxRetryHandlerMethod.Invoke(commandBusHandler, new object[] { message });
                     }
                 }
-
-                #endregion
-
-                #region Transaction
-
-                object resultInvokeCommand;
-                
-                if (commandBusHandlerTypeMethod.GetCustomAttribute(typeof(WithTransactionAttribute)) is WithTransactionAttribute transactionAttr)
-                {
-                    unitOfWork = serviceProvider.GetRequiredService(_GetTypeOfCommandUnitOfWork()) as IUnitOfWork;
-                    
-                    unitOfWork.Transaction(transactionAttr.IsolationLevel);
-
-                    resultInvokeCommand = commandBusHandlerTypeMethod.Invoke(commandBusHandler, new object[] { command });
-
-                    unitOfWork.Commit();
-                }
                 else
-                    resultInvokeCommand = commandBusHandlerTypeMethod.Invoke(commandBusHandler, new object[] { command });
+                {
+                    #region Validator
 
-                #endregion
-                
-                _CleanCache(commandBusHandlerTypeMethod, serviceProvider, service, 
-                    commandBusHandlerType is not null ? commandBusHandlerType.Name : NameOfAction
-                );
-                
-                _PushSuccessNotification(connectionId?.ToString(), commandType.BaseType?.Name, resultInvokeCommand, 
-                    service, commandBusHandlerType is not null ? commandBusHandlerType.Name : NameOfAction
-                );
+                    //If the validation of this part is false, an exception will be thrown and the code will not be executed .
 
-                _TrySendAckMessage(channel, args, service, 
-                    commandBusHandlerType is not null ? commandBusHandlerType.Name : NameOfAction
-                );
+                    if (commandBusHandlerTypeMethod.GetCustomAttribute(typeof(WithValidationAttribute)) is not null)
+                    {
+                        var validatorType = useCaseTypes.FirstOrDefault(
+                            type => type.GetInterfaces().Any(
+                                i => i.IsGenericType &&
+                                     i.GetGenericTypeDefinition() == typeof(IAsyncValidator<>) &&
+                                     i.GetGenericArguments().Any(arg => 
+                                         arg.Name.Equals(nameOfCommand) && arg.Namespace.Equals(nameSpaceOfCommand)
+                                     )
+                            )
+                        );
+                        
+                        var validatorArgType = validatorType?.GetInterfaces()
+                                                             .Select(i => i.GetGenericArguments()[0])
+                                                             .FirstOrDefault();
+                        
+                        Type fullContractValidatorType = typeof(IAsyncValidator<>).MakeGenericType(validatorArgType);
+                        
+                        var validator = serviceProvider.GetRequiredService(fullContractValidatorType);
+                        
+                        var validatorValidateMethod =
+                            validator.GetType().GetMethod("Validate") ?? throw new Exception("Validate function not found !");
+
+                        object validationResult = validatorValidateMethod.Invoke(validator, new object[] { command });
+                    
+                        var fieldValidationResult =
+                            commandBusHandlerType.GetField("_validationResult", BindingFlags.NonPublic | BindingFlags.Instance);
+                    
+                        if (fieldValidationResult is not null)
+                        {
+                            if (
+                                !fieldValidationResult.IsPrivate  || 
+                                !fieldValidationResult.IsInitOnly ||
+                                fieldValidationResult.FieldType != typeof(object)
+                            )
+                                throw new Exception("The [ _validationResult ] field must be private and readonly & return an object");
+                        
+                            fieldValidationResult.SetValue(commandBusHandler, validationResult);
+                        }
+                    }
+
+                    #endregion
+                    
+                    #region Transaction
+
+                    var transactionConfig =
+                        commandBusHandlerTypeMethod.GetCustomAttribute(typeof(TransactionConfigAttribute)) as TransactionConfigAttribute;
+
+                    if(transactionConfig is null)
+                        throw new Exception("Must be used transaction config attribute!");
+                    
+                    var consumerEventCommandRepository =
+                        serviceProvider.GetRequiredService<IConsumerEventCommandRepository>();
+                    
+                    var commandId = commandType.GetProperty("CommandId")?.GetValue(command);
+
+                    if (commandId is null)
+                        throw new Exception("The field ( commandId ) must be set!");
+                    
+                    var consumerEventCommand = consumerEventCommandRepository.FindById(commandId);
+
+                    if (consumerEventCommand is null)
+                    {
+                        #region IdempotentConsumerPattern
+                    
+                        var nowDateTime = DateTime.Now;
+
+                        consumerEventCommand = new ConsumerEvent {
+                            Id = commandId.ToString(),
+                            Type = nameOfCommand,
+                            CountOfRetry = maxRetryInfo.countOfRetry,
+                            CreatedAt_EnglishDate = nowDateTime,
+                            CreatedAt_PersianDate = _dateTime.ToPersianShortDate(nowDateTime)
+                        };
+
+                        consumerEventCommandRepository.Add(consumerEventCommand);
+
+                        #endregion
+
+                        unitOfWork = serviceProvider.GetRequiredService(_GetTypeOfCommandUnitOfWork()) as IUnitOfWork;
+                        
+                        unitOfWork.Transaction(transactionConfig.IsolationLevel);
+
+                        var resultInvokeCommand =
+                            commandBusHandlerTypeMethod.Invoke(commandBusHandler, new object[] { command });
+
+                        unitOfWork.Commit();
+                    
+                        _CleanCache(commandBusHandlerTypeMethod, serviceProvider, service, 
+                            commandBusHandlerType is not null ? commandBusHandlerType.Name : NameOfAction
+                        );
+                    
+                        _PushSuccessNotification(connectionId?.ToString(), commandType.BaseType?.Name, 
+                            resultInvokeCommand, service, 
+                            commandBusHandlerType is not null ? commandBusHandlerType.Name : NameOfAction
+                        );
+                    }
+                    
+                    #endregion
+                }
             }
+            
+            _TrySendAckMessage(channel, args, service, 
+                commandBusHandlerType is not null ? commandBusHandlerType.Name : NameOfAction
+            );
         }
         catch (DomainException e)
         {
@@ -359,9 +391,9 @@ public class AsyncCommandBroker : IAsyncCommandBroker
         string service, IServiceProvider serviceProvider, CancellationToken cancellationToken
     )
     {
-        Type commandBusHandlerType = null;
-        IUnitOfWork unitOfWork = null;
         object connectionId        = null;
+        IUnitOfWork unitOfWork     = null;
+        Type commandBusHandlerType = null;
 
         try
         {
@@ -386,127 +418,157 @@ public class AsyncCommandBroker : IAsyncCommandBroker
                          )
                 )
             );
-        
-            var resultType = targetConsumerCommandBusHandlerType?.GetInterfaces()
+
+            if (targetConsumerCommandBusHandlerType is not null)
+            {
+                var resultType = targetConsumerCommandBusHandlerType?.GetInterfaces()
                                                                  .Select(i => i.GetGenericArguments()[1])
                                                                  .FirstOrDefault();
             
-            var commandType = targetConsumerCommandBusHandlerType?.GetInterfaces()
-                                                                  .Select(i => i.GetGenericArguments()[0])
-                                                                  .FirstOrDefault();
+                var commandType = targetConsumerCommandBusHandlerType?.GetInterfaces()
+                                                                      .Select(i => i.GetGenericArguments()[0])
+                                                                      .FirstOrDefault();
 
-            var command  = JsonConvert.DeserializeObject(message, commandType);
-            connectionId = commandType.GetProperty("ConnectionId")?.GetValue(command);
+                var command  = JsonConvert.DeserializeObject(message, commandType);
+                connectionId = commandType.GetProperty("ConnectionId")?.GetValue(command);
+                
+                var fullContractOfConsumerType =
+                    typeof(IConsumerCommandBusHandler<,>).MakeGenericType(commandType, resultType);
             
-            var fullContractOfConsumerType =
-                typeof(IConsumerCommandBusHandler<,>).MakeGenericType(commandType, resultType);
-        
-            var commandBusHandler = serviceProvider.GetRequiredService(fullContractOfConsumerType);
-            commandBusHandlerType = commandBusHandler.GetType();
-            
-            var commandBusHandlerTypeMethod =
-                commandBusHandlerType.GetMethod("HandleAsync") ?? throw new Exception("HandleAsync function not found !");
-            
-            var retryAttr =
-                commandBusHandlerTypeMethod.GetCustomAttribute(typeof(WithMaxRetryAttribute)) as WithMaxRetryAttribute;
+                var commandBusHandler = serviceProvider.GetRequiredService(fullContractOfConsumerType);
+                commandBusHandlerType = commandBusHandler.GetType();
+                
+                var commandBusHandlerTypeMethod =
+                    commandBusHandlerType.GetMethod("HandleAsync") ?? throw new Exception("HandleAsync function not found !");
+                
+                var retryAttr =
+                    commandBusHandlerTypeMethod.GetCustomAttribute(typeof(WithMaxRetryAttribute)) as WithMaxRetryAttribute;
 
-            if (_IsMaxRetryMessage(args, retryAttr))
-            {
-                if (retryAttr.HasAfterMaxRetryHandle)
+                var maxRetryInfo = _IsMaxRetryMessage(args, retryAttr);
+                
+                if (maxRetryInfo.result)
                 {
-                    var afterMaxRetryHandlerMethod =
-                        commandBusHandlerType.GetMethod("AfterMaxRetryHandleAsync") ?? throw new Exception("AfterMaxRetryHandleAsync function not found !");
-                    
-                    await (Task)afterMaxRetryHandlerMethod.Invoke(commandBusHandler, new object[] { message, cancellationToken });
-                }
-                
-                _TrySendAckMessage(channel, args, service, 
-                    commandBusHandlerType is not null ? commandBusHandlerType.Name : NameOfAction
-                );
-            }
-            else
-            {
-                #region Validator
-
-                //If the validation of this part is false, an exception will be thrown and the code will not be executed .
-
-                if (commandBusHandlerTypeMethod.GetCustomAttribute(typeof(WithValidationAttribute)) is not null)
-                {
-                    var validatorType = useCaseTypes.FirstOrDefault(
-                        type => type.GetInterfaces().Any(
-                            i => i.IsGenericType &&
-                                 i.GetGenericTypeDefinition() == typeof(IAsyncValidator<>) &&
-                                 i.GetGenericArguments().Any(arg =>
-                                     arg.Name.Equals(nameOfCommand) && arg.Namespace.Equals(nameSpaceOfCommand)
-                                 )
-                        )
-                    );
-                    
-                    var validatorArgType = validatorType?.GetInterfaces()
-                                                         .Select(i => i.GetGenericArguments()[0])
-                                                         .FirstOrDefault();
-                    
-                    Type fullContractValidatorType = typeof(IAsyncValidator<>).MakeGenericType(validatorArgType);
-                    
-                    var validator = serviceProvider.GetRequiredService(fullContractValidatorType);
-                    
-                    var validatorValidateMethod =
-                        validator.GetType().GetMethod("ValidateAsync") ?? throw new Exception("ValidateAsync function not found !");
-
-                    object validationResult =
-                        await (Task<object>)validatorValidateMethod.Invoke(validator, new[] { command, cancellationToken });
-                
-                    var fieldValidationResult =
-                        commandBusHandlerType.GetField("_validationResult", BindingFlags.NonPublic | BindingFlags.Instance);
-                
-                    if (fieldValidationResult is not null)
+                    if (retryAttr.HasAfterMaxRetryHandle)
                     {
-                        if (
-                            !fieldValidationResult.IsPrivate  || 
-                            !fieldValidationResult.IsInitOnly ||
-                            fieldValidationResult.FieldType != typeof(object)
-                        )
-                            throw new Exception("The [ _validationResult ] field must be private and readonly & return an object");
-                    
-                        fieldValidationResult.SetValue(commandBusHandler, validationResult);
+                        var afterMaxRetryHandlerMethod =
+                            commandBusHandlerType.GetMethod("AfterMaxRetryHandleAsync") ?? throw new Exception("AfterMaxRetryHandleAsync function not found !");
+                        
+                        await (Task)afterMaxRetryHandlerMethod.Invoke(commandBusHandler, new object[] { message, cancellationToken });
                     }
                 }
-
-                #endregion
-
-                #region Transaction
-
-                object resultInvokeCommand;
-                
-                if (commandBusHandlerTypeMethod.GetCustomAttribute(typeof(WithTransactionAttribute)) is WithTransactionAttribute transactionAttr)
-                {
-                    unitOfWork = serviceProvider.GetRequiredService(_GetTypeOfCommandUnitOfWork()) as IUnitOfWork;
-                    
-                    unitOfWork.Transaction(transactionAttr.IsolationLevel);
-
-                    resultInvokeCommand =
-                        await (Task<object>)commandBusHandlerTypeMethod.Invoke(commandBusHandler, new []{ command, cancellationToken });
-
-                    unitOfWork.Commit();
-                }
                 else
-                    resultInvokeCommand =
-                        await (Task<object>)commandBusHandlerTypeMethod.Invoke(commandBusHandler, new []{ command, cancellationToken });
+                {
+                    #region Validator
 
-                #endregion
-                
-                _CleanCache(commandBusHandlerTypeMethod, serviceProvider, service, 
-                    commandBusHandlerType is not null ? commandBusHandlerType.Name : NameOfAction
-                );
-                
-                _PushSuccessNotification(connectionId?.ToString(), commandType.BaseType?.Name, resultInvokeCommand, 
-                    service, commandBusHandlerType is not null ? commandBusHandlerType.Name : NameOfAction
-                );
+                    //If the validation of this part is false, an exception will be thrown and the code will not be executed .
 
-                _TrySendAckMessage(channel, args, service, 
-                    commandBusHandlerType is not null ? commandBusHandlerType.Name : NameOfAction
-                );
+                    if (commandBusHandlerTypeMethod.GetCustomAttribute(typeof(WithValidationAttribute)) is not null)
+                    {
+                        var validatorType = useCaseTypes.FirstOrDefault(
+                            type => type.GetInterfaces().Any(
+                                i => i.IsGenericType &&
+                                     i.GetGenericTypeDefinition() == typeof(IAsyncValidator<>) &&
+                                     i.GetGenericArguments().Any(arg =>
+                                         arg.Name.Equals(nameOfCommand) && arg.Namespace.Equals(nameSpaceOfCommand)
+                                     )
+                            )
+                        );
+                        
+                        var validatorArgType = validatorType?.GetInterfaces()
+                                                             .Select(i => i.GetGenericArguments()[0])
+                                                             .FirstOrDefault();
+                        
+                        Type fullContractValidatorType = typeof(IAsyncValidator<>).MakeGenericType(validatorArgType);
+                        
+                        var validator = serviceProvider.GetRequiredService(fullContractValidatorType);
+                        
+                        var validatorValidateMethod =
+                            validator.GetType().GetMethod("ValidateAsync") ?? throw new Exception("ValidateAsync function not found !");
+
+                        object validationResult =
+                            await (Task<object>)validatorValidateMethod.Invoke(validator, new[] { command, cancellationToken });
+                    
+                        var fieldValidationResult =
+                            commandBusHandlerType.GetField("_validationResult", BindingFlags.NonPublic | BindingFlags.Instance);
+                    
+                        if (fieldValidationResult is not null)
+                        {
+                            if (
+                                !fieldValidationResult.IsPrivate  || 
+                                !fieldValidationResult.IsInitOnly ||
+                                fieldValidationResult.FieldType != typeof(object)
+                            )
+                                throw new Exception("The [ _validationResult ] field must be private and readonly & return an object");
+                        
+                            fieldValidationResult.SetValue(commandBusHandler, validationResult);
+                        }
+                    }
+
+                    #endregion
+
+                    #region Transaction
+                    
+                    var transactionConfig =
+                        commandBusHandlerTypeMethod.GetCustomAttribute(typeof(TransactionConfigAttribute)) as TransactionConfigAttribute;
+
+                    if(transactionConfig is null)
+                        throw new Exception("Must be used transaction config attribute!");
+                    
+                    var consumerEventCommandRepository =
+                        serviceProvider.GetRequiredService<IConsumerEventCommandRepository>();
+                    
+                    var commandId = commandType.GetProperty("CommandId")?.GetValue(command);
+
+                    if (commandId is null)
+                        throw new Exception("The field ( commandId ) must be set!");
+                    
+                    var consumerEventCommand =
+                        await consumerEventCommandRepository.FindByIdAsync(commandId, cancellationToken);
+
+                    if (consumerEventCommand is null)
+                    {
+                        #region IdempotentConsumerPattern
+                    
+                        var nowDateTime = DateTime.Now;
+
+                        consumerEventCommand = new ConsumerEvent {
+                            Id = commandId.ToString(),
+                            Type = nameOfCommand,
+                            CountOfRetry = maxRetryInfo.countOfRetry,
+                            CreatedAt_EnglishDate = nowDateTime,
+                            CreatedAt_PersianDate = _dateTime.ToPersianShortDate(nowDateTime)
+                        };
+
+                        consumerEventCommandRepository.Add(consumerEventCommand);
+
+                        #endregion
+
+                        unitOfWork = serviceProvider.GetRequiredService(_GetTypeOfCommandUnitOfWork()) as IUnitOfWork;
+                        
+                        await unitOfWork.TransactionAsync(transactionConfig.IsolationLevel, cancellationToken);
+
+                        var resultInvokeCommand =
+                            (Task)commandBusHandlerTypeMethod.Invoke(commandBusHandler, new[] { command, cancellationToken});
+
+                        await unitOfWork.CommitAsync(cancellationToken);
+                    
+                        _CleanCache(commandBusHandlerTypeMethod, serviceProvider, service,
+                            commandBusHandlerType is not null ? commandBusHandlerType.Name : NameOfAction
+                        );
+                    
+                        _PushSuccessNotification(connectionId?.ToString(), commandType.BaseType?.Name,
+                            resultInvokeCommand, service, 
+                            commandBusHandlerType is not null ? commandBusHandlerType.Name : NameOfAction
+                        );
+                    }
+                    
+                    #endregion
+                }
             }
+            
+            _TrySendAckMessage(channel, args, service, 
+                commandBusHandlerType is not null ? commandBusHandlerType.Name : NameOfAction
+            );
         }
         catch (DomainException e)
         {
@@ -576,7 +638,7 @@ public class AsyncCommandBroker : IAsyncCommandBroker
         }
     }
     
-    private bool _IsMaxRetryMessage(BasicDeliverEventArgs args, WithMaxRetryAttribute maxRetryAttribute)
+    private (bool result, int countOfRetry) _IsMaxRetryMessage(BasicDeliverEventArgs args, WithMaxRetryAttribute maxRetryAttribute)
     {
         var xDeath = args.BasicProperties.Headers?.FirstOrDefault(header => header.Key.Equals("x-death")).Value;
 
@@ -584,14 +646,14 @@ public class AsyncCommandBroker : IAsyncCommandBroker
                 
         var countRetry = xDeathInfo?.FirstOrDefault(header => header.Key.Equals("count")).Value;
 
-        return Convert.ToInt32(countRetry) > maxRetryAttribute?.Count;
+        return ( Convert.ToInt32(countRetry) > maxRetryAttribute?.Count , Convert.ToInt32(countRetry) );
     }
     
     private void _TrySendAckMessage(IModel channel, BasicDeliverEventArgs args, string service, string action)
     {
         try
         {
-            channel.BasicAck(args.DeliveryTag, false); //Delete this message from queue
+            channel.BasicAck(args.DeliveryTag, false); //delete this message from queue
         }
         catch (Exception e)
         {

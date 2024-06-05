@@ -48,6 +48,7 @@ public class Mediator : IMediator
         var asyncCommandBroker =
             _serviceProvider.GetRequiredService(typeof(IAsyncCommandBroker)) as IAsyncCommandBroker;
         
+        //ToDo : ( Tech Debt ) => Should be used retry pattern with tools like [Polly]
         asyncCommandBroker.Publish(command);
     }
 
@@ -100,11 +101,11 @@ public class Mediator : IMediator
         {
             var unitOfWork = _serviceProvider.GetRequiredService(_GetTypeOfUnitOfWork()) as ICommandUnitOfWork;
             
-            unitOfWork.Transaction(transactionAttr.IsolationLevel);
+            await unitOfWork.TransactionAsync(transactionAttr.IsolationLevel, cancellationToken);
             
             var result = await (Task<TResult>)commandHandlerMethod.Invoke(commandHandler, new object[]{ command , cancellationToken });
             
-            unitOfWork.Commit();
+            await unitOfWork.CommitAsync(cancellationToken);
 
             _CleanCache(commandHandlerMethod);
 
@@ -121,12 +122,19 @@ public class Mediator : IMediator
         return resultWithoutTransaction;
     }
 
-    public async Task DispatchAsFireAndForgetAsync(IAsyncCommand command, CancellationToken cancellationToken)
+    public Task DispatchAsFireAndForgetAsync(IAsyncCommand command, CancellationToken cancellationToken)
     {
-        var asyncCommandBroker =
-            _serviceProvider.GetRequiredService(typeof(IAsyncCommandBroker)) as IAsyncCommandBroker;
-        
-        await Task.Run(() => asyncCommandBroker.Publish(command), cancellationToken);
+        Task.Run(() => {
+            
+            var asyncCommandBroker =
+                _serviceProvider.GetRequiredService(typeof(IAsyncCommandBroker)) as IAsyncCommandBroker;
+            
+            //ToDo : ( Tech Debt ) => Should be used retry pattern with tools like [Polly]
+            asyncCommandBroker.Publish(command);
+            
+        }, cancellationToken);
+
+        return Task.CompletedTask;
     }
     
     public TResult Dispatch<TResult>(IQuery<TResult> query)
@@ -252,6 +260,7 @@ public class Mediator : IMediator
             var redisCache = _serviceProvider.GetRequiredService<IInternalDistributedCache>();
             
             var cachedData = redisCache.GetCacheValue(cacheAttribute.Key);
+            
             if (cachedData is null)
             {
                 var result =
