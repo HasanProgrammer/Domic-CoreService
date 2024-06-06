@@ -158,7 +158,7 @@ public static class WebApplicationBuilderExtension
     /// </summary>
     /// <param name="builder"></param>
     /// <returns></returns>
-    public static void RegisterRedisCaching(this WebApplicationBuilder builder)
+    public static void RegisterDistributedCaching(this WebApplicationBuilder builder)
     {
         Type[] useCaseAssemblyTypes = Assembly.Load(new AssemblyName("Domic.UseCase")).GetTypes();
         
