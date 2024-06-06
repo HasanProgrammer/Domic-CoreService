@@ -21,7 +21,7 @@ public static class WebApplicationBuilderExtension
         
         var icommandUnitOfWorkType =
             domainAssemblyTypes.FirstOrDefault(type =>
-                type.GetInterfaces().Any(i => i == typeof(ICommandUnitOfWork))
+                type.GetInterfaces().Any(i => i == typeof(ICoreCommandUnitOfWork))
             );
 
         builder.Services.AddGrpc(options => {

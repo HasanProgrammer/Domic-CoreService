@@ -221,7 +221,7 @@ public class MessageBroker : IMessageBroker
             using IServiceScope serviceScope = _serviceScopeFactory.CreateScope();
 
             var commandUnitOfWork =
-                serviceScope.ServiceProvider.GetRequiredService(_GetTypeOfCommandUnitOfWork()) as ICommandUnitOfWork;
+                serviceScope.ServiceProvider.GetRequiredService(_GetTypeOfCommandUnitOfWork()) as ICoreCommandUnitOfWork;
 
             var redisCache = serviceScope.ServiceProvider.GetRequiredService<IInternalDistributedCache>();
             var eventCommandRepository = serviceScope.ServiceProvider.GetRequiredService<IEventCommandRepository>();
@@ -1152,9 +1152,9 @@ public class MessageBroker : IMessageBroker
 
         return transactionType switch {
             TransactionType.Query => 
-                domainTypes.FirstOrDefault(type => type.GetInterfaces().Any(i => i == typeof(IQueryUnitOfWork))),
+                domainTypes.FirstOrDefault(type => type.GetInterfaces().Any(i => i == typeof(ICoreQueryUnitOfWork))),
             TransactionType.Command => 
-                domainTypes.FirstOrDefault(type => type.GetInterfaces().Any(i => i == typeof(ICommandUnitOfWork))),
+                domainTypes.FirstOrDefault(type => type.GetInterfaces().Any(i => i == typeof(ICoreCommandUnitOfWork))),
             _ => throw new ArgumentNotFoundException("Must be defined transaction type!")
         };
     }
@@ -1164,7 +1164,7 @@ public class MessageBroker : IMessageBroker
         var domainTypes = Assembly.Load(new AssemblyName("Domic.Domain")).GetTypes();
 
         return domainTypes.FirstOrDefault(
-            type => type.GetInterfaces().Any(i => i == typeof(ICommandUnitOfWork))
+            type => type.GetInterfaces().Any(i => i == typeof(ICoreCommandUnitOfWork))
         );
     }
     

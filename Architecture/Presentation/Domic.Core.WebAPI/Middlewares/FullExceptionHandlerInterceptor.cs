@@ -27,7 +27,7 @@ public class FullExceptionHandlerInterceptor : Interceptor
 
     private IMessageBroker           _messageBroker;
     private IDateTime                _dateTime;
-    private ICommandUnitOfWork   _commandUnitOfWork;
+    private ICoreCommandUnitOfWork   _coreCommandUnitOfWork;
     private IGlobalUniqueIdGenerator _globalUniqueIdGenerator;
     
     /// <summary>
@@ -65,10 +65,10 @@ public class FullExceptionHandlerInterceptor : Interceptor
         try
         {
             if(_iCommandUnitOfWorkType is not null)
-                _commandUnitOfWork =
+                _coreCommandUnitOfWork =
                     context.GetHttpContext()
                            .RequestServices
-                           .GetRequiredService(_iCommandUnitOfWorkType) as ICommandUnitOfWork;
+                           .GetRequiredService(_iCommandUnitOfWorkType) as ICoreCommandUnitOfWork;
             
             _dateTime                = context.GetHttpContext().RequestServices.GetRequiredService<IDateTime>();
             _messageBroker           = context.GetHttpContext().RequestServices.GetRequiredService<IMessageBroker>();
@@ -112,7 +112,7 @@ public class FullExceptionHandlerInterceptor : Interceptor
         }
         catch (DomainException e) //For command side
         {
-            _commandUnitOfWork.Rollback();
+            _coreCommandUnitOfWork.Rollback();
             
             var Response = new {
                 Code    = _configuration.GetErrorStatusCode(),
@@ -124,7 +124,7 @@ public class FullExceptionHandlerInterceptor : Interceptor
         }
         catch (UseCaseException e) //For command side
         {
-            _commandUnitOfWork.Rollback();
+            _coreCommandUnitOfWork.Rollback();
             
             var Response = new {
                 Code    = _configuration.GetErrorStatusCode(),
@@ -150,7 +150,7 @@ public class FullExceptionHandlerInterceptor : Interceptor
 
             #endregion
          
-            _commandUnitOfWork?.Rollback();
+            _coreCommandUnitOfWork?.Rollback();
 
             var Response = new {
                 Code    = _configuration.GetServerErrorStatusCode() ,

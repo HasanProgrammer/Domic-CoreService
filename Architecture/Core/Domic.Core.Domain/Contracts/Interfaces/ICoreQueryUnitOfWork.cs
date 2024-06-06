@@ -1,3 +1,3 @@
 ﻿namespace Domic.Core.Domain.Contracts.Interfaces;
 
-public interface ICommandUnitOfWork : IUnitOfWork;
+public interface ICoreQueryUnitOfWork : IUnitOfWork;

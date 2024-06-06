@@ -99,7 +99,7 @@ public class Mediator : IMediator
 
         if (commandHandlerMethod.GetCustomAttribute(typeof(WithTransactionAttribute)) is WithTransactionAttribute transactionAttr)
         {
-            var unitOfWork = _serviceProvider.GetRequiredService(_GetTypeOfUnitOfWork()) as ICommandUnitOfWork;
+            var unitOfWork = _serviceProvider.GetRequiredService(_GetTypeOfUnitOfWork()) as ICoreCommandUnitOfWork;
             
             await unitOfWork.TransactionAsync(transactionAttr.IsolationLevel, cancellationToken);
             
@@ -294,7 +294,7 @@ public class Mediator : IMediator
         var domainTypes = Assembly.Load(new AssemblyName("Domic.Domain")).GetTypes();
 
         return domainTypes.FirstOrDefault(
-            type => type.GetInterfaces().Any(i => i == typeof(ICommandUnitOfWork))
+            type => type.GetInterfaces().Any(i => i == typeof(ICoreCommandUnitOfWork))
         );
     }
     
@@ -306,7 +306,7 @@ public class Mediator : IMediator
         
         if(commandHandlerMethod.GetCustomAttribute(typeof(WithTransactionAttribute)) is WithTransactionAttribute transactionAttr)
         {
-            var unitOfWork = _serviceProvider.GetRequiredService(_GetTypeOfUnitOfWork()) as ICommandUnitOfWork;
+            var unitOfWork = _serviceProvider.GetRequiredService(_GetTypeOfUnitOfWork()) as ICoreCommandUnitOfWork;
             
             unitOfWork.Transaction(transactionAttr.IsolationLevel);
             

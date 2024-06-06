@@ -674,7 +674,7 @@ public class AsyncCommandBroker : IAsyncCommandBroker
         var domainTypes = Assembly.Load(new AssemblyName("Domic.Domain")).GetTypes();
 
         return domainTypes.FirstOrDefault(
-            type => type.GetInterfaces().Any(i => i == typeof(ICommandUnitOfWork))
+            type => type.GetInterfaces().Any(i => i == typeof(ICoreCommandUnitOfWork))
         );
     }
 

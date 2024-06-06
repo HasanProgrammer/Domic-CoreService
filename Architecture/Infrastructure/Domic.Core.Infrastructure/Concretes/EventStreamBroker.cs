@@ -144,9 +144,9 @@ public class EventStreamBroker(
         var domainTypes = Assembly.Load(new AssemblyName("Domic.Domain")).GetTypes();
 
         return domainTypes.FirstOrDefault(
-            type => type.GetInterfaces().Any(i => i == typeof(IQueryUnitOfWork))
+            type => type.GetInterfaces().Any(i => i == typeof(ICoreQueryUnitOfWork))
         ) ?? domainTypes.FirstOrDefault(
-            type => type.GetInterfaces().Any(i => i == typeof(ICommandUnitOfWork))
+            type => type.GetInterfaces().Any(i => i == typeof(ICoreCommandUnitOfWork))
         );
     }
 }
