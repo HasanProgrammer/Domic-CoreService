@@ -164,11 +164,11 @@ public static class WebApplicationBuilderExtension
         
         //Third party ( Redis )
         builder.Services.AddKeyedScoped<IConnectionMultiplexer>("InternalRedis",
-            (_, _) => ConnectionMultiplexer.Connect(builder.Configuration.GetInternalRedisConnectionString())
+            (_p, _o) => ConnectionMultiplexer.Connect(Environment.GetEnvironmentVariable("InternalRedisConnectionString"))
         );
         
         builder.Services.AddKeyedScoped<IConnectionMultiplexer>("ExternalRedis",
-            (_, _) => ConnectionMultiplexer.Connect(builder.Configuration.GetExternalRedisConnectionString())
+            (_p, _o) => ConnectionMultiplexer.Connect(Environment.GetEnvironmentVariable("ExternalRedisConnectionString"))
         );
         
         //Pure
