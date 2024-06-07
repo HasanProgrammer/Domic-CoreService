@@ -2,6 +2,7 @@
 
 public class ServiceStatus
 {
+    public string Id        { get; set; }
     public string Name      { get; set; }
     public string Host      { get; set; }
     public string IPAddress { get; set; }

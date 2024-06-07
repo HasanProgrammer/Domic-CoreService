@@ -36,14 +36,17 @@ public class ServiceRegisteryJob : IHostedService
         var serviceHost = Environment.GetEnvironmentVariable("Host");
         var servicePort = Environment.GetEnvironmentVariable("Port");
 
-        //Send event of self registration
+        //send event of self registration
 
         using var scope = _serviceScopeFactory.CreateScope();
+
+        var globalUniqueIdGenerator = scope.ServiceProvider.GetRequiredService<IGlobalUniqueIdGenerator>();
 
         try
         {
             _messageBroker.Publish(new MessageBrokerDto<ServiceStatus> {
                 Message = new ServiceStatus {
+                    Id        = globalUniqueIdGenerator.GetRandom(6),
                     Name      = serviceName         ,
                     Host      = serviceHost         ,
                     IPAddress = Host.GetIPAddress() ,
