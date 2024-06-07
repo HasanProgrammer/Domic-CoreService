@@ -659,7 +659,7 @@ public class MessageBroker : IMessageBroker
 
                     consumerEventQuery = new ConsumerEventQuery {
                         Id = messageId.ToString(),
-                        Type = nameof(message),
+                        Type = messageType.Name,
                         CountOfRetry = maxRetryInfo.countOfRetry,
                         CreatedAt_EnglishDate = nowDateTime,
                         CreatedAt_PersianDate = _dateTime.ToPersianShortDate(nowDateTime)
@@ -754,7 +754,7 @@ public class MessageBroker : IMessageBroker
 
                     consumerEventQuery = new ConsumerEventQuery {
                         Id = messageId.ToString(),
-                        Type = nameof(message),
+                        Type = messageType.Name,
                         CountOfRetry = maxRetryInfo.countOfRetry,
                         CreatedAt_EnglishDate = nowDateTime,
                         CreatedAt_PersianDate = _dateTime.ToPersianShortDate(nowDateTime)
