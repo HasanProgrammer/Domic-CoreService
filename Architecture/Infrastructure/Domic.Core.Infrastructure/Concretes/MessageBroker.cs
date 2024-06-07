@@ -460,7 +460,10 @@ public class MessageBroker : IMessageBroker
 
                 var consumerEventQueryRepository = serviceProvider.GetRequiredService<IConsumerEventQueryRepository>();
 
-                var messageId = message.GetType().GetProperty("Id").GetValue(message);
+                var messageId =
+                    message.GetType().GetProperty("Id", 
+                        BindingFlags.Instance | BindingFlags.Public | BindingFlags.DeclaredOnly
+                    ).GetValue(message);
                 
                 var consumerEventQuery = consumerEventQueryRepository.FindById(messageId);
 
@@ -550,7 +553,10 @@ public class MessageBroker : IMessageBroker
 
                 var consumerEventQueryRepository = serviceProvider.GetRequiredService<IConsumerEventQueryRepository>();
 
-                var messageId = message.GetType().GetProperty("Id").GetValue(message);
+                var messageId =
+                    message.GetType().GetProperty("Id", 
+                        BindingFlags.Instance | BindingFlags.Public | BindingFlags.DeclaredOnly
+                    ).GetValue(message);
                 
                 var consumerEventQuery = await consumerEventQueryRepository.FindByIdAsync(messageId, cancellationToken);
 
@@ -645,7 +651,10 @@ public class MessageBroker : IMessageBroker
 
                 var consumerEventQueryRepository = serviceProvider.GetRequiredService<IConsumerEventQueryRepository>();
 
-                var messageId = messageType.GetProperty("Id").GetValue(message);
+                var messageId =
+                    message.GetType().GetProperty("Id", 
+                        BindingFlags.Instance | BindingFlags.Public | BindingFlags.DeclaredOnly
+                    ).GetValue(message);
                 
                 var consumerEventQuery = consumerEventQueryRepository.FindById(messageId);
 
@@ -740,7 +749,10 @@ public class MessageBroker : IMessageBroker
                 
                 var consumerEventQueryRepository = serviceProvider.GetRequiredService<IConsumerEventQueryRepository>();
 
-                var messageId = messageType.GetProperty("Id").GetValue(message);
+                var messageId =
+                    message.GetType().GetProperty("Id", 
+                        BindingFlags.Instance | BindingFlags.Public | BindingFlags.DeclaredOnly
+                    ).GetValue(message);
                 
                 var consumerEventQuery = await consumerEventQueryRepository.FindByIdAsync(messageId, cancellationToken);
 
