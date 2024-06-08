@@ -18,7 +18,8 @@ public class BlackListPolicyAttribute : ActionFilterAttribute
     public override async Task OnActionExecutionAsync(ActionExecutingContext context, ActionExecutionDelegate next)
     {
         var ignoreCondition = IgnoreActions.Split("|").All(
-            ignore => string.IsNullOrEmpty(context.ActionDescriptor.DisplayName.Search(ignore))
+            ignore => string.IsNullOrEmpty(ignore) || 
+                      string.IsNullOrEmpty(context.ActionDescriptor.DisplayName.Search(ignore))
         );
         
         if (ignoreCondition)
