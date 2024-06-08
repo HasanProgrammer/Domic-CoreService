@@ -24,13 +24,13 @@ public class BlackListPolicyAttribute : ActionFilterAttribute
         
         if (ignoreCondition)
         {
-            var redisCache   = context.HttpContext.RequestServices.GetRequiredService<IInternalDistributedCache>();
-            var jsonWebToken = context.HttpContext.RequestServices.GetRequiredService<IJsonWebToken>();
+            var internalDistributedCache =
+                context.HttpContext.RequestServices.GetRequiredService<IInternalDistributedCache>();
             
             var blackListCondition =
-                redisCache.GetCacheValue("BlackList-Auth")?
-                          .DeSerialize<List<string>>()
-                          .Contains( jsonWebToken.GetUsername(context.HttpContext.GetRowToken()) ) ?? false;
+                internalDistributedCache.GetCacheValue("BlackList-Auth")?
+                                        .DeSerialize<List<string>>()
+                                        .Contains( context.HttpContext.GetRowToken() ) ?? false;
             
             if (blackListCondition)
                 throw new PresentationException("شما مجوز ورود به سامانه را دارا نمی باشید !");
