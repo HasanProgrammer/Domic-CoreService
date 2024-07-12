@@ -4,6 +4,7 @@ using Domic.Core.Domain.Contracts.Interfaces;
 using Domic.Core.Domain.Exceptions;
 using Domic.Core.Common.ClassExtensions;
 using Domic.Core.Common.ClassHelpers;
+using Domic.Core.Common.ClassModels;
 using Domic.Core.Domain.Entities;
 using Domic.Core.Infrastructure.Extensions;
 using Domic.Core.UseCase.Attributes;
@@ -118,6 +119,17 @@ public class AsyncCommandBroker : IAsyncCommandBroker
             _RegisterAllAsyncCommandQueuesInMessageBroker();
             
             var channel = _connection.CreateModel();
+            
+            #region Throttle
+
+            var queueConfig = _configuration.GetSection("InternalQueueConfig").Get<QueueConfig>();
+
+            var queueThrottle = queueConfig.Throttles.FirstOrDefault(throttle => throttle.Queue.Equals(queue));
+            
+            if(queueThrottle is not null && queueThrottle.Active)
+                channel.BasicQos(queueThrottle.Size, queueThrottle.Limitation, queueThrottle.IsGlobally);
+
+            #endregion
             
             var consumer = new AsyncEventingBasicConsumer(channel);
 

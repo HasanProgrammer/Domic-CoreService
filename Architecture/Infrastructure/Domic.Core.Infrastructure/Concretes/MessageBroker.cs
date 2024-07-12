@@ -345,11 +345,9 @@ public class MessageBroker : IMessageBroker
         {
             var channel = _connection.CreateModel();
             
-            var consumer = new AsyncEventingBasicConsumer(channel);
-            
             #region Throttle
 
-            var queueConfig = _configuration.GetSection("QueueConfig").Get<QueueConfig>();
+            var queueConfig = _configuration.GetSection("ExternalQueueConfig").Get<QueueConfig>();
 
             var queueThrottle = queueConfig.Throttles.FirstOrDefault(throttle => throttle.Queue.Equals(queue));
             
@@ -357,6 +355,8 @@ public class MessageBroker : IMessageBroker
                 channel.BasicQos(queueThrottle.Size, queueThrottle.Limitation, queueThrottle.IsGlobally);
 
             #endregion
+            
+            var consumer = new AsyncEventingBasicConsumer(channel);
 
             consumer.Received += async (sender, args) => {
                 
