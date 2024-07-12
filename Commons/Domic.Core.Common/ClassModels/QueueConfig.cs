@@ -11,5 +11,5 @@ public class Throttle
 
 public class QueueConfig
 {
-    public List<Throttle> Throttles { get; set; }
+    public List<Throttle> Throttle { get; set; }
 }

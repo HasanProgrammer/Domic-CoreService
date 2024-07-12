@@ -349,7 +349,7 @@ public class MessageBroker : IMessageBroker
 
             var queueConfig = _configuration.GetSection("ExternalQueueConfig").Get<QueueConfig>();
 
-            var queueThrottle = queueConfig.Throttles.FirstOrDefault(throttle => throttle.Queue.Equals(queue));
+            var queueThrottle = queueConfig.Throttle.FirstOrDefault(throttle => throttle.Queue.Equals(queue));
             
             if(queueThrottle is not null && queueThrottle.Active)
                 channel.BasicQos(queueThrottle.Size, queueThrottle.Limitation, queueThrottle.IsGlobally);
