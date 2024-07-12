@@ -316,17 +316,6 @@ public class MessageBroker : IMessageBroker
             
             var consumer = new EventingBasicConsumer(channel);
 
-            #region Throttle
-
-            var queueConfig = _configuration.GetSection("QueueConfig").Get<QueueConfig>();
-
-            var queueThrottle = queueConfig.Throttles.FirstOrDefault(throttle => throttle.Queue.Equals(queue));
-            
-            if(queueThrottle is not null && queueThrottle.Active)
-                channel.BasicQos(queueThrottle.Size, queueThrottle.Limitation, queueThrottle.IsGlobally);
-
-            #endregion
-
             consumer.Received += (sender, args) => {
                 
                 //ScopeServices trigger
@@ -357,6 +346,17 @@ public class MessageBroker : IMessageBroker
             var channel = _connection.CreateModel();
             
             var consumer = new AsyncEventingBasicConsumer(channel);
+            
+            #region Throttle
+
+            var queueConfig = _configuration.GetSection("QueueConfig").Get<QueueConfig>();
+
+            var queueThrottle = queueConfig.Throttles.FirstOrDefault(throttle => throttle.Queue.Equals(queue));
+            
+            if(queueThrottle is not null && queueThrottle.Active)
+                channel.BasicQos(queueThrottle.Size, queueThrottle.Limitation, queueThrottle.IsGlobally);
+
+            #endregion
 
             consumer.Received += async (sender, args) => {
                 
