@@ -7,6 +7,7 @@ using Domic.Core.Domain.Contracts.Interfaces;
 using Domic.Core.Domain.Entities;
 using Domic.Core.Domain.Enumerations;
 using Domic.Core.Common.ClassExtensions;
+using Domic.Core.Common.ClassModels;
 using Domic.Core.Infrastructure.Extensions;
 using Domic.Core.UseCase.Attributes;
 using Domic.Core.UseCase.Contracts.Interfaces;
@@ -16,6 +17,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Newtonsoft.Json;
 using NSubstitute.Exceptions;
+using NSubstitute.Extensions;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 
@@ -30,6 +32,7 @@ public class MessageBroker : IMessageBroker
     private readonly IServiceScopeFactory _serviceScopeFactory;
     private readonly IDateTime _dateTime;
     private readonly IGlobalUniqueIdGenerator _globalUniqueIdGenerator;
+    private readonly IConfiguration _configuration;
 
     public MessageBroker(IConfiguration configuration, IHostEnvironment hostEnvironment, 
         IServiceScopeFactory serviceScopeFactory, IDateTime dateTime, IGlobalUniqueIdGenerator globalUniqueIdGenerator
@@ -39,6 +42,7 @@ public class MessageBroker : IMessageBroker
         _serviceScopeFactory = serviceScopeFactory;
         _dateTime = dateTime;
         _globalUniqueIdGenerator = globalUniqueIdGenerator;
+        _configuration = configuration;
 
         var factory = new ConnectionFactory {
             HostName = configuration.GetExternalRabbitHostName(),
@@ -311,6 +315,17 @@ public class MessageBroker : IMessageBroker
             var channel = _connection.CreateModel();
             
             var consumer = new EventingBasicConsumer(channel);
+
+            #region Throttle
+
+            var queueConfig = _configuration.GetSection("QueueConfig").Get<QueueConfig>();
+
+            var queueThrottle = queueConfig.Throttles.FirstOrDefault(throttle => throttle.Queue.Equals(queue));
+            
+            if(queueThrottle is not null && queueThrottle.Active)
+                channel.BasicQos(queueThrottle.Size, queueThrottle.Limitation, queueThrottle.IsGlobally);
+
+            #endregion
 
             consumer.Received += (sender, args) => {
                 
