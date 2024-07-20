@@ -18,6 +18,7 @@ using Microsoft.Extensions.Hosting;
 using Newtonsoft.Json;
 using NSubstitute.Exceptions;
 using NSubstitute.Extensions;
+using Polly;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 
@@ -63,29 +64,38 @@ public class MessageBroker : IMessageBroker
 
     public void Publish<TMessage>(MessageBrokerDto<TMessage> messageBroker) where TMessage : class
     {
-        using var channel = _connection.CreateModel();
+        var retryPolicy = Policy.Handle<Exception>()
+                                .WaitAndRetry(5, _ => TimeSpan.FromSeconds(3), 
+                                    (exception, timeSpan, context) => throw exception
+                                );
 
-        switch (messageBroker.ExchangeType)
-        {
-            case Exchange.Direct :
-                channel.PublishMessageToDirectExchange(
-                    messageBroker.Message.Serialize(), messageBroker.Exchange, messageBroker.Route, 
-                    messageBroker.Headers
-                );
+        retryPolicy.Execute(() => {
+            
+            using var channel = _connection.CreateModel();
+
+            switch (messageBroker.ExchangeType)
+            {
+                case Exchange.Direct :
+                    channel.PublishMessageToDirectExchange(
+                        messageBroker.Message.Serialize(), messageBroker.Exchange, messageBroker.Route, 
+                        messageBroker.Headers
+                    );
                 break;
 
-            case Exchange.FanOut :
-                channel.PublishMessageToFanOutExchange(
-                    messageBroker.Message.Serialize(), messageBroker.Exchange
-                );
+                case Exchange.FanOut :
+                    channel.PublishMessageToFanOutExchange(
+                        messageBroker.Message.Serialize(), messageBroker.Exchange
+                    );
                 break;
 
-            case Exchange.Unknown :
-                channel.PublishMessage(messageBroker.Message.Serialize(), messageBroker.Queue);
+                case Exchange.Unknown :
+                    channel.PublishMessage(messageBroker.Message.Serialize(), messageBroker.Queue);
                 break;
 
-            default: throw new ArgumentOutOfRangeException();
-        }
+                default: throw new ArgumentOutOfRangeException();
+            }
+            
+        });
     }
 
     public void Subscribe<TMessage>(string queue) where TMessage : class

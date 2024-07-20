@@ -16,6 +16,8 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Newtonsoft.Json;
+using Polly;
+using Polly.Retry;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 
@@ -64,15 +66,24 @@ public class AsyncCommandBroker : IAsyncCommandBroker
         var commandBusType = useCaseTypes.FirstOrDefault(type => type == command.GetType());
         var messageBroker  = commandBusType.GetCustomAttribute(typeof(QueueableAttribute)) as QueueableAttribute;
 
-        using var channel = _connection.CreateModel();
+        var retryPolicy = Policy.Handle<Exception>()
+                                .WaitAndRetry(5, _ => TimeSpan.FromSeconds(3), 
+                                    (exception, timeSpan, context) => throw exception
+                                );
 
-        channel.PublishMessageToDirectExchange(
-            command.Serialize(), messageBroker.Exchange, messageBroker.Route,
-            new Dictionary<string, object> {
-                { "Command"   , commandBusType.Name      },
-                { "Namespace" , commandBusType.Namespace }
-            }
-        );
+        retryPolicy.Execute(() => {
+            
+            using var channel = _connection.CreateModel();
+
+            channel.PublishMessageToDirectExchange(
+                command.Serialize(), messageBroker.Exchange, messageBroker.Route,
+                new Dictionary<string, object> {
+                    { "Command"   , commandBusType.Name      },
+                    { "Namespace" , commandBusType.Namespace }
+                }
+            );
+            
+        });
     }
 
     public void Subscribe(string queue)
