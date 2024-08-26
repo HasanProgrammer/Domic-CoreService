@@ -88,44 +88,70 @@ public class Permission
 
     #endregion
 
+    #region Ticket
+    
+    public const string TicketReadOne          = "Ticket.ReadOne";
+    public const string TicketReadAllPaginated = "Ticket.ReadAllPaginated";
+    public const string TicketCreate           = "Ticket.Create";
+    public const string TicketUpdate           = "Ticket.Update";
+    public const string TicketActive           = "Ticket.Active";
+    public const string TicketInActive         = "Ticket.InActive";
+    public const string TicketDelete           = "Ticket.Delete";
+
+    #endregion
+
     private static List<string> Collection = new() {
-        UserReadOne                       , //1
-        UserReadAllPaginated              , //2
-        UserCreate                        , //3
-        UserUpdate                        , //4
-        UserActive                        , //5
-        UserInActive                      , //6
-        UserRevoke                        , //7
-        RoleReadOne                       , //8
-        RoleReadAllPaginated              , //9
-        RoleCreate                        , //10
-        RoleUpdate                        , //11
-        RoleDelete                        , //12
-        PermissionReadOne                 , //13
-        PermissionReadAllPaginated        , //14
-        PermissionCreate                  , //15
-        PermissionUpdate                  , //16
-        PermissionDelete                  , //17
-        CategoryReadOne                   , //18
-        CategoryReadAllPaginated          , //19
-        CategoryCreate                    , //20
-        CategoryUpdate                    , //21
-        CategoryDelete                    , //22
-        ArticleReadOne                    , //23
-        ArticleReadAllPaginated           , //24
-        ArticleCreate                     , //25
-        ArticleUpdate                     , //26
-        ArticleActive                     , //27
-        ArticleInActive                   , //28
-        ArticleDelete                     , //29
-        ArticleCommentReadOne             , //30
-        ArticleCommentReadAllPaginated    , //31
-        ArticleCommentCreate              , //32
-        ArticleCommentUpdate              , //33
-        ArticleCommentActive              , //34
-        ArticleCommentInActive            , //35
-        ArticleCommentDelete              , //36
-        AggregateArticleReadAllPaginated  , //37
+        UserReadOne                          , //1
+        UserReadAllPaginated                 , //2
+        UserCreate                           , //3
+        UserUpdate                           , //4
+        UserActive                           , //5
+        UserInActive                         , //6
+        UserRevoke                           , //7
+        RoleReadOne                          , //8
+        RoleReadAllPaginated                 , //9
+        RoleCreate                           , //10
+        RoleUpdate                           , //11
+        RoleDelete                           , //12
+        PermissionReadOne                    , //13
+        PermissionReadAllPaginated           , //14
+        PermissionCreate                     , //15
+        PermissionUpdate                     , //16
+        PermissionDelete                     , //17
+        CategoryReadOne                      , //18
+        CategoryReadAllPaginated             , //19
+        CategoryCreate                       , //20
+        CategoryUpdate                       , //21
+        CategoryDelete                       , //22
+        ArticleReadOne                       , //23
+        ArticleReadAllPaginated              , //24
+        ArticleCreate                        , //25
+        ArticleUpdate                        , //26
+        ArticleActive                        , //27
+        ArticleInActive                      , //28
+        ArticleDelete                        , //29
+        ArticleCommentReadOne                , //30
+        ArticleCommentReadAllPaginated       , //31
+        ArticleCommentCreate                 , //32
+        ArticleCommentUpdate                 , //33
+        ArticleCommentActive                 , //34
+        ArticleCommentInActive               , //35
+        ArticleCommentDelete                 , //36
+        AggregateArticleReadAllPaginated     , //37
+        ArticleCommentAnswerReadOne          , //38
+        ArticleCommentAnswerReadAllPaginated , //39
+        ArticleCommentAnswerCreate           , //40
+        ArticleCommentAnswerUpdate           , //41
+        ArticleCommentAnswerActive           , //42
+        ArticleCommentAnswerInActive         , //43
+        ArticleCommentAnswerDelete           , //44
+        TicketReadOne                        , //45
+        TicketReadAllPaginated               , //46
+        TicketCreate                         , //47
+        TicketUpdate                         , //48
+        TicketActive                         , //49
+        TicketInActive                       , //50
+        TicketDelete                         , //51
     };
 
     public static ReadOnlyCollection<string> GetAll() => Collection.AsReadOnly();
