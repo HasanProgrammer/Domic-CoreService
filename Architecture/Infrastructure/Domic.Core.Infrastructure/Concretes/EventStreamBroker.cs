@@ -1,7 +1,10 @@
 ﻿using System.Reflection;
 using System.Text;
 using Confluent.Kafka;
+using Domic.Core.Common.ClassEnums;
 using Domic.Core.Domain.Contracts.Interfaces;
+using Domic.Core.Domain.Entities;
+using Domic.Core.Domain.Enumerations;
 using Domic.Core.Infrastructure.Extensions;
 using Domic.Core.UseCase.Attributes;
 using Domic.Core.UseCase.Contracts.Interfaces;
@@ -14,9 +17,11 @@ namespace Domic.Core.Infrastructure.Concretes;
 
 public class EventStreamBroker(
     ISerializer serializer, IServiceProvider serviceProvider, IHostEnvironment hostEnvironment, IDateTime dateTime,
-    IGlobalUniqueIdGenerator globalUniqueIdGenerator
+    IGlobalUniqueIdGenerator globalUniqueIdGenerator, IServiceScopeFactory serviceScopeFactory
 ) : IEventStreamBroker
 {
+    private static object _lock = new();
+    
     #region Consts
 
     private const string GroupIdKey = "GroupId";
@@ -27,9 +32,9 @@ public class EventStreamBroker(
     public string NameOfAction { get; set; }
     public string NameOfService { get; set; }
 
-    public async Task PublishAsync<TEvent>(string topic, TEvent @event, Dictionary<string, string> headers = default,
+    public async Task PublishAsync<TMessage>(string topic, TMessage message, Dictionary<string, string> headers = default,
         CancellationToken cancellationToken = default
-    ) where TEvent : IDomainEvent
+    ) where TMessage : class
     {
         var config = new ProducerConfig {
             BootstrapServers = Environment.GetEnvironmentVariable("E-Kafka-Host"),
@@ -49,20 +54,103 @@ public class EventStreamBroker(
         foreach (var header in headers)
             kafkaHeaders.Add(header.Key, Encoding.UTF8.GetBytes(header.Value));
 
-        if ( !headers.Any(h => h.Key == CountOfRetryKey || h.Key == GroupIdKey) )
-        {
-            kafkaHeaders.Add(GroupIdKey, Encoding.UTF8.GetBytes(""));
-            kafkaHeaders.Add(CountOfRetryKey, Encoding.UTF8.GetBytes("0"));
-        }
+        kafkaHeaders.Add(GroupIdKey, Encoding.UTF8.GetBytes(""));
+        kafkaHeaders.Add(CountOfRetryKey, Encoding.UTF8.GetBytes("0"));
 
         await retryPolicy.ExecuteAsync(() =>
             producer.ProduceAsync(topic,
                 new Message<string, string> {
-                    Key = @event.GetType().Name, Value = serializer.Serialize(@event), Headers = kafkaHeaders
+                    Key = message.GetType().Name, Value = serializer.Serialize(message), Headers = kafkaHeaders
                 },
                 cancellationToken
             )
         );
+    }
+
+    public Task PublishAsync(CancellationToken cancellationToken)
+    {
+        //just one worker ( Task ) in current machine ( instance ) can process outbox events => lock
+        lock (_lock)
+        {
+            //ScopeServices Trigger
+            using IServiceScope serviceScope = serviceScopeFactory.CreateScope();
+
+            var commandUnitOfWork =
+                serviceScope.ServiceProvider.GetRequiredService(_GetTypeOfUnitOfWork()) as ICoreCommandUnitOfWork;
+
+            var redisCache = serviceScope.ServiceProvider.GetRequiredService<IInternalDistributedCache>();
+            var eventCommandRepository = serviceScope.ServiceProvider.GetRequiredService<IEventCommandRepository>();
+            
+            try
+            {
+                var eventLocks = new List<string>();
+                
+                commandUnitOfWork.Transaction();
+                
+                foreach (Event targetEvent in eventCommandRepository.FindAllWithOrdering(Order.Date))
+                {
+                    #region DistributedLock
+
+                    var lockEventKey = $"LockEventId-{targetEvent.Id}";
+                    
+                    //ReleaseLock
+                    redisCache.DeleteKey(lockEventKey);
+                    
+                    //AcquireLock
+                    var lockEventSuccessfully = redisCache.SetCacheValue(
+                        new KeyValuePair<string, string>(lockEventKey, targetEvent.Id), CacheSetType.NotExists
+                    );
+
+                    #endregion
+
+                    if (lockEventSuccessfully)
+                    {
+                        eventLocks.Add(lockEventKey);
+                        
+                        if (targetEvent.IsActive == IsActive.Active)
+                        {
+                            //_EventPublishHandler(channel, targetEvent);
+
+                            var nowDateTime        = DateTime.Now;
+                            var nowPersianDateTime = dateTime.ToPersianShortDate(nowDateTime);
+
+                            targetEvent.IsActive              = IsActive.InActive;
+                            targetEvent.UpdatedAt_EnglishDate = nowDateTime;
+                            targetEvent.UpdatedAt_PersianDate = nowPersianDateTime;
+
+                            eventCommandRepository.Change(targetEvent);
+                        }
+                        else
+                            eventCommandRepository.Remove(targetEvent);
+                    }
+                }
+
+                commandUnitOfWork.Commit();
+                
+                //ReleaseLocks
+                eventLocks.ForEach(@event => redisCache.DeleteKey(@event));
+            }
+            catch (Exception e)
+            {
+                e.FileLogger(hostEnvironment, dateTime);
+                
+                e.ElasticStackExceptionLogger(hostEnvironment, globalUniqueIdGenerator, dateTime, 
+                    NameOfService, NameOfAction
+                );
+                
+                // e.CentralExceptionLogger(hostEnvironment, globalUniqueIdGenerator, this, dateTime, NameOfService, 
+                //     NameOfAction
+                // );
+
+                commandUnitOfWork?.Rollback();
+            }
+            finally
+            {
+                
+            }
+        }
+
+        return Task.CompletedTask;
     }
 
     public async Task SubscribeAsync(string topic, CancellationToken cancellationToken)
@@ -86,13 +174,14 @@ public class EventStreamBroker(
 
         while (!cancellationToken.IsCancellationRequested)
         {
-            int countOfRetryValue;
-            object @event;
+            int countOfRetryValue = default;
+            object payloadBody = default;
+            ConsumeResult<string, string> consumeResult = default;
             
             try
             {
-                var consumeResult = consumer.Consume(cancellationToken);
-
+                consumeResult = consumer.Consume(cancellationToken);
+                
                 var groupIdHeader = consumeResult.Message.Headers.First(h => h.Key == GroupIdKey);
                 var countOfRetryHeader = consumeResult.Message.Headers.First(h => h.Key == CountOfRetryKey);
                 var groupIdValue = Encoding.UTF8.GetString(groupIdHeader.GetValueBytes());
@@ -131,7 +220,7 @@ public class EventStreamBroker(
      
                          var eventStreamHandlerType = eventStreamHandler.GetType();
      
-                         var payloadBody = JsonConvert.DeserializeObject(consumeResult.Message.Value, eventStreamType);
+                         payloadBody = JsonConvert.DeserializeObject(consumeResult.Message.Value, eventStreamType);
      
                          var eventStreamHandlerMethod =
                              eventStreamHandlerType.GetMethod("HandleAsync") ?? throw new Exception("HandleAsync function not found !");
@@ -168,8 +257,6 @@ public class EventStreamBroker(
                 }
 
                 #endregion
-
-                consumer.Commit(consumeResult);
             }
             catch (Exception e)
             {
@@ -181,8 +268,11 @@ public class EventStreamBroker(
 
                 unitOfWork?.Rollback();
 
-                //_RetryMessageOfTopicAsync(topic, @event, countOfRetryValue);
+                if(payloadBody != null)
+                    await _RetryEventOfTopicAsync(topic, payloadBody, countOfRetryValue, cancellationToken);
             }
+
+            _TryCommitMessageOfTopic(consumer, consumeResult);
         }
     }
     
@@ -198,19 +288,56 @@ public class EventStreamBroker(
             type => type.GetInterfaces().Any(i => i == typeof(ICoreCommandUnitOfWork))
         );
     }
+
+    private void _TryCommitMessageOfTopic(IConsumer<string, string> consumer, ConsumeResult<string, string> consumeResult)
+    {
+        try
+        {
+            if (consumeResult is not null)
+                consumer.Commit(consumeResult);
+        }
+        catch (Exception e)
+        {
+            e.FileLogger(hostEnvironment, dateTime);
+            
+            e.ElasticStackExceptionLogger(hostEnvironment, globalUniqueIdGenerator, dateTime, 
+                NameOfService, NameOfAction
+            );
+        }
+    }
     
-    private async Task _RetryMessageOfTopicAsync(string topic, object @event, int countOfRetry,
+    private async Task _RetryEventOfTopicAsync(string topic, object @event, int countOfRetry,
         CancellationToken cancellationToken
     )
     {
         try
         {
-            var headers = new Dictionary<string, string> {
-                { GroupIdKey, $"{NameOfService}-{topic}" },
-                { CountOfRetryKey, $"{countOfRetry}" }
+            var config = new ProducerConfig {
+                BootstrapServers = Environment.GetEnvironmentVariable("E-Kafka-Host"),
+                SaslUsername = Environment.GetEnvironmentVariable("E-Kafka-Username"),
+                SaslPassword = Environment.GetEnvironmentVariable("E-Kafka-Password")
             };
-            
-            //await PublishAsync(topic, @event, headers, cancellationToken);
+        
+            using var producer = new ProducerBuilder<string, string>(config).Build();
+        
+            var retryPolicy = Policy.Handle<Exception>()
+                                    .WaitAndRetryAsync(5, _ => TimeSpan.FromSeconds(3),
+                                        (exception, timeSpan, context) => throw exception
+                                    );
+
+            var kafkaHeaders = new Headers {
+                { GroupIdKey, Encoding.UTF8.GetBytes( $"{NameOfService}-{topic}" ) },
+                { CountOfRetryKey, Encoding.UTF8.GetBytes( $"{countOfRetry}" ) }
+            };
+
+            await retryPolicy.ExecuteAsync(() =>
+                producer.ProduceAsync(topic,
+                    new Message<string, string> {
+                        Key = @event.GetType().Name, Value = serializer.Serialize(@event), Headers = kafkaHeaders
+                    },
+                    cancellationToken
+                )
+            );
         }
         catch (Exception e)
         {

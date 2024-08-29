@@ -17,7 +17,6 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Newtonsoft.Json;
 using NSubstitute.Exceptions;
-using NSubstitute.Extensions;
 using Polly;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
