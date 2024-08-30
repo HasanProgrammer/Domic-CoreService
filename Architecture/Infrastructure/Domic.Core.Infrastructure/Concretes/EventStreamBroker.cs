@@ -250,110 +250,108 @@ public class EventStreamBroker(
         try
         {
             var groupIdHeader = consumeResult.Message.Headers.First(h => h.Key == GroupIdKey);
-                var countOfRetryHeader = consumeResult.Message.Headers.First(h => h.Key == CountOfRetryKey);
-                var groupIdValue = Encoding.UTF8.GetString(groupIdHeader.GetValueBytes());
-                
-                countOfRetryValue = Convert.ToInt32( Encoding.UTF8.GetString(countOfRetryHeader.GetValueBytes()) );
-                
-                #region LoadEventStreamHandler
+            var countOfRetryHeader = consumeResult.Message.Headers.First(h => h.Key == CountOfRetryKey);
+            var groupIdValue = Encoding.UTF8.GetString(groupIdHeader.GetValueBytes());
+            
+            countOfRetryValue = Convert.ToInt32( Encoding.UTF8.GetString(countOfRetryHeader.GetValueBytes()) );
+            
+            var processingConditions = (
+                string.IsNullOrEmpty(groupIdValue) || (
+                    groupIdValue == $"{NameOfService}-{topic}" && countOfRetryValue > 0
+                )
+            );
 
-                var processingConditions = (
-                    string.IsNullOrEmpty(groupIdValue) || (
-                        groupIdValue == $"{NameOfService}-{topic}" && countOfRetryValue > 0
+            if (processingConditions)
+            {
+                var targetConsumerMessageStreamHandlerType = useCaseTypes.FirstOrDefault(
+                    type => type.GetInterfaces().Any(
+                        i => i.IsGenericType &&
+                             i.GetGenericTypeDefinition() == typeof(IConsumerMessageStreamHandler<>) &&
+                             i.GetGenericArguments().Any(arg => arg.Name.Equals(consumeResult.Message.Key))
                     )
                 );
 
-                if (processingConditions)
+                if (targetConsumerMessageStreamHandlerType is not null)
                 {
-                    var targetConsumerMessageStreamHandlerType = useCaseTypes.FirstOrDefault(
-                        type => type.GetInterfaces().Any(
-                            i => i.IsGenericType &&
-                                 i.GetGenericTypeDefinition() == typeof(IConsumerMessageStreamHandler<>) &&
-                                 i.GetGenericArguments().Any(arg => arg.Name.Equals(consumeResult.Message.Key))
-                        )
-                    );
-
-                    if (targetConsumerMessageStreamHandlerType is not null)
+                    var messageStreamType =
+                        targetConsumerMessageStreamHandlerType.GetInterfaces()
+                                                              .Select(i => i.GetGenericArguments()[0])
+                                                              .FirstOrDefault();
+ 
+                    var fullContractOfConsumerType =
+                        typeof(IConsumerMessageStreamHandler<>).MakeGenericType(messageStreamType);
+ 
+                    var messageStreamHandler = serviceProvider.GetRequiredService(fullContractOfConsumerType);
+ 
+                    var messageStreamHandlerType = messageStreamHandler.GetType();
+ 
+                    payloadBody = JsonConvert.DeserializeObject(consumeResult.Message.Value, messageStreamType);
+ 
+                    var messageStreamHandlerMethod =
+                        messageStreamHandlerType.GetMethod("Handle") ?? throw new Exception("Handle function not found !");
+ 
+                    var retryAttr =
+                        messageStreamHandlerMethod.GetCustomAttribute(typeof(WithMaxRetryAttribute)) as WithMaxRetryAttribute;
+                     
+                    if (countOfRetryValue > retryAttr.Count)
                     {
-                        var messageStreamType =
-                            targetConsumerMessageStreamHandlerType.GetInterfaces()
-                                                                  .Select(i => i.GetGenericArguments()[0])
-                                                                  .FirstOrDefault();
-     
-                        var fullContractOfConsumerType =
-                            typeof(IConsumerMessageStreamHandler<>).MakeGenericType(messageStreamType);
-     
-                        var messageStreamHandler = serviceProvider.GetRequiredService(fullContractOfConsumerType);
-     
-                        var messageStreamHandlerType = messageStreamHandler.GetType();
-     
-                        payloadBody = JsonConvert.DeserializeObject(consumeResult.Message.Value, messageStreamType);
-     
-                        var messageStreamHandlerMethod =
-                            messageStreamHandlerType.GetMethod("Handle") ?? throw new Exception("Handle function not found !");
-     
-                        var retryAttr =
-                            messageStreamHandlerMethod.GetCustomAttribute(typeof(WithMaxRetryAttribute)) as WithMaxRetryAttribute;
-                         
-                        if (countOfRetryValue > retryAttr.Count)
+                        if (retryAttr.HasAfterMaxRetryHandle)
                         {
-                            if (retryAttr.HasAfterMaxRetryHandle)
-                            {
-                                var afterMaxRetryHandlerMethod =
-                                    messageStreamHandlerType.GetMethod("AfterMaxRetryHandle") ?? throw new Exception("AfterMaxRetryHandle function not found !");
-                         
-                                afterMaxRetryHandlerMethod.Invoke(messageStreamHandler, new[] { payloadBody });
-                            }
+                            var afterMaxRetryHandlerMethod =
+                                messageStreamHandlerType.GetMethod("AfterMaxRetryHandle") ?? throw new Exception("AfterMaxRetryHandle function not found !");
+                     
+                            afterMaxRetryHandlerMethod.Invoke(messageStreamHandler, new[] { payloadBody });
                         }
-                        else
+                    }
+                    else
+                    {
+                        var transactionConfig =
+                            messageStreamHandlerMethod.GetCustomAttribute(typeof(TransactionConfigAttribute)) as TransactionConfigAttribute;
+            
+                        if(transactionConfig is null)
+                            throw new Exception("Must be used transaction config attribute!");
+
+                        var consumerEventQueryRepository = serviceProvider.GetRequiredService<IConsumerEventQueryRepository>();
+
+                        var messageId =
+                            payloadBody.GetType().GetProperty("Id",
+                                BindingFlags.Instance | BindingFlags.Public | BindingFlags.DeclaredOnly
+                            ).GetValue(payloadBody);
+            
+                        //todo: should be used [CancelationToken] from this method ( _MessageOfQueueHandle )
+                        var consumerEventQuery = consumerEventQueryRepository.FindByIdAsync(messageId, default).GetAwaiter().GetResult();
+
+                        if (consumerEventQuery is null)
                         {
-                            var transactionConfig =
-                                messageStreamHandlerMethod.GetCustomAttribute(typeof(TransactionConfigAttribute)) as TransactionConfigAttribute;
-                
-                            if(transactionConfig is null)
-                                throw new Exception("Must be used transaction config attribute!");
+                            unitOfWork = serviceProvider.GetRequiredService(_GetTypeOfUnitOfWork(transactionConfig.Type)) as IUnitOfWork;
+ 
+                            unitOfWork.Transaction(transactionConfig.IsolationLevel);
+                             
+                            #region IdempotentConsumerPattern
+            
+                            var nowDateTime = DateTime.Now;
 
-                            var consumerEventQueryRepository = serviceProvider.GetRequiredService<IConsumerEventQueryRepository>();
+                            consumerEventQuery = new ConsumerEventQuery {
+                                Id = messageId.ToString(),
+                                Type = consumeResult.Message.Key,
+                                CountOfRetry = countOfRetryValue,
+                                CreatedAt_EnglishDate = nowDateTime,
+                                CreatedAt_PersianDate = dateTime.ToPersianShortDate(nowDateTime)
+                            };
 
-                            var messageId =
-                                payloadBody.GetType().GetProperty("Id",
-                                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.DeclaredOnly
-                                ).GetValue(payloadBody);
-                
-                            //todo: should be used [CancelationToken] from this method ( _MessageOfQueueHandle )
-                            var consumerEventQuery = consumerEventQueryRepository.FindByIdAsync(messageId, default).GetAwaiter().GetResult();
+                            consumerEventQueryRepository.Add(consumerEventQuery);
 
-                            if (consumerEventQuery is null)
-                            {
-                                unitOfWork = serviceProvider.GetRequiredService(_GetTypeOfUnitOfWork(transactionConfig.Type)) as IUnitOfWork;
-     
-                                unitOfWork.Transaction(transactionConfig.IsolationLevel);
-                                 
-                                #region IdempotentConsumerPattern
-                
-                                var nowDateTime = DateTime.Now;
-
-                                consumerEventQuery = new ConsumerEventQuery {
-                                    Id = messageId.ToString(),
-                                    Type = consumeResult.Message.Key,
-                                    CountOfRetry = countOfRetryValue,
-                                    CreatedAt_EnglishDate = nowDateTime,
-                                    CreatedAt_PersianDate = dateTime.ToPersianShortDate(nowDateTime)
-                                };
-
-                                consumerEventQueryRepository.Add(consumerEventQuery);
-
-                                #endregion
-     
-                                messageStreamHandlerMethod.Invoke(messageStreamHandler, new[] { payloadBody });
-     
-                                unitOfWork.Commit();
-                            }
+                            #endregion
+ 
+                            messageStreamHandlerMethod.Invoke(messageStreamHandler, new[] { payloadBody });
+ 
+                            unitOfWork.Commit();
                         }
                     }
                 }
-
-                #endregion
+            }
+            
+            consumer.Commit(consumeResult);
         }
         catch (Exception e)
         {
@@ -365,10 +363,11 @@ public class EventStreamBroker(
 
             unitOfWork?.Rollback();
             
-            _RetryEventOrMessageOfTopic(topic, payloadBody, countOfRetryValue);
+            var isSuccessRetry = _RetryEventOrMessageOfTopic(topic, payloadBody, countOfRetryValue);
+            
+            if(isSuccessRetry)
+                consumer.Commit(consumeResult);
         }
-        
-        consumer.Commit(consumeResult);
     }
     
     private async Task _ConsumeNextAsync(Type[] useCaseTypes, string topic, IConsumer<string, string> consumer,
@@ -482,6 +481,8 @@ public class EventStreamBroker(
                     }
                 }
             }
+            
+            consumer.Commit(consumeResult);
         }
         catch (Exception e)
         {
@@ -493,10 +494,12 @@ public class EventStreamBroker(
 
             unitOfWork?.Rollback();
             
-            await _RetryEventOrMessageOfTopicAsync(topic, payloadBody, countOfRetryValue, cancellationToken);
+            var isSuccessRetry =
+                await _RetryEventOrMessageOfTopicAsync(topic, payloadBody, countOfRetryValue, cancellationToken);
+            
+            if(isSuccessRetry) 
+                consumer.Commit(consumeResult);
         }
-        
-        consumer.Commit(consumeResult);
     }
     
     private Type _GetTypeOfUnitOfWork(TransactionType transactionType)
@@ -512,7 +515,7 @@ public class EventStreamBroker(
         };
     }
     
-    private void _RetryEventOrMessageOfTopic(string topic, object payload, int countOfRetry)
+    private bool _RetryEventOrMessageOfTopic(string topic, object payload, int countOfRetry)
     {
         try
         {
@@ -527,23 +530,21 @@ public class EventStreamBroker(
                 { CountOfRetryKey, Encoding.UTF8.GetBytes( $"{countOfRetry}" ) }
             };
         
-            var retryPolicy = Policy.Handle<Exception>()
-                                    .WaitAndRetry(5, _ => TimeSpan.FromSeconds(3),
-                                        (exception, timeSpan, context) => throw exception
-                                    );
             
-            retryPolicy.Execute(() => {
-                
-                using var producer = new ProducerBuilder<string, string>(config).Build();
+            Policy.Handle<Exception>()
+                  .WaitAndRetry(5, _ => TimeSpan.FromSeconds(3), (exception, timeSpan, context) => throw exception)
+                  .Execute(() => {
+                      
+                      using var producer = new ProducerBuilder<string, string>(config).Build();
 
-                producer.Produce(
-                    topic,
-                    new Message<string, string> {
-                        Key = payload.GetType().Name, Value = serializer.Serialize(payload), Headers = kafkaHeaders
-                    }
-                );
-                
-            });
+                      producer.Produce(
+                          topic,
+                          new Message<string, string> {
+                              Key = payload.GetType().Name, Value = serializer.Serialize(payload), Headers = kafkaHeaders
+                          }
+                      );
+                      
+                  });
         }
         catch (Exception e)
         {
@@ -552,10 +553,14 @@ public class EventStreamBroker(
             e.ElasticStackExceptionLogger(hostEnvironment, globalUniqueIdGenerator, dateTime, 
                 NameOfService, NameOfAction
             );
+
+            return false;
         }
+
+        return true;
     }
     
-    private async Task _RetryEventOrMessageOfTopicAsync(string topic, object payload, int countOfRetry,
+    private async Task<bool> _RetryEventOrMessageOfTopicAsync(string topic, object payload, int countOfRetry,
         CancellationToken cancellationToken
     )
     {
@@ -571,25 +576,22 @@ public class EventStreamBroker(
                 { GroupIdKey, Encoding.UTF8.GetBytes( $"{NameOfService}-{topic}" ) },
                 { CountOfRetryKey, Encoding.UTF8.GetBytes( $"{countOfRetry}" ) }
             };
-        
-            var retryPolicy = Policy.Handle<Exception>()
-                                    .WaitAndRetryAsync(5, _ => TimeSpan.FromSeconds(3),
-                                        (exception, timeSpan, context) => throw exception
-                                    );
+            
+            await Policy.Handle<Exception>()
+                        .WaitAndRetryAsync(5, _ => TimeSpan.FromSeconds(3), (exception, timeSpan, context) => throw exception)
+                        .ExecuteAsync(async () => {
 
-            await retryPolicy.ExecuteAsync(async () => {
-
-                using var producer = new ProducerBuilder<string, string>(config).Build();
+                            using var producer = new ProducerBuilder<string, string>(config).Build();
                 
-                await producer.ProduceAsync(
-                    topic,
-                    new Message<string, string> {
-                        Key = payload.GetType().Name, Value = serializer.Serialize(payload), Headers = kafkaHeaders
-                    },
-                    cancellationToken
-                );
+                            await producer.ProduceAsync(
+                                topic,
+                                new Message<string, string> {
+                                    Key = payload.GetType().Name, Value = serializer.Serialize(payload), Headers = kafkaHeaders
+                                },
+                                cancellationToken
+                            );
 
-            });
+                        });
         }
         catch (Exception e)
         {
@@ -598,6 +600,10 @@ public class EventStreamBroker(
             e.ElasticStackExceptionLogger(hostEnvironment, globalUniqueIdGenerator, dateTime, 
                 NameOfService, NameOfAction
             );
+
+            return false;
         }
+
+        return true;
     }
 }
