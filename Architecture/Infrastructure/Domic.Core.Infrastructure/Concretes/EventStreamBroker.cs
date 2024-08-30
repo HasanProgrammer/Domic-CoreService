@@ -5,12 +5,14 @@ using System.Text;
 using Confluent.Kafka;
 using Domic.Core.Common.ClassConsts;
 using Domic.Core.Common.ClassEnums;
+using Domic.Core.Common.ClassModels;
 using Domic.Core.Domain.Contracts.Interfaces;
 using Domic.Core.Domain.Entities;
 using Domic.Core.Domain.Enumerations;
 using Domic.Core.Infrastructure.Extensions;
 using Domic.Core.UseCase.Attributes;
 using Domic.Core.UseCase.Contracts.Interfaces;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Newtonsoft.Json;
@@ -22,14 +24,14 @@ namespace Domic.Core.Infrastructure.Concretes;
 
 public class EventStreamBroker(
     ISerializer serializer, IServiceProvider serviceProvider, IHostEnvironment hostEnvironment, IDateTime dateTime,
-    IGlobalUniqueIdGenerator globalUniqueIdGenerator, IServiceScopeFactory serviceScopeFactory
+    IGlobalUniqueIdGenerator globalUniqueIdGenerator, IServiceScopeFactory serviceScopeFactory,
+    IConfiguration configuration
 ) : IEventStreamBroker
 {
     private static object _lock = new();
     
     #region Consts
 
-    private const string GroupIdKey = "GroupId";
     private const string CountOfRetryKey = "CountOfRetry";
 
     #endregion
@@ -48,33 +50,29 @@ public class EventStreamBroker(
             SaslUsername = Environment.GetEnvironmentVariable("E-Kafka-Username"),
             SaslPassword = Environment.GetEnvironmentVariable("E-Kafka-Password")
         };
-
-        var retryPolicy = Policy.Handle<Exception>()
-            .WaitAndRetryAsync(5, _ => TimeSpan.FromSeconds(3),
-                (exception, timeSpan, context) => throw exception
-            );
         
-        return retryPolicy.ExecuteAsync(async () => {
-            
-            using var producer = new ProducerBuilder<string, string>(config).Build();
-        
-            var kafkaHeaders = new Headers();
+        var kafkaHeaders = new Headers();
 
-            foreach (var header in headers)
-                kafkaHeaders.Add(header.Key, Encoding.UTF8.GetBytes(header.Value));
+        foreach (var header in headers)
+            kafkaHeaders.Add(header.Key, Encoding.UTF8.GetBytes(header.Value));
 
-            kafkaHeaders.Add(GroupIdKey, Encoding.UTF8.GetBytes(""));
-            kafkaHeaders.Add(CountOfRetryKey, Encoding.UTF8.GetBytes("0"));
-            
-            await producer.ProduceAsync(
-                topic,
-                new Message<string, string> {
-                    Key = message.GetType().Name, Value = serializer.Serialize(message), Headers = kafkaHeaders
-                },
-                cancellationToken
-            );
-            
-        });
+        return Policy.Handle<Exception>()
+                     .WaitAndRetryAsync(5, _ => TimeSpan.FromSeconds(3),
+                         (exception, timeSpan, context) => throw exception
+                     )
+                     .ExecuteAsync(async () => {
+                         
+                         using var producer = new ProducerBuilder<string, string>(config).Build();
+
+                         await producer.ProduceAsync(
+                             topic,
+                             new Message<string, string> {
+                                 Key = message.GetType().Name, Value = serializer.Serialize(message), Headers = kafkaHeaders
+                             },
+                             cancellationToken
+                         );
+                         
+                     });
     }
     
     public void SubscribeMessage(string topic, CancellationToken cancellationToken)
@@ -100,7 +98,43 @@ public class EventStreamBroker(
             {
                 var consumeResult = consumer.Consume(cancellationToken);
                 
-                _ConsumeNext(useCaseTypes, topic, consumer, consumeResult);
+                _ConsumeNextMessage(useCaseTypes, topic, consumer, consumeResult);
+            }
+            catch (Exception e)
+            {
+                e.FileLogger(hostEnvironment, dateTime);
+
+                e.ElasticStackExceptionLogger(hostEnvironment, globalUniqueIdGenerator, dateTime,
+                    NameOfService, NameOfAction
+                );
+            }
+        }
+    }
+    
+    public void SubscribeRetriableMessage(string topic, CancellationToken cancellationToken)
+    {
+        var useCaseTypes = Assembly.Load(new AssemblyName("Domic.UseCase")).GetTypes();
+
+        var config = new ConsumerConfig {
+            BootstrapServers = Environment.GetEnvironmentVariable("E-Kafka-Host"),
+            SaslUsername = Environment.GetEnvironmentVariable("E-Kafka-Username"),
+            SaslPassword = Environment.GetEnvironmentVariable("E-Kafka-Password"),
+            EnableAutoCommit = false,
+            AutoOffsetReset = AutoOffsetReset.Earliest,
+            GroupId = $"{NameOfService}-{topic}"
+        };
+
+        using var consumer = new ConsumerBuilder<string, string>(config).Build();
+        
+        consumer.Subscribe(topic);
+
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            try
+            {
+                var consumeResult = consumer.Consume(cancellationToken);
+
+                _ConsumeNextRetriableMessage(useCaseTypes, topic, consumer, consumeResult);
             }
             catch (Exception e)
             {
@@ -130,51 +164,42 @@ public class EventStreamBroker(
         
         consumer.Subscribe(topic);
 
-        while (!cancellationToken.IsCancellationRequested)
-        {
-            try
-            {
-                var consumeResult = consumer.Consume(cancellationToken);
+        #region ThrottleConfigs
 
-                _ConsumeNextAsync(useCaseTypes, topic, consumer, consumeResult, cancellationToken);
-            }
-            catch (Exception e)
-            {
-                e.FileLogger(hostEnvironment, dateTime);
-
-                e.ElasticStackExceptionLogger(hostEnvironment, globalUniqueIdGenerator, dateTime,
-                    NameOfService, NameOfAction
-                );
-            }
-        }
-    }
-
-    public void SubscribeRetriableMessage(string topic, CancellationToken cancellationToken)
-    {
-        var useCaseTypes = Assembly.Load(new AssemblyName("Domic.UseCase")).GetTypes();
-
-        var config = new ConsumerConfig {
-            BootstrapServers = Environment.GetEnvironmentVariable("E-Kafka-Host"),
-            SaslUsername = Environment.GetEnvironmentVariable("E-Kafka-Username"),
-            SaslPassword = Environment.GetEnvironmentVariable("E-Kafka-Password"),
-            EnableAutoCommit = false,
-            AutoOffsetReset = AutoOffsetReset.Earliest,
-            GroupId = $"{NameOfService}-{topic}"
-        };
-
-        using var consumer = new ConsumerBuilder<string, string>(config).Build();
+        List<Task> consumerTasks = new();
         
-        consumer.Subscribe(topic);
+        var topicConfig = configuration.GetSection("ExternalTopicConfig").Get<TopicConfig>();
+
+        var topicThrottle = topicConfig.Throttle.FirstOrDefault(throttle => throttle.Topic.Equals(topic));
+
+        #endregion
 
         while (!cancellationToken.IsCancellationRequested)
         {
-            Thread.Sleep(5000); //5s
+            #region ThrottleConditions
+
+            if (topicThrottle.Active)
+            {
+                if (consumerTasks.Count == topicThrottle.Limitation && !consumerTasks.All(task => task.IsCompleted))
+                {
+                    Thread.Sleep(50); //busy waiting
+                    continue;
+                }
             
+                if(consumerTasks.All(task => task.IsCompleted))
+                    consumerTasks.RemoveAll(task => task.IsCompleted);
+            }
+
+            #endregion
+
             try
             {
                 var consumeResult = consumer.Consume(cancellationToken);
 
-                _ConsumeNextRetriableMessage(useCaseTypes, topic, consumer, consumeResult);
+                var consumerTask =
+                    _ConsumeNextMessageAsync(useCaseTypes, topic, consumer, consumeResult, cancellationToken);
+                
+                consumerTasks.Add(consumerTask);
             }
             catch (Exception e)
             {
@@ -186,7 +211,7 @@ public class EventStreamBroker(
             }
         }
     }
-
+    
     public void SubscribeRetriableMessageAsynchronously(string topic, CancellationToken cancellationToken)
     {
         var useCaseTypes = Assembly.Load(new AssemblyName("Domic.UseCase")).GetTypes();
@@ -203,16 +228,44 @@ public class EventStreamBroker(
         using var consumer = new ConsumerBuilder<string, string>(config).Build();
         
         consumer.Subscribe(topic);
+        
+        #region ThrottleConfigs
+
+        List<Task> consumerTasks = new();
+        
+        var topicConfig = configuration.GetSection("ExternalTopicConfig").Get<TopicConfig>();
+
+        var topicThrottle = topicConfig.Throttle.FirstOrDefault(throttle => throttle.Topic.Equals(topic));
+
+        #endregion
 
         while (!cancellationToken.IsCancellationRequested)
         {
-            Thread.Sleep(5000); //5s
+            #region ThrottleConditions
+
+            if (consumerTasks.Count == topicThrottle.Limitation && !consumerTasks.All(task => task.IsCompleted))
+            {
+                Thread.Sleep(50); //busy waiting
+                continue;
+            }
+
+            //reset
+            if (consumerTasks.All(task => task.IsCompleted))
+            {
+                consumerTasks.RemoveAll(task => task.IsCompleted);
+                Thread.Sleep(5000); //5s
+            }
+
+            #endregion
             
             try
             {
                 var consumeResult = consumer.Consume(cancellationToken);
 
-                _ConsumeNextRetriableMessageAsync(useCaseTypes, topic, consumer, consumeResult, cancellationToken);
+                var consumerTask =
+                    _ConsumeNextRetriableMessageAsync(useCaseTypes, topic, consumer, consumeResult, cancellationToken);
+                
+                consumerTasks.Add(consumerTask);
             }
             catch (Exception e)
             {
@@ -226,6 +279,8 @@ public class EventStreamBroker(
     }
 
     #endregion
+
+    #region EventStructure
 
     public Task PublishAsync(CancellationToken cancellationToken)
     {
@@ -312,10 +367,215 @@ public class EventStreamBroker(
 
         return Task.CompletedTask;
     }
+
+    public void Subscribe(string topic, CancellationToken cancellationToken)
+    {
+        var useCaseTypes = Assembly.Load(new AssemblyName("Domic.UseCase")).GetTypes();
+
+        var config = new ConsumerConfig {
+            BootstrapServers = Environment.GetEnvironmentVariable("E-Kafka-Host"),
+            SaslUsername = Environment.GetEnvironmentVariable("E-Kafka-Username"),
+            SaslPassword = Environment.GetEnvironmentVariable("E-Kafka-Password"),
+            EnableAutoCommit = false,
+            AutoOffsetReset = AutoOffsetReset.Earliest,
+            GroupId = $"{NameOfService}-{topic}"
+        };
+
+        using var consumer = new ConsumerBuilder<string, string>(config).Build();
+        
+        consumer.Subscribe(topic);
+
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            try
+            {
+                var consumeResult = consumer.Consume(cancellationToken);
+                
+                _ConsumeNextEvent(useCaseTypes, topic, consumer, consumeResult);
+            }
+            catch (Exception e)
+            {
+                e.FileLogger(hostEnvironment, dateTime);
+
+                e.ElasticStackExceptionLogger(hostEnvironment, globalUniqueIdGenerator, dateTime,
+                    NameOfService, NameOfAction
+                );
+            }
+        }
+    }
+
+    public void SubscribeRetriable(string topic, CancellationToken cancellationToken)
+    {
+        var useCaseTypes = Assembly.Load(new AssemblyName("Domic.UseCase")).GetTypes();
+
+        var config = new ConsumerConfig {
+            BootstrapServers = Environment.GetEnvironmentVariable("E-Kafka-Host"),
+            SaslUsername = Environment.GetEnvironmentVariable("E-Kafka-Username"),
+            SaslPassword = Environment.GetEnvironmentVariable("E-Kafka-Password"),
+            EnableAutoCommit = false,
+            AutoOffsetReset = AutoOffsetReset.Earliest,
+            GroupId = $"{NameOfService}-{topic}"
+        };
+
+        using var consumer = new ConsumerBuilder<string, string>(config).Build();
+        
+        consumer.Subscribe(topic);
+
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            try
+            {
+                var consumeResult = consumer.Consume(cancellationToken);
+                
+                _ConsumeNextRetriableEvent(useCaseTypes, topic, consumer, consumeResult);
+            }
+            catch (Exception e)
+            {
+                e.FileLogger(hostEnvironment, dateTime);
+
+                e.ElasticStackExceptionLogger(hostEnvironment, globalUniqueIdGenerator, dateTime,
+                    NameOfService, NameOfAction
+                );
+            }
+        }
+    }
+
+    public void SubscribeAsynchronously(string topic, CancellationToken cancellationToken)
+    {
+        var useCaseTypes = Assembly.Load(new AssemblyName("Domic.UseCase")).GetTypes();
+
+        var config = new ConsumerConfig {
+            BootstrapServers = Environment.GetEnvironmentVariable("E-Kafka-Host"),
+            SaslUsername = Environment.GetEnvironmentVariable("E-Kafka-Username"),
+            SaslPassword = Environment.GetEnvironmentVariable("E-Kafka-Password"),
+            EnableAutoCommit = false,
+            AutoOffsetReset = AutoOffsetReset.Earliest,
+            GroupId = $"{NameOfService}-{topic}"
+        };
+
+        using var consumer = new ConsumerBuilder<string, string>(config).Build();
+        
+        consumer.Subscribe(topic);
+
+        #region ThrottleConfigs
+
+        List<Task> consumerTasks = new();
+        
+        var topicConfig = configuration.GetSection("ExternalTopicConfig").Get<TopicConfig>();
+
+        var topicThrottle = topicConfig.Throttle.FirstOrDefault(throttle => throttle.Topic.Equals(topic));
+
+        #endregion
+
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            #region ThrottleConditions
+
+            if (topicThrottle.Active)
+            {
+                if (consumerTasks.Count == topicThrottle.Limitation && !consumerTasks.All(task => task.IsCompleted))
+                {
+                    Thread.Sleep(50); //busy waiting
+                    continue;
+                }
+            
+                if(consumerTasks.All(task => task.IsCompleted))
+                    consumerTasks.RemoveAll(task => task.IsCompleted);
+            }
+
+            #endregion
+
+            try
+            {
+                var consumeResult = consumer.Consume(cancellationToken);
+
+                var consumerTask =
+                    _ConsumeNextEventAsync(useCaseTypes, topic, consumer, consumeResult, cancellationToken);
+                
+                consumerTasks.Add(consumerTask);
+            }
+            catch (Exception e)
+            {
+                e.FileLogger(hostEnvironment, dateTime);
+
+                e.ElasticStackExceptionLogger(hostEnvironment, globalUniqueIdGenerator, dateTime,
+                    NameOfService, NameOfAction
+                );
+            }
+        }
+    }
+
+    public void SubscribeRetriableAsynchronously(string topic, CancellationToken cancellationToken)
+    {
+         var useCaseTypes = Assembly.Load(new AssemblyName("Domic.UseCase")).GetTypes();
+
+        var config = new ConsumerConfig {
+            BootstrapServers = Environment.GetEnvironmentVariable("E-Kafka-Host"),
+            SaslUsername = Environment.GetEnvironmentVariable("E-Kafka-Username"),
+            SaslPassword = Environment.GetEnvironmentVariable("E-Kafka-Password"),
+            EnableAutoCommit = false,
+            AutoOffsetReset = AutoOffsetReset.Earliest,
+            GroupId = $"{NameOfService}-{topic}"
+        };
+
+        using var consumer = new ConsumerBuilder<string, string>(config).Build();
+        
+        consumer.Subscribe(topic);
+        
+        #region ThrottleConfigs
+
+        List<Task> consumerTasks = new();
+        
+        var topicConfig = configuration.GetSection("ExternalTopicConfig").Get<TopicConfig>();
+
+        var topicThrottle = topicConfig.Throttle.FirstOrDefault(throttle => throttle.Topic.Equals(topic));
+
+        #endregion
+
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            #region ThrottleConditions
+
+            if (consumerTasks.Count == topicThrottle.Limitation && !consumerTasks.All(task => task.IsCompleted))
+            {
+                Thread.Sleep(50); //busy waiting
+                continue;
+            }
+
+            //reset
+            if (consumerTasks.All(task => task.IsCompleted))
+            {
+                consumerTasks.RemoveAll(task => task.IsCompleted);
+                Thread.Sleep(5000); //5s
+            }
+
+            #endregion
+            
+            try
+            {
+                var consumeResult = consumer.Consume(cancellationToken);
+
+                var consumerTask =
+                    _ConsumeNextRetriableEventAsync(useCaseTypes, topic, consumer, consumeResult, cancellationToken);
+                
+                consumerTasks.Add(consumerTask);
+            }
+            catch (Exception e)
+            {
+                e.FileLogger(hostEnvironment, dateTime);
+
+                e.ElasticStackExceptionLogger(hostEnvironment, globalUniqueIdGenerator, dateTime,
+                    NameOfService, NameOfAction
+                );
+            }
+        }
+    }
+
+    #endregion
     
     /*---------------------------------------------------------------*/
 
-    private void _ConsumeNext(Type[] useCaseTypes, string topic, IConsumer<string, string> consumer,
+    private void _ConsumeNextMessage(Type[] useCaseTypes, string topic, IConsumer<string, string> consumer,
         ConsumeResult<string, string> consumeResult
     )
     {
@@ -414,7 +674,7 @@ public class EventStreamBroker(
         }
     }
     
-    private async Task _ConsumeNextAsync(Type[] useCaseTypes, string topic, IConsumer<string, string> consumer,
+    private async Task _ConsumeNextMessageAsync(Type[] useCaseTypes, string topic, IConsumer<string, string> consumer,
         ConsumeResult<string, string> consumeResult, CancellationToken cancellationToken
     )
     {
@@ -777,6 +1037,412 @@ public class EventStreamBroker(
                 consumer.Commit(consumeResult);
         }
     }
+    
+    /*---------------------------------------------------------------*/
+    
+    private void _ConsumeNextEvent(Type[] useCaseTypes, string topic, IConsumer<string, string> consumer,
+        ConsumeResult<string, string> consumeResult
+    )
+    {
+        IUnitOfWork unitOfWork = default;
+        Event @event = default;
+        
+        try
+        {
+            var targetConsumerEventStreamHandlerType = useCaseTypes.FirstOrDefault(
+                type => type.GetInterfaces().Any(
+                    i => i.IsGenericType &&
+                         i.GetGenericTypeDefinition() == typeof(IConsumerEventStreamHandler<>) &&
+                         i.GetGenericArguments().Any(arg => arg.Name.Equals(consumeResult.Message.Key))
+                )
+            );
+
+            if (targetConsumerEventStreamHandlerType is not null)
+            {
+                var eventStreamType =
+                    targetConsumerEventStreamHandlerType.GetInterfaces()
+                                                        .Select(i => i.GetGenericArguments()[0])
+                                                        .FirstOrDefault();
+
+                var fullContractOfConsumerType =
+                    typeof(IConsumerEventStreamHandler<>).MakeGenericType(eventStreamType);
+
+                var eventStreamHandler = serviceProvider.GetRequiredService(fullContractOfConsumerType);
+
+                var eventStreamHandlerType = eventStreamHandler.GetType();
+
+                @event = JsonConvert.DeserializeObject<Event>(consumeResult.Message.Value);
+
+                var payloadOfEvent = JsonConvert.DeserializeObject(@event.Payload, eventStreamType);
+                
+                var eventStreamHandlerMethod =
+                    eventStreamHandlerType.GetMethod("Handle") ?? throw new Exception("Handle function not found !");
+                
+                var transactionConfig =
+                        eventStreamHandlerMethod.GetCustomAttribute(typeof(TransactionConfigAttribute)) as TransactionConfigAttribute;
+        
+                if(transactionConfig is null)
+                    throw new Exception("Must be used transaction config attribute!");
+
+                var consumerEventQueryRepository = serviceProvider.GetRequiredService<IConsumerEventQueryRepository>();
+    
+                //todo: should be used [CancelationToken] from this method ( _MessageOfQueueHandle )
+                var consumerEventQuery = consumerEventQueryRepository.FindByIdAsync(@event.Id, default).GetAwaiter().GetResult();
+
+                if (consumerEventQuery is null)
+                {
+                    unitOfWork = serviceProvider.GetRequiredService(_GetTypeOfUnitOfWork(transactionConfig.Type)) as IUnitOfWork;
+
+                    unitOfWork.Transaction(transactionConfig.IsolationLevel);
+                     
+                    #region IdempotentConsumerPattern
+    
+                    var nowDateTime = DateTime.Now;
+
+                    consumerEventQuery = new ConsumerEventQuery {
+                        Id = @event.Id,
+                        Type = consumeResult.Message.Key,
+                        CountOfRetry = 0,
+                        CreatedAt_EnglishDate = nowDateTime,
+                        CreatedAt_PersianDate = dateTime.ToPersianShortDate(nowDateTime)
+                    };
+
+                    consumerEventQueryRepository.Add(consumerEventQuery);
+
+                    #endregion
+
+                    eventStreamHandlerMethod.Invoke(eventStreamHandler, new[] { payloadOfEvent });
+
+                    unitOfWork.Commit();
+                }
+            }
+            
+            consumer.Commit(consumeResult);
+        }
+        catch (Exception e)
+        {
+            e.FileLogger(hostEnvironment, dateTime);
+
+            e.ElasticStackExceptionLogger(hostEnvironment, globalUniqueIdGenerator, dateTime,
+                NameOfService, NameOfAction
+            );
+
+            unitOfWork?.Rollback();
+            
+            var isSuccessRetry = _RetryEventOrMessageOfTopic($"{NameOfService}-Retry-{topic}", @event, countOfRetry: 1);
+            
+            if(isSuccessRetry)
+                consumer.Commit(consumeResult);
+        }
+    }
+    
+    private async Task _ConsumeNextEventAsync(Type[] useCaseTypes, string topic, IConsumer<string, string> consumer,
+        ConsumeResult<string, string> consumeResult, CancellationToken cancellationToken
+    )
+    {
+        IUnitOfWork unitOfWork = default;
+        Event @event = default;
+        
+        try
+        {
+            var targetConsumerEventStreamHandlerType = useCaseTypes.FirstOrDefault(
+                type => type.GetInterfaces().Any(
+                    i => i.IsGenericType &&
+                         i.GetGenericTypeDefinition() == typeof(IConsumerEventStreamHandler<>) &&
+                         i.GetGenericArguments().Any(arg => arg.Name.Equals(consumeResult.Message.Key))
+                )
+            );
+
+            if (targetConsumerEventStreamHandlerType is not null)
+            {
+                var eventStreamType =
+                    targetConsumerEventStreamHandlerType.GetInterfaces()
+                                                        .Select(i => i.GetGenericArguments()[0])
+                                                        .FirstOrDefault();
+
+                var fullContractOfConsumerType =
+                    typeof(IConsumerEventStreamHandler<>).MakeGenericType(eventStreamType);
+
+                var eventStreamHandler = serviceProvider.GetRequiredService(fullContractOfConsumerType);
+
+                var eventStreamHandlerType = eventStreamHandler.GetType();
+
+                @event = JsonConvert.DeserializeObject<Event>(consumeResult.Message.Value);
+
+                var payloadOfEvent = JsonConvert.DeserializeObject(@event.Payload, eventStreamType);
+                
+                var eventStreamHandlerMethod =
+                    eventStreamHandlerType.GetMethod("HandleAsync") ?? throw new Exception("HandleAsync function not found !");
+                
+                var transactionConfig =
+                        eventStreamHandlerMethod.GetCustomAttribute(typeof(TransactionConfigAttribute)) as TransactionConfigAttribute;
+        
+                if(transactionConfig is null)
+                    throw new Exception("Must be used transaction config attribute!");
+
+                var consumerEventQueryRepository = serviceProvider.GetRequiredService<IConsumerEventQueryRepository>();
+    
+                //todo: should be used [CancelationToken] from this method ( _MessageOfQueueHandle )
+                var consumerEventQuery = await consumerEventQueryRepository.FindByIdAsync(@event.Id, cancellationToken);
+
+                if (consumerEventQuery is null)
+                {
+                    unitOfWork = serviceProvider.GetRequiredService(_GetTypeOfUnitOfWork(transactionConfig.Type)) as IUnitOfWork;
+
+                    await unitOfWork.TransactionAsync(transactionConfig.IsolationLevel, cancellationToken);
+                     
+                    #region IdempotentConsumerPattern
+    
+                    var nowDateTime = DateTime.Now;
+
+                    consumerEventQuery = new ConsumerEventQuery {
+                        Id = @event.Id,
+                        Type = consumeResult.Message.Key,
+                        CountOfRetry = 0,
+                        CreatedAt_EnglishDate = nowDateTime,
+                        CreatedAt_PersianDate = dateTime.ToPersianShortDate(nowDateTime)
+                    };
+
+                    consumerEventQueryRepository.Add(consumerEventQuery);
+
+                    #endregion
+
+                    await (Task)eventStreamHandlerMethod.Invoke(eventStreamHandler, new[] { payloadOfEvent, cancellationToken });
+
+                    await unitOfWork.CommitAsync(cancellationToken);
+                }
+            }
+            
+            consumer.Commit(consumeResult);
+        }
+        catch (Exception e)
+        {
+            e.FileLogger(hostEnvironment, dateTime);
+
+            e.ElasticStackExceptionLogger(hostEnvironment, globalUniqueIdGenerator, dateTime,
+                NameOfService, NameOfAction
+            );
+
+            unitOfWork?.Rollback();
+            
+            var isSuccessRetry = 
+                await _RetryEventOrMessageOfTopicAsync($"{NameOfService}-Retry-{topic}", @event, countOfRetry: 1, cancellationToken);
+            
+            if(isSuccessRetry)
+                consumer.Commit(consumeResult);
+        }
+    }
+    
+    private void _ConsumeNextRetriableEvent(Type[] useCaseTypes, string topic, IConsumer<string, string> consumer,
+        ConsumeResult<string, string> consumeResult
+    )
+    {
+        IUnitOfWork unitOfWork = default;
+        Event @event = default;
+        
+        var countOfRetryValue = Convert.ToInt32(
+            Encoding.UTF8.GetString(
+                consumeResult.Message.Headers.First(h => h.Key == CountOfRetryKey).GetValueBytes()
+            )
+        );
+        
+        try
+        {
+            var targetConsumerEventStreamHandlerType = useCaseTypes.FirstOrDefault(
+                type => type.GetInterfaces().Any(
+                    i => i.IsGenericType &&
+                         i.GetGenericTypeDefinition() == typeof(IConsumerEventStreamHandler<>) &&
+                         i.GetGenericArguments().Any(arg => arg.Name.Equals(consumeResult.Message.Key))
+                )
+            );
+
+            if (targetConsumerEventStreamHandlerType is not null)
+            {
+                var eventStreamType =
+                    targetConsumerEventStreamHandlerType.GetInterfaces()
+                                                        .Select(i => i.GetGenericArguments()[0])
+                                                        .FirstOrDefault();
+
+                var fullContractOfConsumerType =
+                    typeof(IConsumerEventStreamHandler<>).MakeGenericType(eventStreamType);
+
+                var eventStreamHandler = serviceProvider.GetRequiredService(fullContractOfConsumerType);
+
+                var eventStreamHandlerType = eventStreamHandler.GetType();
+
+                @event = JsonConvert.DeserializeObject<Event>(consumeResult.Message.Value);
+
+                var payloadOfEvent = JsonConvert.DeserializeObject(@event.Payload, eventStreamType);
+                
+                var eventStreamHandlerMethod =
+                    eventStreamHandlerType.GetMethod("Handle") ?? throw new Exception("Handle function not found !");
+                
+                var transactionConfig =
+                        eventStreamHandlerMethod.GetCustomAttribute(typeof(TransactionConfigAttribute)) as TransactionConfigAttribute;
+        
+                if(transactionConfig is null)
+                    throw new Exception("Must be used transaction config attribute!");
+
+                var consumerEventQueryRepository = serviceProvider.GetRequiredService<IConsumerEventQueryRepository>();
+    
+                //todo: should be used [CancelationToken] from this method ( _MessageOfQueueHandle )
+                var consumerEventQuery = consumerEventQueryRepository.FindByIdAsync(@event.Id, default).GetAwaiter().GetResult();
+
+                if (consumerEventQuery is null)
+                {
+                    unitOfWork = serviceProvider.GetRequiredService(_GetTypeOfUnitOfWork(transactionConfig.Type)) as IUnitOfWork;
+
+                    unitOfWork.Transaction(transactionConfig.IsolationLevel);
+                     
+                    #region IdempotentConsumerPattern
+    
+                    var nowDateTime = DateTime.Now;
+
+                    consumerEventQuery = new ConsumerEventQuery {
+                        Id = @event.Id,
+                        Type = consumeResult.Message.Key,
+                        CountOfRetry = 0,
+                        CreatedAt_EnglishDate = nowDateTime,
+                        CreatedAt_PersianDate = dateTime.ToPersianShortDate(nowDateTime)
+                    };
+
+                    consumerEventQueryRepository.Add(consumerEventQuery);
+
+                    #endregion
+
+                    eventStreamHandlerMethod.Invoke(eventStreamHandler, new[] { payloadOfEvent });
+
+                    unitOfWork.Commit();
+                }
+            }
+            
+            consumer.Commit(consumeResult);
+        }
+        catch (Exception e)
+        {
+            e.FileLogger(hostEnvironment, dateTime);
+
+            e.ElasticStackExceptionLogger(hostEnvironment, globalUniqueIdGenerator, dateTime,
+                NameOfService, NameOfAction
+            );
+
+            unitOfWork?.Rollback();
+            
+            countOfRetryValue++;
+            
+            var isSuccessRetry = _RetryEventOrMessageOfTopic($"{NameOfService}-Retry-{topic}", @event, countOfRetryValue);
+            
+            if(isSuccessRetry)
+                consumer.Commit(consumeResult);
+        }
+    }
+    
+    private async Task _ConsumeNextRetriableEventAsync(Type[] useCaseTypes, string topic, IConsumer<string, string> consumer,
+        ConsumeResult<string, string> consumeResult, CancellationToken cancellationToken
+    )
+    {
+        IUnitOfWork unitOfWork = default;
+        Event @event = default;
+        
+        var countOfRetryValue = Convert.ToInt32(
+            Encoding.UTF8.GetString(
+                consumeResult.Message.Headers.First(h => h.Key == CountOfRetryKey).GetValueBytes()
+            )
+        );
+        
+        try
+        {
+            var targetConsumerEventStreamHandlerType = useCaseTypes.FirstOrDefault(
+                type => type.GetInterfaces().Any(
+                    i => i.IsGenericType &&
+                         i.GetGenericTypeDefinition() == typeof(IConsumerEventStreamHandler<>) &&
+                         i.GetGenericArguments().Any(arg => arg.Name.Equals(consumeResult.Message.Key))
+                )
+            );
+
+            if (targetConsumerEventStreamHandlerType is not null)
+            {
+                var eventStreamType =
+                    targetConsumerEventStreamHandlerType.GetInterfaces()
+                                                        .Select(i => i.GetGenericArguments()[0])
+                                                        .FirstOrDefault();
+
+                var fullContractOfConsumerType =
+                    typeof(IConsumerEventStreamHandler<>).MakeGenericType(eventStreamType);
+
+                var eventStreamHandler = serviceProvider.GetRequiredService(fullContractOfConsumerType);
+
+                var eventStreamHandlerType = eventStreamHandler.GetType();
+
+                @event = JsonConvert.DeserializeObject<Event>(consumeResult.Message.Value);
+
+                var payloadOfEvent = JsonConvert.DeserializeObject(@event.Payload, eventStreamType);
+                
+                var eventStreamHandlerMethod =
+                    eventStreamHandlerType.GetMethod("HandleAsync") ?? throw new Exception("HandleAsync function not found !");
+                
+                var transactionConfig =
+                        eventStreamHandlerMethod.GetCustomAttribute(typeof(TransactionConfigAttribute)) as TransactionConfigAttribute;
+        
+                if(transactionConfig is null)
+                    throw new Exception("Must be used transaction config attribute!");
+
+                var consumerEventQueryRepository = serviceProvider.GetRequiredService<IConsumerEventQueryRepository>();
+    
+                //todo: should be used [CancelationToken] from this method ( _MessageOfQueueHandle )
+                var consumerEventQuery = await consumerEventQueryRepository.FindByIdAsync(@event.Id, cancellationToken);
+
+                if (consumerEventQuery is null)
+                {
+                    unitOfWork = serviceProvider.GetRequiredService(_GetTypeOfUnitOfWork(transactionConfig.Type)) as IUnitOfWork;
+
+                    await unitOfWork.TransactionAsync(transactionConfig.IsolationLevel, cancellationToken);
+                     
+                    #region IdempotentConsumerPattern
+    
+                    var nowDateTime = DateTime.Now;
+
+                    consumerEventQuery = new ConsumerEventQuery {
+                        Id = @event.Id,
+                        Type = consumeResult.Message.Key,
+                        CountOfRetry = 0,
+                        CreatedAt_EnglishDate = nowDateTime,
+                        CreatedAt_PersianDate = dateTime.ToPersianShortDate(nowDateTime)
+                    };
+
+                    consumerEventQueryRepository.Add(consumerEventQuery);
+
+                    #endregion
+
+                    await (Task)eventStreamHandlerMethod.Invoke(eventStreamHandler, new[] { payloadOfEvent, cancellationToken });
+
+                    await unitOfWork.CommitAsync(cancellationToken);
+                }
+            }
+            
+            consumer.Commit(consumeResult);
+        }
+        catch (Exception e)
+        {
+            e.FileLogger(hostEnvironment, dateTime);
+
+            e.ElasticStackExceptionLogger(hostEnvironment, globalUniqueIdGenerator, dateTime,
+                NameOfService, NameOfAction
+            );
+
+            unitOfWork?.Rollback();
+
+            countOfRetryValue++;
+            
+            var isSuccessRetry =
+                await _RetryEventOrMessageOfTopicAsync($"{NameOfService}-Retry-{topic}", @event, countOfRetryValue, cancellationToken);
+            
+            if(isSuccessRetry)
+                consumer.Commit(consumeResult);
+        }
+    }
+    
+    /*---------------------------------------------------------------*/
     
     private Type _GetTypeOfUnitOfWork(TransactionType transactionType)
     {

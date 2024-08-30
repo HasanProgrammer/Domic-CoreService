@@ -26,10 +26,10 @@ public interface IConsumerMessageStreamHandler<in TMessage> where TMessage : cla
     /// <summary>
     /// 
     /// </summary>
-    /// <param name="event"></param>
+    /// <param name="message"></param>
     /// <param name="cancellationToken"></param>
     /// <returns></returns>
     /// <exception cref="NotImplementedException"></exception>
-    public Task AfterMaxRetryHandleAsync(TMessage @event, CancellationToken cancellationToken) 
+    public Task AfterMaxRetryHandleAsync(TMessage message, CancellationToken cancellationToken) 
         => throw new NotImplementedException();
 }
