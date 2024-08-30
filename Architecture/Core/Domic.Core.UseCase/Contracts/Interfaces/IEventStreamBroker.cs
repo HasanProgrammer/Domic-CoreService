@@ -5,7 +5,7 @@ public interface IEventStreamBroker
     public string NameOfAction  { get; set; }
     public string NameOfService { get; set; }
 
-    #region StructureOfMessage
+    #region MessageStructure
 
     /// <summary>
     /// 
@@ -31,10 +31,27 @@ public interface IEventStreamBroker
     /// <param name="topic"></param>
     /// <param name="cancellationToken"></param>
     public void SubscribeMessageAsynchronously(string topic, CancellationToken cancellationToken) => throw new NotImplementedException();
-
+    
+    /// <summary>
+    /// This method is used to process messages in a [Topic] in a sequential manner
+    /// </summary>
+    /// <param name="topic"></param>
+    /// <param name="cancellationToken"></param>
+    /// <returns></returns>
+    public void SubscribeRetriableMessage(string topic, CancellationToken cancellationToken) 
+        => throw new NotImplementedException();
+    
+    /// <summary>
+    /// This method processes the messages of a topic concurrently ( LongRunningTask )
+    /// </summary>
+    /// <param name="topic"></param>
+    /// <param name="cancellationToken"></param>
+    public void SubscribeRetriableMessageAsynchronously(string topic, CancellationToken cancellationToken) 
+        => throw new NotImplementedException();
+    
     #endregion
 
-    #region StructureOfEvent
+    #region EventStructure
 
     /// <summary>
     /// 
@@ -59,11 +76,30 @@ public interface IEventStreamBroker
     public void Subscribe(string topic, CancellationToken cancellationToken) => throw new NotImplementedException();
     
     /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="topic"></param>
+    /// <param name="cancellationToken"></param>
+    /// <exception cref="NotImplementedException"></exception>
+    public void SubscribeRetriable(string topic, CancellationToken cancellationToken) 
+        => throw new NotImplementedException();
+    
+    /// <summary>
     /// This method processes the messages of a topic concurrently ( LongRunningTask )
     /// </summary>
     /// <param name="topic"></param>
     /// <param name="cancellationToken"></param>
-    public void SubscribeAsynchronously(string topic, CancellationToken cancellationToken) => throw new NotImplementedException();
+    public void SubscribeAsynchronously(string topic, CancellationToken cancellationToken) 
+        => throw new NotImplementedException();
+    
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="topic"></param>
+    /// <param name="cancellationToken"></param>
+    /// <exception cref="NotImplementedException"></exception>
+    public void SubscribeRetriableAsynchronously(string topic, CancellationToken cancellationToken)
+        => throw new NotImplementedException();
 
     #endregion
 }

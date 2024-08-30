@@ -88,18 +88,24 @@ public static class WebApplicationBuilderExtension
     /// <param name="builder"></param>
     public static void RegisterAsyncCommandsSubscriber(this WebApplicationBuilder builder)
         => builder.Services.AddHostedService<CommandConsumerJob>();
-    
+
     /// <summary>
     /// 
     /// </summary>
     /// <param name="builder"></param>
     public static void RegisterEventStreamSubscriber(this WebApplicationBuilder builder)
-        => builder.Services.AddHostedService<EventStreamConsumerJob>();
-    
+    {
+        builder.Services.AddHostedService<EventStreamConsumerJob>();
+        builder.Services.AddHostedService<EventRetriableStreamConsumerJob>();
+    }
+
     /// <summary>
     /// 
     /// </summary>
     /// <param name="builder"></param>
     public static void RegisterMessageStreamSubscriber(this WebApplicationBuilder builder)
-        => builder.Services.AddHostedService<MessageStreamConsumerJob>();
+    {
+        builder.Services.AddHostedService<MessageStreamConsumerJob>();
+        builder.Services.AddHostedService<MessageRetriableStreamConsumerJob>();
+    }
 }
