@@ -8,12 +8,12 @@ using Microsoft.Extensions.Hosting;
 
 namespace Domic.Core.WebAPI.Jobs;
 
-public class EventStreamConsumerJob : IHostedService
+public class MessageStreamConsumerJob : IHostedService
 {
     private readonly IEventStreamBroker _eventStreamBroker;
     private readonly IConfiguration _configuration;
 
-    public EventStreamConsumerJob(IEventStreamBroker eventStreamBroker, IConfiguration configuration)
+    public MessageStreamConsumerJob(IEventStreamBroker eventStreamBroker, IConfiguration configuration)
     {
         _eventStreamBroker = eventStreamBroker;
         _configuration = configuration;
@@ -26,13 +26,13 @@ public class EventStreamConsumerJob : IHostedService
         
         var useCaseTypes = Assembly.Load(new AssemblyName("Domic.UseCase")).GetTypes();
         
-        var eventStreamHandlerTypes = useCaseTypes.Where(type =>
+        var messageStreamHandlerTypes = useCaseTypes.Where(type =>
             type.GetInterfaces().Any(i =>
-                i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IConsumerEventStreamHandler<>)
+                i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IConsumerMessageStreamHandler<>)
             )
         );
 
-        var topics = eventStreamHandlerTypes.Select(type => 
+        var topics = messageStreamHandlerTypes.Select(type => 
             ( type.GetCustomAttribute(typeof(StreamConsumerAttribute)) as StreamConsumerAttribute )?.Topic
         );
 
@@ -52,14 +52,14 @@ public class EventStreamConsumerJob : IHostedService
     
     private void _LongRunningListenerAsNonBlockingAndSequential(string topic, CancellationToken cancellationToken)
     {
-        Task.Factory.StartNew(() => _eventStreamBroker.Subscribe(topic, cancellationToken),
+        Task.Factory.StartNew(() => _eventStreamBroker.SubscribeMessage(topic, cancellationToken),
             TaskCreationOptions.LongRunning
         );
     }
     
     private void _LongRunningListenerAsNonBlockingAndAsynchronously(string topic, CancellationToken cancellationToken)
     {
-        Task.Factory.StartNew(() => _eventStreamBroker.SubscribeAsynchronously(topic, cancellationToken),
+        Task.Factory.StartNew(() => _eventStreamBroker.SubscribeMessageAsynchronously(topic, cancellationToken),
             TaskCreationOptions.LongRunning
         );
     }

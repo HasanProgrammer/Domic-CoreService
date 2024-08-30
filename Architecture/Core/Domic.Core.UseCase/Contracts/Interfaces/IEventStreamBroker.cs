@@ -5,6 +5,8 @@ public interface IEventStreamBroker
     public string NameOfAction  { get; set; }
     public string NameOfService { get; set; }
 
+    #region StructureOfMessage
+
     /// <summary>
     /// 
     /// </summary>
@@ -15,6 +17,25 @@ public interface IEventStreamBroker
         CancellationToken cancellationToken = default
     ) where TMessage : class => throw new NotImplementedException();
     
+    /// <summary>
+    /// This method is used to process messages in a [Topic] in a sequential manner
+    /// </summary>
+    /// <param name="topic"></param>
+    /// <param name="cancellationToken"></param>
+    /// <returns></returns>
+    public void SubscribeMessage(string topic, CancellationToken cancellationToken) => throw new NotImplementedException();
+    
+    /// <summary>
+    /// This method processes the messages of a topic concurrently ( LongRunningTask )
+    /// </summary>
+    /// <param name="topic"></param>
+    /// <param name="cancellationToken"></param>
+    public void SubscribeMessageAsynchronously(string topic, CancellationToken cancellationToken) => throw new NotImplementedException();
+
+    #endregion
+
+    #region StructureOfEvent
+
     /// <summary>
     /// 
     /// </summary>
@@ -30,10 +51,19 @@ public interface IEventStreamBroker
     public Task PublishAsync(CancellationToken cancellationToken) => throw new NotImplementedException();
     
     /// <summary>
-    /// 
+    /// This method is used to process messages in a [Topic] in a sequential manner
     /// </summary>
     /// <param name="topic"></param>
     /// <param name="cancellationToken"></param>
     /// <returns></returns>
-    public Task SubscribeAsync(string topic, CancellationToken cancellationToken);
+    public void Subscribe(string topic, CancellationToken cancellationToken) => throw new NotImplementedException();
+    
+    /// <summary>
+    /// This method processes the messages of a topic concurrently ( LongRunningTask )
+    /// </summary>
+    /// <param name="topic"></param>
+    /// <param name="cancellationToken"></param>
+    public void SubscribeAsynchronously(string topic, CancellationToken cancellationToken) => throw new NotImplementedException();
+
+    #endregion
 }

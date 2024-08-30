@@ -1,14 +1,12 @@
-﻿using Domic.Core.Domain.Contracts.Interfaces;
+﻿namespace Domic.Core.UseCase.Contracts.Interfaces;
 
-namespace Domic.Core.UseCase.Contracts.Interfaces;
-
-public interface IConsumerEventStreamHandler<in TEvent> where TEvent : IDomainEvent
+public interface IConsumerMessageStreamHandler<in TMessage> where TMessage : class
 {
     /// <summary>
     /// 
     /// </summary>
-    /// <param name="event"></param>
-    public void Handle(TEvent @event);
+    /// <param name="message"></param>
+    public void Handle(TMessage message);
     
     /// <summary>
     /// 
@@ -16,14 +14,14 @@ public interface IConsumerEventStreamHandler<in TEvent> where TEvent : IDomainEv
     /// <param name="event"></param>
     /// <param name="cancellationToken"></param>
     /// <returns></returns>
-    public Task HandleAsync(TEvent @event, CancellationToken cancellationToken) => throw new NotImplementedException();
+    public Task HandleAsync(TMessage @event, CancellationToken cancellationToken) => throw new NotImplementedException();
     
     /// <summary>
     /// 
     /// </summary>
-    /// <param name="event"></param>
+    /// <param name="message"></param>
     /// <exception cref="NotImplementedException"></exception>
-    public void AfterMaxRetryHandle(TEvent @event) => throw new NotImplementedException();
+    public void AfterMaxRetryHandle(TMessage message) => throw new NotImplementedException();
     
     /// <summary>
     /// 
@@ -32,6 +30,6 @@ public interface IConsumerEventStreamHandler<in TEvent> where TEvent : IDomainEv
     /// <param name="cancellationToken"></param>
     /// <returns></returns>
     /// <exception cref="NotImplementedException"></exception>
-    public Task AfterMaxRetryHandleAsync(TEvent @event, CancellationToken cancellationToken) 
+    public Task AfterMaxRetryHandleAsync(TMessage @event, CancellationToken cancellationToken) 
         => throw new NotImplementedException();
 }

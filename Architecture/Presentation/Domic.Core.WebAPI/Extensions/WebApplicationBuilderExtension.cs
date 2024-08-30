@@ -95,4 +95,11 @@ public static class WebApplicationBuilderExtension
     /// <param name="builder"></param>
     public static void RegisterEventStreamSubscriber(this WebApplicationBuilder builder)
         => builder.Services.AddHostedService<EventStreamConsumerJob>();
+    
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="builder"></param>
+    public static void RegisterMessageStreamSubscriber(this WebApplicationBuilder builder)
+        => builder.Services.AddHostedService<MessageStreamConsumerJob>();
 }

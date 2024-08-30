@@ -107,7 +107,7 @@ public class MessageBroker : IMessageBroker
 
             consumer.Received += (sender, args) => {
                 
-                //ScopeServices trigger
+                //ScopeServices Trigger
                 using IServiceScope serviceScope = _serviceScopeFactory.CreateScope();
                 
                 var message = Encoding.UTF8.GetString(args.Body.ToArray()).DeSerialize<TMessage>();
@@ -138,7 +138,7 @@ public class MessageBroker : IMessageBroker
 
             consumer.Received += (sender, args) => {
                 
-                //ScopeServices trigger
+                //ScopeServices Trigger
                 using IServiceScope serviceScope = _serviceScopeFactory.CreateScope();
                 
                 var message = Encoding.UTF8.GetString(args.Body.ToArray()).DeSerialize(messageType);
@@ -180,7 +180,7 @@ public class MessageBroker : IMessageBroker
 
             consumer.Received += async (sender, args) => {
                 
-                //ScopeServices trigger
+                //ScopeServices Trigger
                 using IServiceScope serviceScope = _serviceScopeFactory.CreateScope();
                 
                 var message = Encoding.UTF8.GetString(args.Body.ToArray()).DeSerialize<TMessage>();
@@ -511,7 +511,8 @@ public class MessageBroker : IMessageBroker
                         BindingFlags.Instance | BindingFlags.Public | BindingFlags.DeclaredOnly
                     ).GetValue(message);
                 
-                var consumerEventQuery = consumerEventQueryRepository.FindById(messageId);
+                //todo: should be used [CancelationToken] from this method ( _MessageOfQueueHandle )
+                var consumerEventQuery = consumerEventQueryRepository.FindByIdAsync(messageId, default).GetAwaiter().GetResult();
 
                 if (consumerEventQuery is null)
                 {
@@ -702,7 +703,8 @@ public class MessageBroker : IMessageBroker
                         BindingFlags.Instance | BindingFlags.Public | BindingFlags.DeclaredOnly
                     ).GetValue(message);
                 
-                var consumerEventQuery = consumerEventQueryRepository.FindById(messageId);
+                //todo: should be used [CancelationToken] from this method ( _MessageOfQueueHandle )
+                var consumerEventQuery = consumerEventQueryRepository.FindByIdAsync(messageId, default).GetAwaiter().GetResult();
 
                 if (consumerEventQuery is null)
                 {
@@ -908,7 +910,8 @@ public class MessageBroker : IMessageBroker
                         var consumerEventQueryRepository =
                             serviceProvider.GetRequiredService<IConsumerEventQueryRepository>();
                         
-                        var consumerEventQuery = consumerEventQueryRepository.FindById(@event.Id);
+                        //todo: should be used [CancelationToken] from this method ( _EventOfQueueHandle )
+                        var consumerEventQuery = consumerEventQueryRepository.FindByIdAsync(@event.Id, default).GetAwaiter().GetResult();
                         
                         if (consumerEventQuery is null)
                         {
