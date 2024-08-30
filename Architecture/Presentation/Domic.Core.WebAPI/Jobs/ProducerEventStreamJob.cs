@@ -4,26 +4,26 @@ using Microsoft.Extensions.Hosting;
 
 namespace Domic.Core.WebAPI.Jobs;
 
-public class ProducerEventJob : IHostedService, IDisposable
+public class ProducerEventStreamJob : IHostedService, IDisposable
 {
-    private readonly IMessageBroker _messageBroker;
+    private readonly IEventStreamBroker _eventStreamBroker;
     private readonly IConfiguration _configuration;
 
     private Timer _timer;
 
-    public ProducerEventJob(IMessageBroker messageBroker, IConfiguration configuration)
+    public ProducerEventStreamJob(IEventStreamBroker eventStreamBroker, IConfiguration configuration)
     {
-        _messageBroker = messageBroker;
+        _eventStreamBroker = eventStreamBroker;
         _configuration = configuration;
     }
 
     public Task StartAsync(CancellationToken cancellationToken)
     {
-        _messageBroker.NameOfAction  = nameof(ProducerEventJob);
-        _messageBroker.NameOfService = _configuration.GetValue<string>("NameOfService");
+        _eventStreamBroker.NameOfAction  = nameof(ProducerEventStreamJob);
+        _eventStreamBroker.NameOfService = _configuration.GetValue<string>("NameOfService");
 
         _timer =
-            new Timer(state => Task.Run(() => _messageBroker.Publish(cancellationToken), cancellationToken), null, TimeSpan.Zero, TimeSpan.FromSeconds(10));
+            new Timer(state => Task.Run(() => _eventStreamBroker.Publish(cancellationToken), cancellationToken), null, TimeSpan.Zero, TimeSpan.FromSeconds(10));
         
         return Task.CompletedTask;
     }

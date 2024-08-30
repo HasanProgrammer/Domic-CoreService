@@ -815,8 +815,8 @@ public partial interface IRepository<TEntity>
     /// <param name="cancellationToken"></param>
     /// <returns></returns>
     /// <exception cref="NotImplementedException"></exception>
-    public Task<IEnumerable<TEntity>> FindAllWithOrderingAsync(Order order, bool accending, 
-        CancellationToken cancellationToken
+    public Task<IEnumerable<TEntity>> FindAllWithOrderingAsync(Order order, bool accending = true, 
+        CancellationToken cancellationToken = default
     ) => throw new NotImplementedException();
 
     #endregion

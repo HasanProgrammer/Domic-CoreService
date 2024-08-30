@@ -64,7 +64,7 @@ public interface IMessageBroker : IDisposable, IAsyncDisposable
     /// <param name="event"></param>
     /// <typeparam name="TEvent"></typeparam>
     /// <exception cref="NotImplementedException"></exception>
-    public void Publish() => throw new NotImplementedException();
+    public void Publish(CancellationToken cancellationToken) => throw new NotImplementedException();
 
     /// <summary>
     /// 

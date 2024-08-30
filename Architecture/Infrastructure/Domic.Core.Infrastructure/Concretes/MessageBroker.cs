@@ -247,12 +247,12 @@ public class MessageBroker : IMessageBroker
 
     #region EventStructure
     
-    public void Publish()
+    public void Publish(CancellationToken cancellationToken)
     {
         //just one worker ( Task ) in current machine ( instance ) can process outbox events => lock
         lock (_lock)
         {
-            //ScopeServices trigger
+            //ScopeServices Trigger
             using IServiceScope serviceScope = _serviceScopeFactory.CreateScope();
 
             var commandUnitOfWork =
@@ -271,7 +271,12 @@ public class MessageBroker : IMessageBroker
                 
                 commandUnitOfWork.Transaction();
                 
-                foreach (Event targetEvent in eventCommandRepository.FindAllWithOrdering(Order.Date))
+                var events =
+                    eventCommandRepository.FindAllWithOrderingAsync(Order.Date, cancellationToken: cancellationToken)
+                                          .GetAwaiter()
+                                          .GetResult();
+                
+                foreach (Event targetEvent in events)
                 {
                     #region DistributedLock
 
@@ -431,38 +436,6 @@ public class MessageBroker : IMessageBroker
     }
 
     /*---------------------------------------------------------------*/
-
-    private void _EventPublishHandler(IModel channel, Event @event)
-    {
-        var nameOfEvent = @event.Type;
-
-        var domainTypes = Assembly.Load(new AssemblyName("Domic.Domain")).GetTypes();
-        
-        var typeOfEvents = domainTypes.Where(
-            type => type.BaseType?.GetInterfaces().Any(i => i == typeof(IDomainEvent)) ?? false
-        );
-
-        var typeOfEvent = typeOfEvents.FirstOrDefault(type => type.Name.Equals(nameOfEvent));
-
-        var messageBroker = typeOfEvent.GetCustomAttribute(typeof(MessageBrokerAttribute)) as MessageBrokerAttribute;
-
-        switch (messageBroker.ExchangeType)
-        {
-            case Exchange.Direct :
-                channel.PublishMessageToDirectExchange(
-                    @event.Serialize(), messageBroker.Exchange, messageBroker.Route
-                );
-            break;
-            
-            case Exchange.FanOut :
-                channel.PublishMessageToFanOutExchange(
-                    @event.Serialize(), messageBroker.Exchange
-                );
-            break;
-
-            default : throw new ArgumentOutOfRangeException();
-        }
-    }
 
     private void _MessageOfQueueHandle<TMessage>(IModel channel, BasicDeliverEventArgs args, TMessage message,
         IServiceProvider serviceProvider
@@ -848,6 +821,40 @@ public class MessageBroker : IMessageBroker
         }
     }
     
+    /*---------------------------------------------------------------*/
+    
+    private void _EventPublishHandler(IModel channel, Event @event)
+    {
+        var nameOfEvent = @event.Type;
+
+        var domainTypes = Assembly.Load(new AssemblyName("Domic.Domain")).GetTypes();
+        
+        var typeOfEvents = domainTypes.Where(
+            type => type.BaseType?.GetInterfaces().Any(i => i == typeof(IDomainEvent)) ?? false
+        );
+
+        var typeOfEvent = typeOfEvents.FirstOrDefault(type => type.Name.Equals(nameOfEvent));
+
+        var messageBroker = typeOfEvent.GetCustomAttribute(typeof(MessageBrokerAttribute)) as MessageBrokerAttribute;
+
+        switch (messageBroker.ExchangeType)
+        {
+            case Exchange.Direct :
+                channel.PublishMessageToDirectExchange(
+                    @event.Serialize(), messageBroker.Exchange, messageBroker.Route
+                );
+                break;
+            
+            case Exchange.FanOut :
+                channel.PublishMessageToFanOutExchange(
+                    @event.Serialize(), messageBroker.Exchange
+                );
+                break;
+
+            default : throw new ArgumentOutOfRangeException();
+        }
+    }
+    
     private void _EventOfQueueHandle(IModel channel, BasicDeliverEventArgs args, Event @event, string service,
         IServiceProvider serviceProvider
     )
@@ -1163,6 +1170,8 @@ public class MessageBroker : IMessageBroker
             _RequeueMessageAsDeadLetter(channel, args);
         }
     }
+    
+    /*---------------------------------------------------------------*/
     
     private void _RequeueMessageAsDeadLetter(IModel channel, BasicDeliverEventArgs args)
     {

@@ -6,6 +6,7 @@ using Confluent.Kafka;
 using Domic.Core.Common.ClassConsts;
 using Domic.Core.Common.ClassEnums;
 using Domic.Core.Common.ClassModels;
+using Domic.Core.Domain.Attributes;
 using Domic.Core.Domain.Contracts.Interfaces;
 using Domic.Core.Domain.Entities;
 using Domic.Core.Domain.Enumerations;
@@ -282,7 +283,7 @@ public class EventStreamBroker(
 
     #region EventStructure
 
-    public Task PublishAsync(CancellationToken cancellationToken)
+    public void Publish(CancellationToken cancellationToken)
     {
         //just one worker ( Task ) in current machine ( instance ) can process outbox events => lock
         lock (_lock)
@@ -301,8 +302,13 @@ public class EventStreamBroker(
                 var eventLocks = new List<string>();
                 
                 commandUnitOfWork.Transaction();
+
+                var events =
+                    eventCommandRepository.FindAllWithOrderingAsync(Order.Date, cancellationToken: cancellationToken)
+                                          .GetAwaiter()
+                                          .GetResult();
                 
-                foreach (Event targetEvent in eventCommandRepository.FindAllWithOrdering(Order.Date))
+                foreach (Event targetEvent in events)
                 {
                     #region DistributedLock
 
@@ -324,7 +330,7 @@ public class EventStreamBroker(
                         
                         if (targetEvent.IsActive == IsActive.Active)
                         {
-                            //_EventPublishHandler(channel, targetEvent);
+                            _EventPublishHandler(targetEvent);
 
                             var nowDateTime        = DateTime.Now;
                             var nowPersianDateTime = dateTime.ToPersianShortDate(nowDateTime);
@@ -359,13 +365,7 @@ public class EventStreamBroker(
 
                 commandUnitOfWork?.Rollback();
             }
-            finally
-            {
-                
-            }
         }
-
-        return Task.CompletedTask;
     }
 
     public void Subscribe(string topic, CancellationToken cancellationToken)
@@ -1039,6 +1039,44 @@ public class EventStreamBroker(
     }
     
     /*---------------------------------------------------------------*/
+    
+    private void _EventPublishHandler(Event @event)
+    {
+        var nameOfEvent = @event.Type;
+
+        var domainTypes = Assembly.Load(new AssemblyName("Domic.Domain")).GetTypes();
+        
+        var typeOfEvents = domainTypes.Where(
+            type => type.BaseType?.GetInterfaces().Any(i => i == typeof(IDomainEvent)) ?? false
+        );
+
+        var typeOfEvent = typeOfEvents.FirstOrDefault(type => type.Name.Equals(nameOfEvent));
+
+        var broker = typeOfEvent.GetCustomAttribute(typeof(MessageBrokerAttribute)) as MessageBrokerAttribute;
+        
+        var config = new ProducerConfig {
+            BootstrapServers = Environment.GetEnvironmentVariable("E-Kafka-Host"),
+            SaslUsername = Environment.GetEnvironmentVariable("E-Kafka-Username"),
+            SaslPassword = Environment.GetEnvironmentVariable("E-Kafka-Password")
+        };
+
+        Policy.Handle<Exception>()
+              .WaitAndRetry(5, _ => TimeSpan.FromSeconds(3),
+                  (exception, timeSpan, context) => throw exception
+              )
+              .Execute(() => {
+                  
+                  using var producer = new ProducerBuilder<string, string>(config).Build();
+                 
+                  producer.Produce(
+                      broker.Topic,
+                      new Message<string, string> {
+                          Key = nameOfEvent, Value = serializer.Serialize(@event)
+                      }
+                  );
+                  
+              });
+    }
     
     private void _ConsumeNextEvent(Type[] useCaseTypes, string topic, IConsumer<string, string> consumer,
         ConsumeResult<string, string> consumeResult
