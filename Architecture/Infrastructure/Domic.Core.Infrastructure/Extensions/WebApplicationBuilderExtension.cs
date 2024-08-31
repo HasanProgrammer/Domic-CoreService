@@ -443,6 +443,7 @@ public static class WebApplicationBuilderExtension
         Type[] useCaseAssemblyTypes = Assembly.Load(new AssemblyName("Domic.UseCase")).GetTypes();
         
         RegisterAllConsumerEventStreamHandler(builder.Services, useCaseAssemblyTypes);
+        RegisterAllConsumerMessageStreamHandler(builder.Services, useCaseAssemblyTypes);
     }
     
     /*---------------------------------------------------------------*/
@@ -642,6 +643,34 @@ public static class WebApplicationBuilderExtension
             serviceCollection.AddScoped(
                 typeof(IConsumerEventStreamHandler<>).MakeGenericType(eventStreamHandlerTypeValue),
                 eventStreamHandlerType
+            );
+                
+        }
+    }
+    
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="serviceCollection"></param>
+    /// <param name="useCaseAssemblyTypes"></param>
+    private static void RegisterAllConsumerMessageStreamHandler(IServiceCollection serviceCollection, 
+        Type[] useCaseAssemblyTypes
+    )
+    {
+        IEnumerable<Type> messageStreamHandlerTypes = useCaseAssemblyTypes.Where(
+            type => type.GetInterfaces().Any(
+                i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IConsumerMessageStreamHandler<>)
+            )
+        );
+
+        foreach (Type messageStreamHandlerType in messageStreamHandlerTypes) {
+                
+            Type messageStreamHandlerTypeValue =
+                messageStreamHandlerType.GetInterfaces().FirstOrDefault().GetGenericArguments().FirstOrDefault();
+                
+            serviceCollection.AddScoped(
+                typeof(IConsumerMessageStreamHandler<>).MakeGenericType(messageStreamHandlerTypeValue),
+                messageStreamHandlerType
             );
                 
         }

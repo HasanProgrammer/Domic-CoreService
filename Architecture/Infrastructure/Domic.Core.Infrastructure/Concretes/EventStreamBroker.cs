@@ -42,6 +42,38 @@ public class EventStreamBroker(
 
     #region MessageStructure
 
+    public void Publish<TMessage>(string topic, TMessage message, Dictionary<string, string> headers = default)
+        where TMessage : class
+    {
+        var config = new ProducerConfig {
+            BootstrapServers = Environment.GetEnvironmentVariable("E-Kafka-Host"),
+            SaslUsername = Environment.GetEnvironmentVariable("E-Kafka-Username"),
+            SaslPassword = Environment.GetEnvironmentVariable("E-Kafka-Password")
+        };
+        
+        var kafkaHeaders = new Headers();
+
+        foreach (var header in headers)
+            kafkaHeaders.Add(header.Key, Encoding.UTF8.GetBytes(header.Value));
+
+        Policy.Handle<Exception>()
+              .WaitAndRetry(5, _ => TimeSpan.FromSeconds(3),
+                  (exception, timeSpan, context) => throw exception
+              )
+              .Execute(() => {
+                  
+                  using var producer = new ProducerBuilder<string, string>(config).Build();
+                  
+                  producer.Produce(
+                      topic,
+                      new Message<string, string> {
+                          Key = message.GetType().Name, Value = serializer.Serialize(message), Headers = kafkaHeaders
+                      }
+                  );
+                  
+              });
+    }
+
     public Task PublishAsync<TMessage>(string topic, TMessage message, Dictionary<string, string> headers = default,
         CancellationToken cancellationToken = default
     ) where TMessage : class
@@ -580,7 +612,8 @@ public class EventStreamBroker(
     )
     {
         IUnitOfWork unitOfWork = default;
-        object payloadBody     = default;
+        object payload = default;
+        Type messageStreamHandlerType = default;
         
         try
         {
@@ -604,9 +637,9 @@ public class EventStreamBroker(
 
                 var messageStreamHandler = serviceProvider.GetRequiredService(fullContractOfConsumerType);
 
-                var messageStreamHandlerType = messageStreamHandler.GetType();
+                messageStreamHandlerType = messageStreamHandler.GetType();
 
-                payloadBody = JsonConvert.DeserializeObject(consumeResult.Message.Value, messageStreamType);
+                payload = JsonConvert.DeserializeObject(consumeResult.Message.Value, messageStreamType);
 
                 var messageStreamHandlerMethod =
                     messageStreamHandlerType.GetMethod("Handle") ?? throw new Exception("Handle function not found !");
@@ -620,9 +653,9 @@ public class EventStreamBroker(
                 var consumerEventQueryRepository = serviceProvider.GetRequiredService<IConsumerEventQueryRepository>();
 
                 var messageId =
-                    payloadBody.GetType().GetProperty("Id",
+                    payload.GetType().GetProperty("Id",
                         BindingFlags.Instance | BindingFlags.Public | BindingFlags.DeclaredOnly
-                    ).GetValue(payloadBody);
+                    ).GetValue(payload);
     
                 //todo: should be used [CancelationToken] from this method ( _MessageOfQueueHandle )
                 var consumerEventQuery = consumerEventQueryRepository.FindByIdAsync(messageId, default).GetAwaiter().GetResult();
@@ -649,13 +682,13 @@ public class EventStreamBroker(
 
                     #endregion
 
-                    messageStreamHandlerMethod.Invoke(messageStreamHandler, new[] { payloadBody });
+                    messageStreamHandlerMethod.Invoke(messageStreamHandler, new[] { payload });
 
                     unitOfWork.Commit();
                 }
             }
             
-            consumer.Commit(consumeResult);
+            _TryCommitOffset(consumer, consumeResult);
         }
         catch (Exception e)
         {
@@ -664,130 +697,17 @@ public class EventStreamBroker(
             e.ElasticStackExceptionLogger(hostEnvironment, globalUniqueIdGenerator, dateTime,
                 NameOfService, NameOfAction
             );
-
-            unitOfWork?.Rollback();
             
-            var isSuccessRetry = _RetryEventOrMessageOfTopic($"{NameOfService}-Retry-{topic}", payloadBody, countOfRetry: 1);
-            
-            if(isSuccessRetry)
-                consumer.Commit(consumeResult);
-        }
-    }
-    
-    private async Task _ConsumeNextMessageAsync(Type[] useCaseTypes, string topic, IConsumer<string, string> consumer,
-        ConsumeResult<string, string> consumeResult, CancellationToken cancellationToken
-    )
-    {
-        IUnitOfWork unitOfWork = default;
-        object payloadBody     = default;
-        
-        try
-        {
-            /*var groupIdHeader = consumeResult.Message.Headers.First(h => h.Key == GroupIdKey);
-            var countOfRetryHeader = consumeResult.Message.Headers.First(h => h.Key == CountOfRetryKey);
-            var groupIdValue = Encoding.UTF8.GetString(groupIdHeader.GetValueBytes());
-            
-            countOfRetryValue = Convert.ToInt32( Encoding.UTF8.GetString(countOfRetryHeader.GetValueBytes()) );
-            
-            var processingConditions = (
-                string.IsNullOrEmpty(groupIdValue) || (
-                    groupIdValue == $"{NameOfService}-{topic}" && countOfRetryValue > 0
-                )
-            );
-
-            if (processingConditions)
-            {
-                
-            }*/
-            
-            var targetConsumerMessageStreamHandlerType = useCaseTypes.FirstOrDefault(
-                type => type.GetInterfaces().Any(
-                    i => i.IsGenericType &&
-                         i.GetGenericTypeDefinition() == typeof(IConsumerMessageStreamHandler<>) &&
-                         i.GetGenericArguments().Any(arg => arg.Name.Equals(consumeResult.Message.Key))
-                )
-            );
-
-            if (targetConsumerMessageStreamHandlerType is not null)
-            {
-                var messageStreamType =
-                    targetConsumerMessageStreamHandlerType.GetInterfaces()
-                                                          .Select(i => i.GetGenericArguments()[0])
-                                                          .FirstOrDefault();
-
-                var fullContractOfConsumerType =
-                    typeof(IConsumerMessageStreamHandler<>).MakeGenericType(messageStreamType);
-
-                var messageStreamHandler = serviceProvider.GetRequiredService(fullContractOfConsumerType);
-
-                var messageStreamHandlerType = messageStreamHandler.GetType();
-
-                payloadBody = JsonConvert.DeserializeObject(consumeResult.Message.Value, messageStreamType);
-
-                var messageStreamHandlerMethod =
-                    messageStreamHandlerType.GetMethod("Handle") ?? throw new Exception("Handle function not found !");
-                
-                var transactionConfig =
-                        messageStreamHandlerMethod.GetCustomAttribute(typeof(TransactionConfigAttribute)) as TransactionConfigAttribute;
-        
-                if(transactionConfig is null)
-                    throw new Exception("Must be used transaction config attribute!");
-
-                var consumerEventQueryRepository = serviceProvider.GetRequiredService<IConsumerEventQueryRepository>();
-
-                var messageId =
-                    payloadBody.GetType().GetProperty("Id",
-                        BindingFlags.Instance | BindingFlags.Public | BindingFlags.DeclaredOnly
-                    ).GetValue(payloadBody);
-    
-                //todo: should be used [CancelationToken] from this method ( _MessageOfQueueHandle )
-                var consumerEventQuery = await consumerEventQueryRepository.FindByIdAsync(messageId, cancellationToken);
-
-                if (consumerEventQuery is null)
-                {
-                    unitOfWork = serviceProvider.GetRequiredService(_GetTypeOfUnitOfWork(transactionConfig.Type)) as IUnitOfWork;
-
-                    await unitOfWork.TransactionAsync(transactionConfig.IsolationLevel, cancellationToken);
-                     
-                    #region IdempotentConsumerPattern
-    
-                    var nowDateTime = DateTime.Now;
-
-                    consumerEventQuery = new ConsumerEventQuery {
-                        Id = messageId.ToString(),
-                        Type = consumeResult.Message.Key,
-                        CountOfRetry = 0,
-                        CreatedAt_EnglishDate = nowDateTime,
-                        CreatedAt_PersianDate = dateTime.ToPersianShortDate(nowDateTime)
-                    };
-
-                    consumerEventQueryRepository.Add(consumerEventQuery);
-
-                    #endregion
-
-                    await (Task)messageStreamHandlerMethod.Invoke(messageStreamHandler, new[] { payloadBody, cancellationToken });
-
-                    await unitOfWork.CommitAsync(cancellationToken);
-                }
-            }
-            
-            consumer.Commit(consumeResult);
-        }
-        catch (Exception e)
-        {
-            e.FileLogger(hostEnvironment, dateTime);
-
-            e.ElasticStackExceptionLogger(hostEnvironment, globalUniqueIdGenerator, dateTime,
-                NameOfService, NameOfAction
+            e.CentralExceptionLoggerAsStream(hostEnvironment, globalUniqueIdGenerator, this, dateTime, NameOfService, 
+                messageStreamHandlerType is not null ? messageStreamHandlerType.Name : NameOfAction
             );
 
             unitOfWork?.Rollback();
             
-            var isSuccessRetry =
-                await _RetryEventOrMessageOfTopicAsync($"{NameOfService}-Retry-{topic}", payloadBody, countOfRetry: 1, cancellationToken);
-            
-            if(isSuccessRetry)
-                consumer.Commit(consumeResult);
+            var isSuccessRetry = _RetryEventOrMessageOfTopic($"{NameOfService}-Retry-{topic}", payload, countOfRetry: 1);
+
+            if (isSuccessRetry)
+                _TryCommitOffset(consumer, consumeResult);
         }
     }
     
@@ -796,7 +716,8 @@ public class EventStreamBroker(
     )
     {
         IUnitOfWork unitOfWork = default;
-        object payloadBody     = default;
+        object payload = default;
+        Type messageStreamHandlerType = default;
 
         var countOfRetryValue = Convert.ToInt32(
             Encoding.UTF8.GetString(
@@ -826,9 +747,9 @@ public class EventStreamBroker(
 
                 var messageStreamHandler = serviceProvider.GetRequiredService(fullContractOfConsumerType);
 
-                var messageStreamHandlerType = messageStreamHandler.GetType();
+                messageStreamHandlerType = messageStreamHandler.GetType();
 
-                payloadBody = JsonConvert.DeserializeObject(consumeResult.Message.Value, messageStreamType);
+                payload = JsonConvert.DeserializeObject(consumeResult.Message.Value, messageStreamType);
 
                 var messageStreamHandlerMethod =
                     messageStreamHandlerType.GetMethod("Handle") ?? throw new Exception("Handle function not found !");
@@ -843,7 +764,7 @@ public class EventStreamBroker(
                         var afterMaxRetryHandlerMethod =
                             messageStreamHandlerType.GetMethod("AfterMaxRetryHandle") ?? throw new Exception("AfterMaxRetryHandle function not found !");
                  
-                        afterMaxRetryHandlerMethod.Invoke(messageStreamHandler, new[] { payloadBody });
+                        afterMaxRetryHandlerMethod.Invoke(messageStreamHandler, new[] { payload });
                     }
                 }
                 else
@@ -857,12 +778,13 @@ public class EventStreamBroker(
                     var consumerEventQueryRepository = serviceProvider.GetRequiredService<IConsumerEventQueryRepository>();
 
                     var messageId =
-                        payloadBody.GetType().GetProperty("Id",
+                        payload.GetType().GetProperty("Id",
                             BindingFlags.Instance | BindingFlags.Public | BindingFlags.DeclaredOnly
-                        ).GetValue(payloadBody);
+                        ).GetValue(payload);
         
                     //todo: should be used [CancelationToken] from this method ( _MessageOfQueueHandle )
-                    var consumerEventQuery = consumerEventQueryRepository.FindByIdAsync(messageId, default).GetAwaiter().GetResult();
+                    var consumerEventQuery =
+                        consumerEventQueryRepository.FindByIdAsync(messageId, default).GetAwaiter().GetResult();
 
                     if (consumerEventQuery is null)
                     {
@@ -886,14 +808,14 @@ public class EventStreamBroker(
 
                         #endregion
 
-                        messageStreamHandlerMethod.Invoke(messageStreamHandler, new[] { payloadBody });
+                        messageStreamHandlerMethod.Invoke(messageStreamHandler, new[] { payload });
 
                         unitOfWork.Commit();
                     }
                 }
             }
             
-            consumer.Commit(consumeResult);
+            _TryCommitOffset(consumer, consumeResult);
         }
         catch (Exception e)
         {
@@ -902,15 +824,124 @@ public class EventStreamBroker(
             e.ElasticStackExceptionLogger(hostEnvironment, globalUniqueIdGenerator, dateTime,
                 NameOfService, NameOfAction
             );
+            
+            e.CentralExceptionLoggerAsStream(hostEnvironment, globalUniqueIdGenerator, this, dateTime, NameOfService, 
+                messageStreamHandlerType is not null ? messageStreamHandlerType.Name : NameOfAction
+            );
 
             unitOfWork?.Rollback();
 
             countOfRetryValue++;
             
-            var isSuccessRetry = _RetryEventOrMessageOfTopic($"{NameOfService}-Retry-{topic}", payloadBody, countOfRetryValue);
+            var isSuccessRetry = _RetryEventOrMessageOfTopic($"{NameOfService}-Retry-{topic}", payload, countOfRetryValue);
             
             if(isSuccessRetry)
-                consumer.Commit(consumeResult);
+                _TryCommitOffset(consumer, consumeResult);
+        }
+    }
+    
+    private async Task _ConsumeNextMessageAsync(Type[] useCaseTypes, string topic, IConsumer<string, string> consumer,
+        ConsumeResult<string, string> consumeResult, CancellationToken cancellationToken
+    )
+    {
+        IUnitOfWork unitOfWork = default;
+        object payload = default;
+        Type messageStreamHandlerType = default;
+        
+        try
+        {
+            var targetConsumerMessageStreamHandlerType = useCaseTypes.FirstOrDefault(
+                type => type.GetInterfaces().Any(
+                    i => i.IsGenericType &&
+                         i.GetGenericTypeDefinition() == typeof(IConsumerMessageStreamHandler<>) &&
+                         i.GetGenericArguments().Any(arg => arg.Name.Equals(consumeResult.Message.Key))
+                )
+            );
+
+            if (targetConsumerMessageStreamHandlerType is not null)
+            {
+                var messageStreamType =
+                    targetConsumerMessageStreamHandlerType.GetInterfaces()
+                                                          .Select(i => i.GetGenericArguments()[0])
+                                                          .FirstOrDefault();
+
+                var fullContractOfConsumerType =
+                    typeof(IConsumerMessageStreamHandler<>).MakeGenericType(messageStreamType);
+
+                var messageStreamHandler = serviceProvider.GetRequiredService(fullContractOfConsumerType);
+
+                messageStreamHandlerType = messageStreamHandler.GetType();
+
+                payload = JsonConvert.DeserializeObject(consumeResult.Message.Value, messageStreamType);
+
+                var messageStreamHandlerMethod =
+                    messageStreamHandlerType.GetMethod("HandleAsync") ?? throw new Exception("HandleAsync function not found !");
+                
+                var transactionConfig =
+                        messageStreamHandlerMethod.GetCustomAttribute(typeof(TransactionConfigAttribute)) as TransactionConfigAttribute;
+        
+                if(transactionConfig is null)
+                    throw new Exception("Must be used transaction config attribute!");
+
+                var consumerEventQueryRepository = serviceProvider.GetRequiredService<IConsumerEventQueryRepository>();
+
+                var messageId =
+                    payload.GetType().GetProperty("Id",
+                        BindingFlags.Instance | BindingFlags.Public | BindingFlags.DeclaredOnly
+                    ).GetValue(payload);
+    
+                var consumerEventQuery = await consumerEventQueryRepository.FindByIdAsync(messageId, cancellationToken);
+
+                if (consumerEventQuery is null)
+                {
+                    unitOfWork = serviceProvider.GetRequiredService(_GetTypeOfUnitOfWork(transactionConfig.Type)) as IUnitOfWork;
+
+                    await unitOfWork.TransactionAsync(transactionConfig.IsolationLevel, cancellationToken);
+                     
+                    #region IdempotentConsumerPattern
+    
+                    var nowDateTime = DateTime.Now;
+
+                    consumerEventQuery = new ConsumerEventQuery {
+                        Id = messageId.ToString(),
+                        Type = consumeResult.Message.Key,
+                        CountOfRetry = 0,
+                        CreatedAt_EnglishDate = nowDateTime,
+                        CreatedAt_PersianDate = dateTime.ToPersianShortDate(nowDateTime)
+                    };
+
+                    consumerEventQueryRepository.Add(consumerEventQuery);
+
+                    #endregion
+
+                    await (Task)messageStreamHandlerMethod.Invoke(messageStreamHandler, new[] { payload, cancellationToken });
+
+                    await unitOfWork.CommitAsync(cancellationToken);
+                }
+            }
+            
+            _TryCommitOffset(consumer, consumeResult);
+        }
+        catch (Exception e)
+        {
+            e.FileLogger(hostEnvironment, dateTime);
+
+            e.ElasticStackExceptionLogger(hostEnvironment, globalUniqueIdGenerator, dateTime,
+                NameOfService, NameOfAction
+            );
+            
+            e.CentralExceptionLoggerAsStream(hostEnvironment, globalUniqueIdGenerator, this, dateTime, NameOfService, 
+                messageStreamHandlerType is not null ? messageStreamHandlerType.Name : NameOfAction
+            );
+            
+            if(unitOfWork is not null)
+                await unitOfWork.RollbackAsync(cancellationToken);
+            
+            var isSuccessRetry =
+                await _RetryEventOrMessageOfTopicAsync($"{NameOfService}-Retry-{topic}", payload, countOfRetry: 1, cancellationToken);
+            
+            if(isSuccessRetry)
+                _TryCommitOffset(consumer, consumeResult);
         }
     }
     
@@ -919,7 +950,8 @@ public class EventStreamBroker(
     )
     {
         IUnitOfWork unitOfWork = default;
-        object payloadBody     = default;
+        object payload = default;
+        Type messageStreamHandlerType = default;
         
         var countOfRetryValue = Convert.ToInt32(
             Encoding.UTF8.GetString(
@@ -949,12 +981,12 @@ public class EventStreamBroker(
 
                 var messageStreamHandler = serviceProvider.GetRequiredService(fullContractOfConsumerType);
 
-                var messageStreamHandlerType = messageStreamHandler.GetType();
+                messageStreamHandlerType = messageStreamHandler.GetType();
 
-                payloadBody = JsonConvert.DeserializeObject(consumeResult.Message.Value, messageStreamType);
+                payload = JsonConvert.DeserializeObject(consumeResult.Message.Value, messageStreamType);
 
                 var messageStreamHandlerMethod =
-                    messageStreamHandlerType.GetMethod("Handle") ?? throw new Exception("Handle function not found !");
+                    messageStreamHandlerType.GetMethod("HandleAsync") ?? throw new Exception("HandleAsync function not found !");
 
                 var retryAttr =
                     messageStreamHandlerMethod.GetCustomAttribute(typeof(WithMaxRetryAttribute)) as WithMaxRetryAttribute;
@@ -964,9 +996,9 @@ public class EventStreamBroker(
                     if (retryAttr.HasAfterMaxRetryHandle)
                     {
                         var afterMaxRetryHandlerMethod =
-                            messageStreamHandlerType.GetMethod("AfterMaxRetryHandle") ?? throw new Exception("AfterMaxRetryHandle function not found !");
+                            messageStreamHandlerType.GetMethod("AfterMaxRetryHandleAsync") ?? throw new Exception("AfterMaxRetryHandleAsync function not found !");
                  
-                        afterMaxRetryHandlerMethod.Invoke(messageStreamHandler, new[] { payloadBody });
+                        await (Task)afterMaxRetryHandlerMethod.Invoke(messageStreamHandler, new[] { payload, cancellationToken });
                     }
                 }
                 else
@@ -980,11 +1012,10 @@ public class EventStreamBroker(
                     var consumerEventQueryRepository = serviceProvider.GetRequiredService<IConsumerEventQueryRepository>();
 
                     var messageId =
-                        payloadBody.GetType().GetProperty("Id",
+                        payload.GetType().GetProperty("Id",
                             BindingFlags.Instance | BindingFlags.Public | BindingFlags.DeclaredOnly
-                        ).GetValue(payloadBody);
+                        ).GetValue(payload);
         
-                    //todo: should be used [CancelationToken] from this method ( _MessageOfQueueHandle )
                     var consumerEventQuery = await consumerEventQueryRepository.FindByIdAsync(messageId, cancellationToken);
 
                     if (consumerEventQuery is null)
@@ -1009,14 +1040,14 @@ public class EventStreamBroker(
 
                         #endregion
 
-                        await (Task)messageStreamHandlerMethod.Invoke(messageStreamHandler, new[] { payloadBody, cancellationToken });
+                        await (Task)messageStreamHandlerMethod.Invoke(messageStreamHandler, new[] { payload, cancellationToken });
 
                         await unitOfWork.CommitAsync(cancellationToken);
                     }
                 }
             }
             
-            consumer.Commit(consumeResult);
+            _TryCommitOffset(consumer, consumeResult);
         }
         catch (Exception e)
         {
@@ -1025,16 +1056,21 @@ public class EventStreamBroker(
             e.ElasticStackExceptionLogger(hostEnvironment, globalUniqueIdGenerator, dateTime,
                 NameOfService, NameOfAction
             );
-
-            unitOfWork?.Rollback();
+            
+            e.CentralExceptionLoggerAsStream(hostEnvironment, globalUniqueIdGenerator, this, dateTime, NameOfService, 
+                messageStreamHandlerType is not null ? messageStreamHandlerType.Name : NameOfAction
+            );
+            
+            if(unitOfWork is not null)
+                await unitOfWork.RollbackAsync(cancellationToken);
 
             countOfRetryValue++;
             
             var isSuccessRetry =
-                await _RetryEventOrMessageOfTopicAsync($"{NameOfService}-Retry-{topic}", payloadBody, countOfRetryValue, cancellationToken);
+                await _RetryEventOrMessageOfTopicAsync($"{NameOfService}-Retry-{topic}", payload, countOfRetryValue, cancellationToken);
             
             if(isSuccessRetry)
-                consumer.Commit(consumeResult);
+                _TryCommitOffset(consumer, consumeResult);
         }
     }
     
@@ -1059,23 +1095,15 @@ public class EventStreamBroker(
             SaslUsername = Environment.GetEnvironmentVariable("E-Kafka-Username"),
             SaslPassword = Environment.GetEnvironmentVariable("E-Kafka-Password")
         };
-
-        Policy.Handle<Exception>()
-              .WaitAndRetry(5, _ => TimeSpan.FromSeconds(3),
-                  (exception, timeSpan, context) => throw exception
-              )
-              .Execute(() => {
-                  
-                  using var producer = new ProducerBuilder<string, string>(config).Build();
+        
+        using var producer = new ProducerBuilder<string, string>(config).Build();
                  
-                  producer.Produce(
-                      broker.Topic,
-                      new Message<string, string> {
-                          Key = nameOfEvent, Value = serializer.Serialize(@event)
-                      }
-                  );
-                  
-              });
+        producer.Produce(
+            broker.Topic,
+            new Message<string, string> {
+                Key = nameOfEvent, Value = serializer.Serialize(@event)
+            }
+        );
     }
     
     private void _ConsumeNextEvent(Type[] useCaseTypes, string topic, IConsumer<string, string> consumer,
@@ -1084,6 +1112,7 @@ public class EventStreamBroker(
     {
         IUnitOfWork unitOfWork = default;
         Event @event = default;
+        Type eventStreamHandlerType = default;
         
         try
         {
@@ -1107,11 +1136,11 @@ public class EventStreamBroker(
 
                 var eventStreamHandler = serviceProvider.GetRequiredService(fullContractOfConsumerType);
 
-                var eventStreamHandlerType = eventStreamHandler.GetType();
+                eventStreamHandlerType = eventStreamHandler.GetType();
 
                 @event = JsonConvert.DeserializeObject<Event>(consumeResult.Message.Value);
 
-                var payloadOfEvent = JsonConvert.DeserializeObject(@event.Payload, eventStreamType);
+                var payload = JsonConvert.DeserializeObject(@event.Payload, eventStreamType);
                 
                 var eventStreamHandlerMethod =
                     eventStreamHandlerType.GetMethod("Handle") ?? throw new Exception("Handle function not found !");
@@ -1149,13 +1178,13 @@ public class EventStreamBroker(
 
                     #endregion
 
-                    eventStreamHandlerMethod.Invoke(eventStreamHandler, new[] { payloadOfEvent });
+                    eventStreamHandlerMethod.Invoke(eventStreamHandler, new[] { payload });
 
                     unitOfWork.Commit();
                 }
             }
             
-            consumer.Commit(consumeResult);
+            _TryCommitOffset(consumer, consumeResult);
         }
         catch (Exception e)
         {
@@ -1163,6 +1192,10 @@ public class EventStreamBroker(
 
             e.ElasticStackExceptionLogger(hostEnvironment, globalUniqueIdGenerator, dateTime,
                 NameOfService, NameOfAction
+            );
+            
+            e.CentralExceptionLoggerAsStream(hostEnvironment, globalUniqueIdGenerator, this, dateTime, NameOfService, 
+                eventStreamHandlerType is not null ? eventStreamHandlerType.Name : NameOfAction
             );
 
             unitOfWork?.Rollback();
@@ -1170,104 +1203,7 @@ public class EventStreamBroker(
             var isSuccessRetry = _RetryEventOrMessageOfTopic($"{NameOfService}-Retry-{topic}", @event, countOfRetry: 1);
             
             if(isSuccessRetry)
-                consumer.Commit(consumeResult);
-        }
-    }
-    
-    private async Task _ConsumeNextEventAsync(Type[] useCaseTypes, string topic, IConsumer<string, string> consumer,
-        ConsumeResult<string, string> consumeResult, CancellationToken cancellationToken
-    )
-    {
-        IUnitOfWork unitOfWork = default;
-        Event @event = default;
-        
-        try
-        {
-            var targetConsumerEventStreamHandlerType = useCaseTypes.FirstOrDefault(
-                type => type.GetInterfaces().Any(
-                    i => i.IsGenericType &&
-                         i.GetGenericTypeDefinition() == typeof(IConsumerEventStreamHandler<>) &&
-                         i.GetGenericArguments().Any(arg => arg.Name.Equals(consumeResult.Message.Key))
-                )
-            );
-
-            if (targetConsumerEventStreamHandlerType is not null)
-            {
-                var eventStreamType =
-                    targetConsumerEventStreamHandlerType.GetInterfaces()
-                                                        .Select(i => i.GetGenericArguments()[0])
-                                                        .FirstOrDefault();
-
-                var fullContractOfConsumerType =
-                    typeof(IConsumerEventStreamHandler<>).MakeGenericType(eventStreamType);
-
-                var eventStreamHandler = serviceProvider.GetRequiredService(fullContractOfConsumerType);
-
-                var eventStreamHandlerType = eventStreamHandler.GetType();
-
-                @event = JsonConvert.DeserializeObject<Event>(consumeResult.Message.Value);
-
-                var payloadOfEvent = JsonConvert.DeserializeObject(@event.Payload, eventStreamType);
-                
-                var eventStreamHandlerMethod =
-                    eventStreamHandlerType.GetMethod("HandleAsync") ?? throw new Exception("HandleAsync function not found !");
-                
-                var transactionConfig =
-                        eventStreamHandlerMethod.GetCustomAttribute(typeof(TransactionConfigAttribute)) as TransactionConfigAttribute;
-        
-                if(transactionConfig is null)
-                    throw new Exception("Must be used transaction config attribute!");
-
-                var consumerEventQueryRepository = serviceProvider.GetRequiredService<IConsumerEventQueryRepository>();
-    
-                //todo: should be used [CancelationToken] from this method ( _MessageOfQueueHandle )
-                var consumerEventQuery = await consumerEventQueryRepository.FindByIdAsync(@event.Id, cancellationToken);
-
-                if (consumerEventQuery is null)
-                {
-                    unitOfWork = serviceProvider.GetRequiredService(_GetTypeOfUnitOfWork(transactionConfig.Type)) as IUnitOfWork;
-
-                    await unitOfWork.TransactionAsync(transactionConfig.IsolationLevel, cancellationToken);
-                     
-                    #region IdempotentConsumerPattern
-    
-                    var nowDateTime = DateTime.Now;
-
-                    consumerEventQuery = new ConsumerEventQuery {
-                        Id = @event.Id,
-                        Type = consumeResult.Message.Key,
-                        CountOfRetry = 0,
-                        CreatedAt_EnglishDate = nowDateTime,
-                        CreatedAt_PersianDate = dateTime.ToPersianShortDate(nowDateTime)
-                    };
-
-                    consumerEventQueryRepository.Add(consumerEventQuery);
-
-                    #endregion
-
-                    await (Task)eventStreamHandlerMethod.Invoke(eventStreamHandler, new[] { payloadOfEvent, cancellationToken });
-
-                    await unitOfWork.CommitAsync(cancellationToken);
-                }
-            }
-            
-            consumer.Commit(consumeResult);
-        }
-        catch (Exception e)
-        {
-            e.FileLogger(hostEnvironment, dateTime);
-
-            e.ElasticStackExceptionLogger(hostEnvironment, globalUniqueIdGenerator, dateTime,
-                NameOfService, NameOfAction
-            );
-
-            unitOfWork?.Rollback();
-            
-            var isSuccessRetry = 
-                await _RetryEventOrMessageOfTopicAsync($"{NameOfService}-Retry-{topic}", @event, countOfRetry: 1, cancellationToken);
-            
-            if(isSuccessRetry)
-                consumer.Commit(consumeResult);
+                _TryCommitOffset(consumer, consumeResult);
         }
     }
     
@@ -1277,6 +1213,7 @@ public class EventStreamBroker(
     {
         IUnitOfWork unitOfWork = default;
         Event @event = default;
+        Type eventStreamHandlerType = default;
         
         var countOfRetryValue = Convert.ToInt32(
             Encoding.UTF8.GetString(
@@ -1306,55 +1243,71 @@ public class EventStreamBroker(
 
                 var eventStreamHandler = serviceProvider.GetRequiredService(fullContractOfConsumerType);
 
-                var eventStreamHandlerType = eventStreamHandler.GetType();
+                eventStreamHandlerType = eventStreamHandler.GetType();
 
                 @event = JsonConvert.DeserializeObject<Event>(consumeResult.Message.Value);
 
-                var payloadOfEvent = JsonConvert.DeserializeObject(@event.Payload, eventStreamType);
+                var payload = JsonConvert.DeserializeObject(@event.Payload, eventStreamType);
                 
                 var eventStreamHandlerMethod =
                     eventStreamHandlerType.GetMethod("Handle") ?? throw new Exception("Handle function not found !");
                 
-                var transactionConfig =
+                var retryAttr =
+                    eventStreamHandlerMethod.GetCustomAttribute(typeof(WithMaxRetryAttribute)) as WithMaxRetryAttribute;
+                 
+                if (countOfRetryValue > retryAttr.Count)
+                {
+                    if (retryAttr.HasAfterMaxRetryHandle)
+                    {
+                        var afterMaxRetryHandlerMethod =
+                            eventStreamHandlerType.GetMethod("AfterMaxRetryHandle") ?? throw new Exception("AfterMaxRetryHandle function not found !");
+                 
+                        afterMaxRetryHandlerMethod.Invoke(eventStreamHandlerType, new[] { payload });
+                    }
+                }
+                else
+                {
+                    var transactionConfig =
                         eventStreamHandlerMethod.GetCustomAttribute(typeof(TransactionConfigAttribute)) as TransactionConfigAttribute;
         
-                if(transactionConfig is null)
-                    throw new Exception("Must be used transaction config attribute!");
+                    if(transactionConfig is null)
+                        throw new Exception("Must be used transaction config attribute!");
 
-                var consumerEventQueryRepository = serviceProvider.GetRequiredService<IConsumerEventQueryRepository>();
+                    var consumerEventQueryRepository = serviceProvider.GetRequiredService<IConsumerEventQueryRepository>();
     
-                //todo: should be used [CancelationToken] from this method ( _MessageOfQueueHandle )
-                var consumerEventQuery = consumerEventQueryRepository.FindByIdAsync(@event.Id, default).GetAwaiter().GetResult();
+                    //todo: should be used [CancelationToken] from this method ( _MessageOfQueueHandle )
+                    var consumerEventQuery = consumerEventQueryRepository.FindByIdAsync(@event.Id, default).GetAwaiter().GetResult();
 
-                if (consumerEventQuery is null)
-                {
-                    unitOfWork = serviceProvider.GetRequiredService(_GetTypeOfUnitOfWork(transactionConfig.Type)) as IUnitOfWork;
+                    if (consumerEventQuery is null)
+                    {
+                        unitOfWork = serviceProvider.GetRequiredService(_GetTypeOfUnitOfWork(transactionConfig.Type)) as IUnitOfWork;
 
-                    unitOfWork.Transaction(transactionConfig.IsolationLevel);
+                        unitOfWork.Transaction(transactionConfig.IsolationLevel);
                      
-                    #region IdempotentConsumerPattern
+                        #region IdempotentConsumerPattern
     
-                    var nowDateTime = DateTime.Now;
+                        var nowDateTime = DateTime.Now;
 
-                    consumerEventQuery = new ConsumerEventQuery {
-                        Id = @event.Id,
-                        Type = consumeResult.Message.Key,
-                        CountOfRetry = 0,
-                        CreatedAt_EnglishDate = nowDateTime,
-                        CreatedAt_PersianDate = dateTime.ToPersianShortDate(nowDateTime)
-                    };
+                        consumerEventQuery = new ConsumerEventQuery {
+                            Id = @event.Id,
+                            Type = consumeResult.Message.Key,
+                            CountOfRetry = 0,
+                            CreatedAt_EnglishDate = nowDateTime,
+                            CreatedAt_PersianDate = dateTime.ToPersianShortDate(nowDateTime)
+                        };
 
-                    consumerEventQueryRepository.Add(consumerEventQuery);
+                        consumerEventQueryRepository.Add(consumerEventQuery);
 
-                    #endregion
+                        #endregion
 
-                    eventStreamHandlerMethod.Invoke(eventStreamHandler, new[] { payloadOfEvent });
+                        eventStreamHandlerMethod.Invoke(eventStreamHandler, new[] { payload });
 
-                    unitOfWork.Commit();
+                        unitOfWork.Commit();
+                    }
                 }
             }
             
-            consumer.Commit(consumeResult);
+            _TryCommitOffset(consumer, consumeResult);
         }
         catch (Exception e)
         {
@@ -1362,6 +1315,10 @@ public class EventStreamBroker(
 
             e.ElasticStackExceptionLogger(hostEnvironment, globalUniqueIdGenerator, dateTime,
                 NameOfService, NameOfAction
+            );
+            
+            e.CentralExceptionLoggerAsStream(hostEnvironment, globalUniqueIdGenerator, this, dateTime, NameOfService, 
+                eventStreamHandlerType is not null ? eventStreamHandlerType.Name : NameOfAction
             );
 
             unitOfWork?.Rollback();
@@ -1371,22 +1328,17 @@ public class EventStreamBroker(
             var isSuccessRetry = _RetryEventOrMessageOfTopic($"{NameOfService}-Retry-{topic}", @event, countOfRetryValue);
             
             if(isSuccessRetry)
-                consumer.Commit(consumeResult);
+                _TryCommitOffset(consumer, consumeResult);
         }
     }
     
-    private async Task _ConsumeNextRetriableEventAsync(Type[] useCaseTypes, string topic, IConsumer<string, string> consumer,
+    private async Task _ConsumeNextEventAsync(Type[] useCaseTypes, string topic, IConsumer<string, string> consumer,
         ConsumeResult<string, string> consumeResult, CancellationToken cancellationToken
     )
     {
         IUnitOfWork unitOfWork = default;
         Event @event = default;
-        
-        var countOfRetryValue = Convert.ToInt32(
-            Encoding.UTF8.GetString(
-                consumeResult.Message.Headers.First(h => h.Key == CountOfRetryKey).GetValueBytes()
-            )
-        );
+        Type eventStreamHandlerType = default;
         
         try
         {
@@ -1410,11 +1362,11 @@ public class EventStreamBroker(
 
                 var eventStreamHandler = serviceProvider.GetRequiredService(fullContractOfConsumerType);
 
-                var eventStreamHandlerType = eventStreamHandler.GetType();
+                eventStreamHandlerType = eventStreamHandler.GetType();
 
                 @event = JsonConvert.DeserializeObject<Event>(consumeResult.Message.Value);
 
-                var payloadOfEvent = JsonConvert.DeserializeObject(@event.Payload, eventStreamType);
+                var payload = JsonConvert.DeserializeObject(@event.Payload, eventStreamType);
                 
                 var eventStreamHandlerMethod =
                     eventStreamHandlerType.GetMethod("HandleAsync") ?? throw new Exception("HandleAsync function not found !");
@@ -1427,7 +1379,6 @@ public class EventStreamBroker(
 
                 var consumerEventQueryRepository = serviceProvider.GetRequiredService<IConsumerEventQueryRepository>();
     
-                //todo: should be used [CancelationToken] from this method ( _MessageOfQueueHandle )
                 var consumerEventQuery = await consumerEventQueryRepository.FindByIdAsync(@event.Id, cancellationToken);
 
                 if (consumerEventQuery is null)
@@ -1452,13 +1403,13 @@ public class EventStreamBroker(
 
                     #endregion
 
-                    await (Task)eventStreamHandlerMethod.Invoke(eventStreamHandler, new[] { payloadOfEvent, cancellationToken });
+                    await (Task)eventStreamHandlerMethod.Invoke(eventStreamHandler, new[] { payload, cancellationToken });
 
                     await unitOfWork.CommitAsync(cancellationToken);
                 }
             }
             
-            consumer.Commit(consumeResult);
+            _TryCommitOffset(consumer, consumeResult);
         }
         catch (Exception e)
         {
@@ -1467,8 +1418,137 @@ public class EventStreamBroker(
             e.ElasticStackExceptionLogger(hostEnvironment, globalUniqueIdGenerator, dateTime,
                 NameOfService, NameOfAction
             );
+            
+            e.CentralExceptionLoggerAsStream(hostEnvironment, globalUniqueIdGenerator, this, dateTime, NameOfService, 
+                eventStreamHandlerType is not null ? eventStreamHandlerType.Name : NameOfAction
+            );
 
-            unitOfWork?.Rollback();
+            if(unitOfWork is not null)
+                await unitOfWork.RollbackAsync(cancellationToken);
+            
+            var isSuccessRetry = 
+                await _RetryEventOrMessageOfTopicAsync($"{NameOfService}-Retry-{topic}", @event, countOfRetry: 1, cancellationToken);
+            
+            if(isSuccessRetry)
+                _TryCommitOffset(consumer, consumeResult);
+        }
+    }
+    
+    private async Task _ConsumeNextRetriableEventAsync(Type[] useCaseTypes, string topic, IConsumer<string, string> consumer,
+        ConsumeResult<string, string> consumeResult, CancellationToken cancellationToken
+    )
+    {
+        IUnitOfWork unitOfWork = default;
+        Event @event = default;
+        Type eventStreamHandlerType = default;
+        
+        var countOfRetryValue = Convert.ToInt32(
+            Encoding.UTF8.GetString(
+                consumeResult.Message.Headers.First(h => h.Key == CountOfRetryKey).GetValueBytes()
+            )
+        );
+        
+        try
+        {
+            var targetConsumerEventStreamHandlerType = useCaseTypes.FirstOrDefault(
+                type => type.GetInterfaces().Any(
+                    i => i.IsGenericType &&
+                         i.GetGenericTypeDefinition() == typeof(IConsumerEventStreamHandler<>) &&
+                         i.GetGenericArguments().Any(arg => arg.Name.Equals(consumeResult.Message.Key))
+                )
+            );
+
+            if (targetConsumerEventStreamHandlerType is not null)
+            {
+                var eventStreamType =
+                    targetConsumerEventStreamHandlerType.GetInterfaces()
+                                                        .Select(i => i.GetGenericArguments()[0])
+                                                        .FirstOrDefault();
+
+                var fullContractOfConsumerType =
+                    typeof(IConsumerEventStreamHandler<>).MakeGenericType(eventStreamType);
+
+                var eventStreamHandler = serviceProvider.GetRequiredService(fullContractOfConsumerType);
+
+                eventStreamHandlerType = eventStreamHandler.GetType();
+
+                @event = JsonConvert.DeserializeObject<Event>(consumeResult.Message.Value);
+
+                var payload = JsonConvert.DeserializeObject(@event.Payload, eventStreamType);
+                
+                var eventStreamHandlerMethod =
+                    eventStreamHandlerType.GetMethod("HandleAsync") ?? throw new Exception("HandleAsync function not found !");
+                
+                var retryAttr =
+                    eventStreamHandlerMethod.GetCustomAttribute(typeof(WithMaxRetryAttribute)) as WithMaxRetryAttribute;
+                 
+                if (countOfRetryValue > retryAttr.Count)
+                {
+                    if (retryAttr.HasAfterMaxRetryHandle)
+                    {
+                        var afterMaxRetryHandlerMethod =
+                            eventStreamHandlerType.GetMethod("AfterMaxRetryHandleAsync") ?? throw new Exception("AfterMaxRetryHandleAsync function not found !");
+                 
+                        await (Task)afterMaxRetryHandlerMethod.Invoke(eventStreamHandlerType, new[] { payload, cancellationToken });
+                    }
+                }
+                else
+                {
+                    var transactionConfig =
+                        eventStreamHandlerMethod.GetCustomAttribute(typeof(TransactionConfigAttribute)) as TransactionConfigAttribute;
+        
+                    if(transactionConfig is null)
+                        throw new Exception("Must be used transaction config attribute!");
+
+                    var consumerEventQueryRepository = serviceProvider.GetRequiredService<IConsumerEventQueryRepository>();
+    
+                    var consumerEventQuery = await consumerEventQueryRepository.FindByIdAsync(@event.Id, cancellationToken);
+
+                    if (consumerEventQuery is null)
+                    {
+                        unitOfWork = serviceProvider.GetRequiredService(_GetTypeOfUnitOfWork(transactionConfig.Type)) as IUnitOfWork;
+
+                        await unitOfWork.TransactionAsync(transactionConfig.IsolationLevel, cancellationToken);
+                     
+                        #region IdempotentConsumerPattern
+    
+                        var nowDateTime = DateTime.Now;
+
+                        consumerEventQuery = new ConsumerEventQuery {
+                            Id = @event.Id,
+                            Type = consumeResult.Message.Key,
+                            CountOfRetry = 0,
+                            CreatedAt_EnglishDate = nowDateTime,
+                            CreatedAt_PersianDate = dateTime.ToPersianShortDate(nowDateTime)
+                        };
+
+                        consumerEventQueryRepository.Add(consumerEventQuery);
+
+                        #endregion
+
+                        await (Task)eventStreamHandlerMethod.Invoke(eventStreamHandler, new[] { payload, cancellationToken });
+
+                        await unitOfWork.CommitAsync(cancellationToken);
+                    }
+                }
+            }
+            
+            _TryCommitOffset(consumer, consumeResult);
+        }
+        catch (Exception e)
+        {
+            e.FileLogger(hostEnvironment, dateTime);
+
+            e.ElasticStackExceptionLogger(hostEnvironment, globalUniqueIdGenerator, dateTime,
+                NameOfService, NameOfAction
+            );
+            
+            e.CentralExceptionLoggerAsStream(hostEnvironment, globalUniqueIdGenerator, this, dateTime, NameOfService, 
+                eventStreamHandlerType is not null ? eventStreamHandlerType.Name : NameOfAction
+            );
+
+            if(unitOfWork is not null)
+                await unitOfWork.RollbackAsync(cancellationToken);
 
             countOfRetryValue++;
             
@@ -1476,7 +1556,7 @@ public class EventStreamBroker(
                 await _RetryEventOrMessageOfTopicAsync($"{NameOfService}-Retry-{topic}", @event, countOfRetryValue, cancellationToken);
             
             if(isSuccessRetry)
-                consumer.Commit(consumeResult);
+                _TryCommitOffset(consumer, consumeResult);
         }
     }
     
@@ -1493,6 +1573,13 @@ public class EventStreamBroker(
                 domainTypes.FirstOrDefault(type => type.GetInterfaces().Any(i => i == typeof(ICoreCommandUnitOfWork))),
             _ => throw new ArgumentNotFoundException("Must be defined transaction type!")
         };
+    }
+
+    private void _TryCommitOffset(IConsumer<string, string> consumer, ConsumeResult<string, string> consumeResult)
+    {
+        Policy.Handle<Exception>()
+              .WaitAndRetry(5, _ => TimeSpan.FromSeconds(3), (exception, timeSpan, context) => throw exception)
+              .Execute(() => consumer.Commit(consumeResult));
     }
     
     private bool _RetryEventOrMessageOfTopic(string topic, object payload, int countOfRetry)

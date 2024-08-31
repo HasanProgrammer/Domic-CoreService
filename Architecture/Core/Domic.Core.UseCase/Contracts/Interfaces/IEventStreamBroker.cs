@@ -6,6 +6,18 @@ public interface IEventStreamBroker
     public string NameOfService { get; set; }
 
     #region MessageStructure
+    
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="topic"></param>
+    /// <param name="message"></param>
+    /// <param name="headers"></param>
+    /// <typeparam name="TMessage"></typeparam>
+    /// <returns></returns>
+    /// <exception cref="NotImplementedException"></exception>
+    public void Publish<TMessage>(string topic, TMessage message, Dictionary<string, string> headers = default) 
+        where TMessage : class => throw new NotImplementedException();
 
     /// <summary>
     /// 

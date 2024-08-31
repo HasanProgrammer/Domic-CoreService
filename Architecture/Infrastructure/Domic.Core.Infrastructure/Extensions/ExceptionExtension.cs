@@ -108,8 +108,35 @@ public static class ExceptionExtension
                 Route        = Broker.StateTracker_Exception_Route
             };
 
-            //ToDo : ( Tech Debt ) -> Should be used retry pattern ( like polly )!
             messageBroker.Publish<SystemException>(dto);
+        }
+        catch (Exception exception)
+        {
+            exception.FileLogger(hostEnvironment, dateTime);
+        }
+    }
+    
+    public static void CentralExceptionLoggerAsStream(this Exception e, IHostEnvironment hostEnvironment, 
+        IGlobalUniqueIdGenerator globalUniqueIdGenerator, IEventStreamBroker eventStreamBroker, IDateTime dateTime, 
+        string service, string action
+    )
+    {
+        try
+        {
+            var nowDateTime        = DateTime.Now;
+            var nowPersianDateTime = dateTime.ToPersianShortDate(nowDateTime);
+            
+            var systemException = new SystemException {
+                Id        = globalUniqueIdGenerator.GetRandom(6) ,
+                Service   = service                              ,
+                Action    = action                               ,
+                Message   = e.Message                            ,
+                Exception = e.StackTrace                         ,
+                CreatedAt_EnglishDate = nowDateTime              ,
+                CreatedAt_PersianDate = nowPersianDateTime
+            };
+            
+            eventStreamBroker.Publish<SystemException>("StateTracker", systemException);
         }
         catch (Exception exception)
         {
