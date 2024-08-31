@@ -66,7 +66,6 @@ public static class RabbitExtension
     public static void BindQueueToFanOutExchange(this IModel Channel, string exchange, string queue)
         => Channel.QueueBind(queue: queue, exchange: exchange, routingKey: "", arguments: null);
     
-    /*ارسال مستقیم پیام به Queue*/
     /// <summary>
     /// 
     /// </summary>
@@ -82,7 +81,6 @@ public static class RabbitExtension
         Channel.BasicPublish(exchange: "", routingKey: queue, basicProperties: null, body: Body);
     }
     
-    /*ارسال پیام به مبادله گر ( Exchange ) پیام به روش Direct*/
     /// <summary>
     /// 
     /// </summary>
@@ -131,7 +129,6 @@ public static class RabbitExtension
         Channel.BasicPublish(exchange: exchange, routingKey: route, basicProperties: props, body: Body);
     }
     
-    /*ارسال پیام به مبادله گر ( Exchange ) پیام به روش Direct | با ارسال Header های اختصاصی*/
     /// <summary>
     /// 
     /// </summary>
@@ -151,7 +148,6 @@ public static class RabbitExtension
         Channel.BasicPublish(exchange: exchange, routingKey: route, basicProperties: properties, body: Body);
     }
     
-    /*ارسال پیام به مبادله گر ( Exchange ) پیام به روش FanOut*/
     /// <summary>
     /// 
     /// </summary>
@@ -173,7 +169,6 @@ public static class RabbitExtension
         Channel.BasicPublish(exchange: exchange, routingKey: "", basicProperties: props, body: Body);
     }
     
-    /*ارسال پیام به مبادله گر ( Exchange ) پیام به روش FanOut | با ارسال Header های اختصاصی*/
     /// <summary>
     /// 
     /// </summary>
