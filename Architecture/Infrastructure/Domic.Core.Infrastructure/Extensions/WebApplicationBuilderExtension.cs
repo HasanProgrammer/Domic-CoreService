@@ -48,6 +48,8 @@ public static class WebApplicationBuilderExtension
         builder.Services.AddSingleton(typeof(IGlobalUniqueIdGenerator), typeof(GlobalUniqueIdGenerator));
         
         builder.Services.AddScoped(typeof(ILogger), typeof(Logger));
+        
+        builder.Services.AddScoped(typeof(IStreamLogger), typeof(StreamLogger));
     }
 
     /// <summary>
@@ -226,8 +228,7 @@ public static class WebApplicationBuilderExtension
     }
     
     /// <summary>
-    /// ToDo: must be ( Issuer )   replaced with Host.GetIPAddress()
-    /// ToDo: must be ( Audience ) replaced with Host.GetIPAddress()
+    /// 
     /// </summary>
     /// <param name="builder"></param>
     /// <exception cref="TokenNotValidException"></exception>
