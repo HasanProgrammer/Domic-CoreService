@@ -5,6 +5,7 @@ using Domic.Core.Domain.Exceptions;
 using Grpc.Core;
 using Grpc.Core.Interceptors;
 using Domic.Core.Common.ClassExtensions;
+using Domic.Core.Common.ClassModels;
 using Domic.Core.Infrastructure.Extensions;
 using Domic.Core.UseCase.Contracts.Interfaces;
 using Domic.Core.UseCase.Exceptions;
@@ -26,6 +27,7 @@ public class FullExceptionHandlerInterceptor : Interceptor
     private readonly IHostEnvironment _hostEnvironment;
 
     private IMessageBroker           _messageBroker;
+    private IEventStreamBroker       _eventStreamBroker;
     private IDateTime                _dateTime;
     private ICoreCommandUnitOfWork   _coreCommandUnitOfWork;
     private IGlobalUniqueIdGenerator _globalUniqueIdGenerator;
@@ -60,6 +62,7 @@ public class FullExceptionHandlerInterceptor : Interceptor
         ServerCallContext context , UnaryServerMethod<TRequest, TResponse> continuation
     )
     {
+        var loggerType  = _configuration.GetSection("LoggerType").Get<LoggerType>();
         var serviceName = _configuration.GetValue<string>("NameOfService");
         
         try
@@ -71,12 +74,24 @@ public class FullExceptionHandlerInterceptor : Interceptor
                            .GetRequiredService(_iCommandUnitOfWorkType) as ICoreCommandUnitOfWork;
             
             _dateTime                = context.GetHttpContext().RequestServices.GetRequiredService<IDateTime>();
-            _messageBroker           = context.GetHttpContext().RequestServices.GetRequiredService<IMessageBroker>();
             _globalUniqueIdGenerator = context.GetHttpContext().RequestServices.GetRequiredService<IGlobalUniqueIdGenerator>();
-            
-            context.CentralRequestLoggerAsync(_hostEnvironment, _globalUniqueIdGenerator, _messageBroker, _dateTime, 
-                serviceName, request, context.CancellationToken
-            );
+
+            if (loggerType.Messaging)
+            {
+                _messageBroker = context.GetHttpContext().RequestServices.GetRequiredService<IMessageBroker>();
+                
+                context.CentralRequestLoggerAsync(_hostEnvironment, _globalUniqueIdGenerator, _messageBroker, _dateTime, 
+                    serviceName, request, context.CancellationToken
+                );
+            }
+            else
+            {
+                _eventStreamBroker = context.GetHttpContext().RequestServices.GetRequiredService<IEventStreamBroker>();
+                
+                context.CentralRequestLoggerAsStreamAsync(_hostEnvironment, _globalUniqueIdGenerator, _eventStreamBroker, 
+                    _dateTime, serviceName, request, context.CancellationToken
+                );
+            }
             
             context.CheckLicense(_configuration);
             
@@ -112,7 +127,7 @@ public class FullExceptionHandlerInterceptor : Interceptor
         }
         catch (DomainException e) //For command side
         {
-            _coreCommandUnitOfWork.Rollback();
+            await _RollbackAsync(context.CancellationToken);
             
             var Response = new {
                 Code    = _configuration.GetErrorStatusCode(),
@@ -124,7 +139,7 @@ public class FullExceptionHandlerInterceptor : Interceptor
         }
         catch (UseCaseException e) //For command side
         {
-            _coreCommandUnitOfWork.Rollback();
+            await _RollbackAsync(context.CancellationToken);
             
             var Response = new {
                 Code    = _configuration.GetErrorStatusCode(),
@@ -143,14 +158,23 @@ public class FullExceptionHandlerInterceptor : Interceptor
             e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, serviceName, 
                 context.Method
             );
-            
-            e.CentralExceptionLoggerAsync(_hostEnvironment, _globalUniqueIdGenerator, _messageBroker, _dateTime, 
-                serviceName, context.Method, context.CancellationToken
-            );
+
+            if (_messageBroker is not null)
+            {
+                e.CentralExceptionLoggerAsync(_hostEnvironment, _globalUniqueIdGenerator, _messageBroker, _dateTime, 
+                    serviceName, context.Method, context.CancellationToken
+                );
+            }
+            else
+            {
+                e.CentralExceptionLoggerAsStreamAsync(_hostEnvironment, _globalUniqueIdGenerator, _eventStreamBroker, 
+                    _dateTime, serviceName, context.Method, context.CancellationToken
+                );
+            }
 
             #endregion
-         
-            _coreCommandUnitOfWork?.Rollback();
+
+            await _RollbackAsync(context.CancellationToken);
 
             var Response = new {
                 Code    = _configuration.GetServerErrorStatusCode() ,
@@ -160,5 +184,20 @@ public class FullExceptionHandlerInterceptor : Interceptor
 
             throw new RpcException(new Status(StatusCode.Internal, JsonConvert.SerializeObject(Response)));
         }
+    }
+
+    private Task _RollbackAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            _coreCommandUnitOfWork?.Rollback();
+        }
+        catch (Exception e)
+        {
+            if(_coreCommandUnitOfWork is not null)
+                return _coreCommandUnitOfWork.RollbackAsync(cancellationToken);
+        }
+
+        return Task.CompletedTask;
     }
 }

@@ -1,6 +1,7 @@
 #pragma warning disable CS4014
 
 using Domic.Core.Common.ClassExtensions;
+using Domic.Core.Common.ClassModels;
 using Domic.Core.Domain.Contracts.Interfaces;
 using Domic.Core.WebAPI.Exceptions;
 using Grpc.Core;
@@ -25,6 +26,7 @@ public class ExceptionHandlerInterceptor : Interceptor
     private readonly IHostEnvironment _hostEnvironment;
     
     private IMessageBroker           _messageBroker;
+    private IEventStreamBroker       _eventStreamBroker;
     private IDateTime                _dateTime;
     private IGlobalUniqueIdGenerator _globalUniqueIdGenerator;
     
@@ -55,17 +57,30 @@ public class ExceptionHandlerInterceptor : Interceptor
         ServerCallContext context , UnaryServerMethod<TRequest, TResponse> continuation
     )
     {
+        var loggerType  = _configuration.GetSection("LoggerType").Get<LoggerType>();
         var serviceName = _configuration.GetValue<string>("NameOfService");
         
         try
         {
             _dateTime                = context.GetHttpContext().RequestServices.GetRequiredService<IDateTime>();
-            _messageBroker           = context.GetHttpContext().RequestServices.GetRequiredService<IMessageBroker>();
             _globalUniqueIdGenerator = context.GetHttpContext().RequestServices.GetRequiredService<IGlobalUniqueIdGenerator>();
-            
-            context.CentralRequestLoggerAsync(_hostEnvironment, _globalUniqueIdGenerator, _messageBroker, _dateTime,
-                serviceName, request, context.CancellationToken
-            );
+
+            if (loggerType.Messaging)
+            {
+                _messageBroker = context.GetHttpContext().RequestServices.GetRequiredService<IMessageBroker>();
+                
+                context.CentralRequestLoggerAsync(_hostEnvironment, _globalUniqueIdGenerator, _messageBroker, _dateTime,
+                    serviceName, request, context.CancellationToken
+                );
+            }
+            else
+            {
+                _eventStreamBroker = context.GetHttpContext().RequestServices.GetRequiredService<IEventStreamBroker>();
+                
+                context.CentralRequestLoggerAsStreamAsync(_hostEnvironment, _globalUniqueIdGenerator, 
+                    _eventStreamBroker, _dateTime, serviceName, request, context.CancellationToken
+                );
+            }
             
             context.CheckLicense(_configuration);
             
@@ -100,10 +115,19 @@ public class ExceptionHandlerInterceptor : Interceptor
             e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, serviceName, 
                 context.Method
             );
-            
-            e.CentralExceptionLoggerAsync(_hostEnvironment, _globalUniqueIdGenerator, _messageBroker, _dateTime, 
-                serviceName, context.Method, context.CancellationToken
-            );
+
+            if (_messageBroker is not null)
+            {
+                e.CentralExceptionLoggerAsync(_hostEnvironment, _globalUniqueIdGenerator, _messageBroker, _dateTime, 
+                    serviceName, context.Method, context.CancellationToken
+                );
+            }
+            else
+            {
+                e.CentralExceptionLoggerAsStreamAsync(_hostEnvironment, _globalUniqueIdGenerator, _eventStreamBroker, 
+                    _dateTime, serviceName, context.Method, context.CancellationToken
+                );
+            }
 
             #endregion
 

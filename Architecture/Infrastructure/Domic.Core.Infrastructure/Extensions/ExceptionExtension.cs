@@ -116,34 +116,6 @@ public static class ExceptionExtension
         }
     }
     
-    public static void CentralExceptionLoggerAsStream(this Exception e, IHostEnvironment hostEnvironment, 
-        IGlobalUniqueIdGenerator globalUniqueIdGenerator, IEventStreamBroker eventStreamBroker, IDateTime dateTime, 
-        string service, string action
-    )
-    {
-        try
-        {
-            var nowDateTime        = DateTime.Now;
-            var nowPersianDateTime = dateTime.ToPersianShortDate(nowDateTime);
-            
-            var systemException = new SystemException {
-                Id        = globalUniqueIdGenerator.GetRandom(6) ,
-                Service   = service                              ,
-                Action    = action                               ,
-                Message   = e.Message                            ,
-                Exception = e.StackTrace                         ,
-                CreatedAt_EnglishDate = nowDateTime              ,
-                CreatedAt_PersianDate = nowPersianDateTime
-            };
-            
-            eventStreamBroker.Publish<SystemException>("StateTracker", systemException);
-        }
-        catch (Exception exception)
-        {
-            exception.FileLogger(hostEnvironment, dateTime);
-        }
-    }
-    
     /// <summary>
     /// 
     /// </summary>
@@ -183,6 +155,85 @@ public static class ExceptionExtension
             };
             
             await Task.Run(() => messageBroker.Publish<SystemException>(dto), cancellationToken);
+        }
+        catch (Exception exception)
+        {
+            exception.FileLogger(hostEnvironment, dateTime);
+        }
+    }
+    
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="e"></param>
+    /// <param name="hostEnvironment"></param>
+    /// <param name="globalUniqueIdGenerator"></param>
+    /// <param name="eventStreamBroker"></param>
+    /// <param name="dateTime"></param>
+    /// <param name="service"></param>
+    /// <param name="action"></param>
+    public static void CentralExceptionLoggerAsStream(this Exception e, IHostEnvironment hostEnvironment, 
+        IGlobalUniqueIdGenerator globalUniqueIdGenerator, IEventStreamBroker eventStreamBroker, IDateTime dateTime, 
+        string service, string action
+    )
+    {
+        try
+        {
+            var nowDateTime        = DateTime.Now;
+            var nowPersianDateTime = dateTime.ToPersianShortDate(nowDateTime);
+            
+            var systemException = new SystemException {
+                Id        = globalUniqueIdGenerator.GetRandom(6) ,
+                Service   = service                              ,
+                Action    = action                               ,
+                Message   = e.Message                            ,
+                Exception = e.StackTrace                         ,
+                CreatedAt_EnglishDate = nowDateTime              ,
+                CreatedAt_PersianDate = nowPersianDateTime
+            };
+            
+            eventStreamBroker.Publish<SystemException>("StateTracker", systemException);
+        }
+        catch (Exception exception)
+        {
+            exception.FileLogger(hostEnvironment, dateTime);
+        }
+    }
+    
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="e"></param>
+    /// <param name="hostEnvironment"></param>
+    /// <param name="globalUniqueIdGenerator"></param>
+    /// <param name="eventStreamBroker"></param>
+    /// <param name="dateTime"></param>
+    /// <param name="service"></param>
+    /// <param name="action"></param>
+    /// <param name="cancellationToken"></param>
+    public static async Task CentralExceptionLoggerAsStreamAsync(this Exception e, IHostEnvironment hostEnvironment, 
+        IGlobalUniqueIdGenerator globalUniqueIdGenerator, IEventStreamBroker eventStreamBroker, IDateTime dateTime, 
+        string service, string action, CancellationToken cancellationToken
+    )
+    {
+        try
+        {
+            var nowDateTime        = DateTime.Now;
+            var nowPersianDateTime = dateTime.ToPersianShortDate(nowDateTime);
+            
+            var systemException = new SystemException {
+                Id        = globalUniqueIdGenerator.GetRandom(6) ,
+                Service   = service                              ,
+                Action    = action                               ,
+                Message   = e.Message                            ,
+                Exception = e.StackTrace                         ,
+                CreatedAt_EnglishDate = nowDateTime              ,
+                CreatedAt_PersianDate = nowPersianDateTime
+            };
+            
+            await eventStreamBroker.PublishAsync<SystemException>("StateTracker", systemException, 
+                cancellationToken: cancellationToken
+            );
         }
         catch (Exception exception)
         {

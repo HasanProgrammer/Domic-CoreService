@@ -124,4 +124,88 @@ public static class ServerCallContextExtension
             );
         }
     }
+    
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="context"></param>
+    /// <param name="streamBroker"></param>
+    /// <param name="globalUniqueIdGenerator"></param>
+    /// <param name="dateTime"></param>
+    /// <param name="serviceName"></param>
+    /// <param name="payload"></param>
+    public static void CentralRequestLoggerAsStream(this ServerCallContext context, IEventStreamBroker streamBroker,
+        IGlobalUniqueIdGenerator globalUniqueIdGenerator, IDateTime dateTime, string serviceName, object payload
+    )
+    {
+        var httpContext = context.GetHttpContext();
+            
+        var nowDateTime        = DateTime.Now;
+        var nowPersianDateTime = dateTime.ToPersianShortDate(nowDateTime);
+            
+        var systemRequest = new SystemRequest {
+            Id        = globalUniqueIdGenerator.GetRandom(6)    ,
+            IpClient  = httpContext.GetClientIP()               ,
+            Service   = serviceName                             ,
+            Action    = context.Method                          ,
+            Header    = httpContext.Request.Headers.Serialize() ,
+            Payload   = payload.Serialize()                     ,
+            CreatedAt_EnglishDate = nowDateTime                 ,
+            CreatedAt_PersianDate = nowPersianDateTime
+        };
+            
+        streamBroker.Publish<SystemRequest>("StateTracker", systemRequest);
+    }
+
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="context"></param>
+    /// <param name="hostEnvironment"></param>
+    /// <param name="globalUniqueIdGenerator"></param>
+    /// <param name="eventStreamBroker"></param>
+    /// <param name="dateTime"></param>
+    /// <param name="serviceName"></param>
+    /// <param name="payload"></param>
+    /// <param name="cancellationToken"></param>
+    /// <returns></returns>
+    public static async Task CentralRequestLoggerAsStreamAsync(this ServerCallContext context, 
+        IHostEnvironment hostEnvironment, IGlobalUniqueIdGenerator globalUniqueIdGenerator, 
+        IEventStreamBroker eventStreamBroker, IDateTime dateTime, string serviceName, object payload, 
+        CancellationToken cancellationToken
+    )
+    {
+        try
+        {
+            var httpContext = context.GetHttpContext();
+                
+            var nowDateTime        = DateTime.Now;
+            var nowPersianDateTime = dateTime.ToPersianShortDate(nowDateTime);
+            
+            var systemRequest = new SystemRequest {
+                Id        = globalUniqueIdGenerator.GetRandom(6)    ,
+                IpClient  = httpContext.GetClientIP()               ,
+                Service   = serviceName                             ,
+                Action    = context.Method                          ,
+                Header    = httpContext.Request.Headers.Serialize() ,
+                Payload   = payload.Serialize()                     ,
+                CreatedAt_EnglishDate = nowDateTime                 ,
+                CreatedAt_PersianDate = nowPersianDateTime
+            };
+            
+            await Task.Run(() => eventStreamBroker.Publish<SystemRequest>("StateTracker", systemRequest), cancellationToken);
+        }
+        catch (Exception e)
+        {
+            e.FileLogger(hostEnvironment, dateTime);
+            
+            e.ElasticStackExceptionLogger(hostEnvironment, globalUniqueIdGenerator, dateTime, serviceName, 
+                context.Method
+            );
+            
+            e.CentralExceptionLoggerAsStream(hostEnvironment, globalUniqueIdGenerator, eventStreamBroker, dateTime,
+                serviceName, context.Method
+            );
+        }
+    }
 }
