@@ -1,4 +1,6 @@
-﻿using Domic.Core.Common.ClassModels;
+﻿#pragma warning disable CS4014 // Because this call is not awaited, execution of the current method continues before the call is completed
+
+using Domic.Core.Common.ClassModels;
 using Domic.Core.Domain.Constants;
 using Domic.Core.Domain.Contracts.Interfaces;
 using Domic.Core.Domain.Enumerations;
@@ -61,7 +63,10 @@ public class ServiceRegisteryJob : IHostedService
         }
         catch (Exception e)
         {
-            e.FileLogger(_hostEnvironment, scope.ServiceProvider.GetRequiredService<IDateTime>());
+            //fire&forget
+            e.FileLoggerAsync(_hostEnvironment, scope.ServiceProvider.GetRequiredService<IDateTime>(), 
+                cancellationToken: cancellationToken
+            );
         }
 
         return Task.CompletedTask;

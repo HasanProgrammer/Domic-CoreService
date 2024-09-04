@@ -22,8 +22,15 @@ public class ProducerEventJob : IHostedService, IDisposable
         _messageBroker.NameOfAction  = nameof(ProducerEventJob);
         _messageBroker.NameOfService = _configuration.GetValue<string>("NameOfService");
 
+        #if false
+        
         _timer =
             new Timer(state => Task.Run(() => _messageBroker.Publish(cancellationToken), cancellationToken), null, TimeSpan.Zero, TimeSpan.FromSeconds(10));
+        
+        #endif
+        
+        _timer =
+            new Timer(state => _messageBroker.PublishAsync(cancellationToken), null, TimeSpan.Zero, TimeSpan.FromSeconds(5));
         
         return Task.CompletedTask;
     }

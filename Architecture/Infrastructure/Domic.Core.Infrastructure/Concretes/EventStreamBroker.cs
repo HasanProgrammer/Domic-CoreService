@@ -30,6 +30,7 @@ public class EventStreamBroker(
 ) : IEventStreamBroker
 {
     private static object _lock = new();
+    private static SemaphoreSlim _asyncLock = new(1, 1);
     
     #region Consts
 
@@ -57,9 +58,7 @@ public class EventStreamBroker(
             kafkaHeaders.Add(header.Key, Encoding.UTF8.GetBytes(header.Value));
 
         Policy.Handle<Exception>()
-              .WaitAndRetry(5, _ => TimeSpan.FromSeconds(3),
-                  (exception, timeSpan, context) => throw exception
-              )
+              .WaitAndRetry(5, _ => TimeSpan.FromSeconds(3), (exception, timeSpan, context) => {})
               .Execute(() => {
                   
                   using var producer = new ProducerBuilder<string, string>(config).Build();
@@ -90,9 +89,7 @@ public class EventStreamBroker(
             kafkaHeaders.Add(header.Key, Encoding.UTF8.GetBytes(header.Value));
 
         return Policy.Handle<Exception>()
-                     .WaitAndRetryAsync(5, _ => TimeSpan.FromSeconds(3),
-                         (exception, timeSpan, context) => throw exception
-                     )
+                     .WaitAndRetryAsync(5, _ => TimeSpan.FromSeconds(3), (exception, timeSpan, context) => {})
                      .ExecuteAsync(async () => {
                          
                          using var producer = new ProducerBuilder<string, string>(config).Build();
@@ -102,7 +99,7 @@ public class EventStreamBroker(
                              new Message<string, string> {
                                  Key = message.GetType().Name, Value = serializer.Serialize(message), Headers = kafkaHeaders
                              },
-                             cancellationToken
+                             cancellationToken: cancellationToken
                          );
                          
                      });
@@ -236,7 +233,8 @@ public class EventStreamBroker(
             }
             catch (Exception e)
             {
-                e.FileLogger(hostEnvironment, dateTime);
+                //fire&forget
+                e.FileLoggerAsync(hostEnvironment, dateTime, cancellationToken: cancellationToken);
 
                 e.ElasticStackExceptionLogger(hostEnvironment, globalUniqueIdGenerator, dateTime,
                     NameOfService, NameOfAction
@@ -302,7 +300,8 @@ public class EventStreamBroker(
             }
             catch (Exception e)
             {
-                e.FileLogger(hostEnvironment, dateTime);
+                //fire&forget
+                e.FileLoggerAsync(hostEnvironment, dateTime, cancellationToken: cancellationToken);
 
                 e.ElasticStackExceptionLogger(hostEnvironment, globalUniqueIdGenerator, dateTime,
                     NameOfService, NameOfAction
@@ -346,10 +345,10 @@ public class EventStreamBroker(
 
                     var lockEventKey = $"LockEventId-{targetEvent.Id}";
                     
-                    //ReleaseLock
+                    //ReleaseDistributedLock
                     redisCache.DeleteKey(lockEventKey);
                     
-                    //AcquireLock
+                    //AcquireDistributedLock
                     var lockEventSuccessfully = redisCache.SetCacheValue(
                         new KeyValuePair<string, string>(lockEventKey, targetEvent.Id), CacheSetType.NotExists
                     );
@@ -380,7 +379,7 @@ public class EventStreamBroker(
 
                 commandUnitOfWork.Commit();
                 
-                //ReleaseLocks
+                //ReleaseDistributedLocks
                 eventLocks.ForEach(@event => redisCache.DeleteKey(@event));
             }
             catch (Exception e)
@@ -391,12 +390,103 @@ public class EventStreamBroker(
                     NameOfService, NameOfAction
                 );
                 
-                // e.CentralExceptionLogger(hostEnvironment, globalUniqueIdGenerator, this, dateTime, NameOfService, 
-                //     NameOfAction
-                // );
+                e.CentralExceptionLoggerAsStream(hostEnvironment, globalUniqueIdGenerator, this, dateTime, NameOfService, 
+                    NameOfAction
+                );
 
-                commandUnitOfWork?.Rollback();
+                _TryRollback(commandUnitOfWork);
             }
+        }
+    }
+
+    public async Task PublishAsync(CancellationToken cancellationToken)
+    {
+        //just one worker ( Task ) in current machine ( instance ) can process outbox events => lock
+
+        await _asyncLock.WaitAsync(cancellationToken);
+        
+        //ScopeServices Trigger
+        using IServiceScope serviceScope = serviceScopeFactory.CreateAsyncScope();
+
+        var commandUnitOfWork =
+            serviceScope.ServiceProvider.GetRequiredService(_GetTypeOfUnitOfWork(TransactionType.Command)) as ICoreCommandUnitOfWork;
+
+        var redisCache = serviceScope.ServiceProvider.GetRequiredService<IInternalDistributedCache>();
+        var eventCommandRepository = serviceScope.ServiceProvider.GetRequiredService<IEventCommandRepository>();
+
+        try
+        {
+            var eventLocks = new List<string>();
+
+            await commandUnitOfWork.TransactionAsync(cancellationToken: cancellationToken);
+
+            var events =
+                await eventCommandRepository.FindAllWithOrderingAsync(Order.Date, cancellationToken: cancellationToken);
+
+            foreach (Event targetEvent in events)
+            {
+                #region DistributedLock
+
+                var lockEventKey = $"LockEventId-{targetEvent.Id}";
+
+                //ReleaseDistributedLock
+                await redisCache.DeleteKeyAsync(lockEventKey, cancellationToken);
+
+                //AcquireDistributedLock
+                var lockEventSuccessfully = await redisCache.SetCacheValueAsync(
+                    new KeyValuePair<string, string>(lockEventKey, targetEvent.Id), CacheSetType.NotExists, 
+                    cancellationToken: cancellationToken
+                );
+
+                #endregion
+
+                if (lockEventSuccessfully)
+                {
+                    eventLocks.Add(lockEventKey);
+
+                    if (targetEvent.IsActive == IsActive.Active)
+                    {
+                        await _EventPublishHandlerAsync(targetEvent, cancellationToken);
+
+                        var nowDateTime = DateTime.Now;
+                        var nowPersianDateTime = dateTime.ToPersianShortDate(nowDateTime);
+
+                        targetEvent.IsActive = IsActive.InActive;
+                        targetEvent.UpdatedAt_EnglishDate = nowDateTime;
+                        targetEvent.UpdatedAt_PersianDate = nowPersianDateTime;
+
+                        eventCommandRepository.Change(targetEvent);
+                    }
+                    else
+                        eventCommandRepository.Remove(targetEvent);
+                }
+            }
+
+            await commandUnitOfWork.CommitAsync(cancellationToken);
+
+            //ReleaseDistributedLocks
+            foreach (var eventlock in eventLocks)
+                await redisCache.DeleteKeyAsync(eventlock, cancellationToken);
+        }
+        catch (Exception e)
+        {
+            //fire&forget
+            e.FileLoggerAsync(hostEnvironment, dateTime, cancellationToken: cancellationToken);
+
+            e.ElasticStackExceptionLogger(hostEnvironment, globalUniqueIdGenerator, dateTime,
+                NameOfService, NameOfAction
+            );
+
+            //fire&forget
+            e.CentralExceptionLoggerAsStreamAsync(hostEnvironment, globalUniqueIdGenerator, this, dateTime,
+                NameOfService, NameOfAction, cancellationToken: cancellationToken
+            );
+
+            await _TryRollbackAsync(commandUnitOfWork, cancellationToken);
+        }
+        finally
+        {
+            _asyncLock.Release();
         }
     }
 
@@ -528,7 +618,8 @@ public class EventStreamBroker(
             }
             catch (Exception e)
             {
-                e.FileLogger(hostEnvironment, dateTime);
+                //fire&forget
+                e.FileLoggerAsync(hostEnvironment, dateTime, cancellationToken: cancellationToken);
 
                 e.ElasticStackExceptionLogger(hostEnvironment, globalUniqueIdGenerator, dateTime,
                     NameOfService, NameOfAction
@@ -594,7 +685,8 @@ public class EventStreamBroker(
             }
             catch (Exception e)
             {
-                e.FileLogger(hostEnvironment, dateTime);
+                //fire&forget
+                e.FileLoggerAsync(hostEnvironment, dateTime, cancellationToken: cancellationToken);
 
                 e.ElasticStackExceptionLogger(hostEnvironment, globalUniqueIdGenerator, dateTime,
                     NameOfService, NameOfAction
@@ -702,7 +794,7 @@ public class EventStreamBroker(
                 messageStreamHandlerType is not null ? messageStreamHandlerType.Name : NameOfAction
             );
 
-            unitOfWork?.Rollback();
+            _TryRollback(unitOfWork);
             
             var isSuccessRetry = _RetryEventOrMessageOfTopic($"{NameOfService}-Retry-{topic}", payload, countOfRetry: 1);
 
@@ -828,9 +920,9 @@ public class EventStreamBroker(
             e.CentralExceptionLoggerAsStream(hostEnvironment, globalUniqueIdGenerator, this, dateTime, NameOfService, 
                 messageStreamHandlerType is not null ? messageStreamHandlerType.Name : NameOfAction
             );
-
-            unitOfWork?.Rollback();
-
+            
+            _TryRollback(unitOfWork);
+            
             countOfRetryValue++;
             
             var isSuccessRetry = _RetryEventOrMessageOfTopic($"{NameOfService}-Retry-{topic}", payload, countOfRetryValue);
@@ -924,18 +1016,20 @@ public class EventStreamBroker(
         }
         catch (Exception e)
         {
-            e.FileLogger(hostEnvironment, dateTime);
+            //fire&forget
+            e.FileLoggerAsync(hostEnvironment, dateTime, cancellationToken: cancellationToken);
 
             e.ElasticStackExceptionLogger(hostEnvironment, globalUniqueIdGenerator, dateTime,
                 NameOfService, NameOfAction
             );
             
-            e.CentralExceptionLoggerAsStream(hostEnvironment, globalUniqueIdGenerator, this, dateTime, NameOfService, 
-                messageStreamHandlerType is not null ? messageStreamHandlerType.Name : NameOfAction
+            //fire&forget
+            e.CentralExceptionLoggerAsStreamAsync(hostEnvironment, globalUniqueIdGenerator, this, dateTime, NameOfService, 
+                messageStreamHandlerType is not null ? messageStreamHandlerType.Name : NameOfAction, 
+                cancellationToken: cancellationToken
             );
-            
-            if(unitOfWork is not null)
-                await unitOfWork.RollbackAsync(cancellationToken);
+
+            await _TryRollbackAsync(unitOfWork, cancellationToken);
             
             var isSuccessRetry =
                 await _RetryEventOrMessageOfTopicAsync($"{NameOfService}-Retry-{topic}", payload, countOfRetry: 1, cancellationToken);
@@ -1051,18 +1145,20 @@ public class EventStreamBroker(
         }
         catch (Exception e)
         {
-            e.FileLogger(hostEnvironment, dateTime);
+            //fire&forget
+            e.FileLoggerAsync(hostEnvironment, dateTime, cancellationToken: cancellationToken);
 
             e.ElasticStackExceptionLogger(hostEnvironment, globalUniqueIdGenerator, dateTime,
                 NameOfService, NameOfAction
             );
             
-            e.CentralExceptionLoggerAsStream(hostEnvironment, globalUniqueIdGenerator, this, dateTime, NameOfService, 
-                messageStreamHandlerType is not null ? messageStreamHandlerType.Name : NameOfAction
+            //fire&forget
+            e.CentralExceptionLoggerAsStreamAsync(hostEnvironment, globalUniqueIdGenerator, this, dateTime, NameOfService, 
+                messageStreamHandlerType is not null ? messageStreamHandlerType.Name : NameOfAction,
+                cancellationToken: cancellationToken
             );
-            
-            if(unitOfWork is not null)
-                await unitOfWork.RollbackAsync(cancellationToken);
+
+            await _TryRollbackAsync(unitOfWork, cancellationToken);
 
             countOfRetryValue++;
             
@@ -1103,6 +1199,37 @@ public class EventStreamBroker(
             new Message<string, string> {
                 Key = nameOfEvent, Value = serializer.Serialize(@event)
             }
+        );
+    }
+    
+    private async Task _EventPublishHandlerAsync(Event @event, CancellationToken cancellationToken)
+    {
+        var nameOfEvent = @event.Type;
+
+        var domainTypes = Assembly.Load(new AssemblyName("Domic.Domain")).GetTypes();
+        
+        var typeOfEvents = domainTypes.Where(
+            type => type.BaseType?.GetInterfaces().Any(i => i == typeof(IDomainEvent)) ?? false
+        );
+
+        var typeOfEvent = typeOfEvents.FirstOrDefault(type => type.Name.Equals(nameOfEvent));
+
+        var broker = typeOfEvent.GetCustomAttribute(typeof(MessageBrokerAttribute)) as MessageBrokerAttribute;
+        
+        var config = new ProducerConfig {
+            BootstrapServers = Environment.GetEnvironmentVariable("E-Kafka-Host"),
+            SaslUsername = Environment.GetEnvironmentVariable("E-Kafka-Username"),
+            SaslPassword = Environment.GetEnvironmentVariable("E-Kafka-Password")
+        };
+        
+        using var producer = new ProducerBuilder<string, string>(config).Build();
+                 
+        await producer.ProduceAsync(
+            broker.Topic,
+            new Message<string, string> {
+                Key = nameOfEvent, Value = serializer.Serialize(@event)
+            },
+            cancellationToken: cancellationToken
         );
     }
     
@@ -1198,7 +1325,7 @@ public class EventStreamBroker(
                 eventStreamHandlerType is not null ? eventStreamHandlerType.Name : NameOfAction
             );
 
-            unitOfWork?.Rollback();
+            _TryRollback(unitOfWork);
             
             var isSuccessRetry = _RetryEventOrMessageOfTopic($"{NameOfService}-Retry-{topic}", @event, countOfRetry: 1);
             
@@ -1321,7 +1448,7 @@ public class EventStreamBroker(
                 eventStreamHandlerType is not null ? eventStreamHandlerType.Name : NameOfAction
             );
 
-            unitOfWork?.Rollback();
+            _TryRollback(unitOfWork);
             
             countOfRetryValue++;
             
@@ -1413,18 +1540,20 @@ public class EventStreamBroker(
         }
         catch (Exception e)
         {
-            e.FileLogger(hostEnvironment, dateTime);
+            //fire&forget
+            e.FileLoggerAsync(hostEnvironment, dateTime, cancellationToken: cancellationToken);
 
             e.ElasticStackExceptionLogger(hostEnvironment, globalUniqueIdGenerator, dateTime,
                 NameOfService, NameOfAction
             );
             
-            e.CentralExceptionLoggerAsStream(hostEnvironment, globalUniqueIdGenerator, this, dateTime, NameOfService, 
-                eventStreamHandlerType is not null ? eventStreamHandlerType.Name : NameOfAction
+            //fire&forget
+            e.CentralExceptionLoggerAsStreamAsync(hostEnvironment, globalUniqueIdGenerator, this, dateTime, NameOfService, 
+                eventStreamHandlerType is not null ? eventStreamHandlerType.Name : NameOfAction,
+                cancellationToken: cancellationToken
             );
 
-            if(unitOfWork is not null)
-                await unitOfWork.RollbackAsync(cancellationToken);
+            await _TryRollbackAsync(unitOfWork, cancellationToken);
             
             var isSuccessRetry = 
                 await _RetryEventOrMessageOfTopicAsync($"{NameOfService}-Retry-{topic}", @event, countOfRetry: 1, cancellationToken);
@@ -1537,18 +1666,20 @@ public class EventStreamBroker(
         }
         catch (Exception e)
         {
-            e.FileLogger(hostEnvironment, dateTime);
+            //fire&forget
+            e.FileLoggerAsync(hostEnvironment, dateTime, cancellationToken: cancellationToken);
 
             e.ElasticStackExceptionLogger(hostEnvironment, globalUniqueIdGenerator, dateTime,
                 NameOfService, NameOfAction
             );
             
-            e.CentralExceptionLoggerAsStream(hostEnvironment, globalUniqueIdGenerator, this, dateTime, NameOfService, 
-                eventStreamHandlerType is not null ? eventStreamHandlerType.Name : NameOfAction
+            //fire&forget
+            e.CentralExceptionLoggerAsStreamAsync(hostEnvironment, globalUniqueIdGenerator, this, dateTime, NameOfService, 
+                eventStreamHandlerType is not null ? eventStreamHandlerType.Name : NameOfAction,
+                cancellationToken: cancellationToken
             );
 
-            if(unitOfWork is not null)
-                await unitOfWork.RollbackAsync(cancellationToken);
+            await _TryRollbackAsync(unitOfWork, cancellationToken);
 
             countOfRetryValue++;
             
@@ -1561,6 +1692,38 @@ public class EventStreamBroker(
     }
     
     /*---------------------------------------------------------------*/
+    
+    private void _TryRollback(IUnitOfWork unitOfWork)
+    {
+        try
+        {
+            Policy.Handle<Exception>()
+                  .WaitAndRetry(5, _ => TimeSpan.FromSeconds(3), (exception, timeSpan, context) => {})
+                  .Execute(() => unitOfWork?.Rollback());
+        }
+        catch (Exception e)
+        {
+            e.FileLogger(hostEnvironment, dateTime);
+        }
+    }
+    
+    private Task _TryRollbackAsync(IUnitOfWork unitOfWork, CancellationToken cancellationToken)
+    {
+        try
+        {
+            if (unitOfWork is not null)
+                return Policy.Handle<Exception>()
+                             .WaitAndRetryAsync(5, _ => TimeSpan.FromSeconds(3), (exception, timeSpan, context) => {})
+                             .ExecuteAsync(() => unitOfWork.RollbackAsync(cancellationToken));
+        }
+        catch (Exception e)
+        {
+            //fire&forget
+            e.FileLoggerAsync(hostEnvironment, dateTime, cancellationToken: cancellationToken);
+        }
+
+        return Task.CompletedTask;
+    }
     
     private Type _GetTypeOfUnitOfWork(TransactionType transactionType)
     {
@@ -1577,9 +1740,16 @@ public class EventStreamBroker(
 
     private void _TryCommitOffset(IConsumer<string, string> consumer, ConsumeResult<string, string> consumeResult)
     {
-        Policy.Handle<Exception>()
-              .WaitAndRetry(5, _ => TimeSpan.FromSeconds(3), (exception, timeSpan, context) => throw exception)
-              .Execute(() => consumer.Commit(consumeResult));
+        try
+        {
+            Policy.Handle<Exception>()
+                  .WaitAndRetry(5, _ => TimeSpan.FromSeconds(3), (exception, timeSpan, context) => {})
+                  .Execute(() => consumer.Commit(consumeResult));
+        }
+        catch (Exception e)
+        {
+            e.FileLogger(hostEnvironment, dateTime);
+        }
     }
     
     private bool _RetryEventOrMessageOfTopic(string topic, object payload, int countOfRetry)
@@ -1597,7 +1767,7 @@ public class EventStreamBroker(
             };
             
             Policy.Handle<Exception>()
-                  .WaitAndRetry(5, _ => TimeSpan.FromSeconds(3), (exception, timeSpan, context) => throw exception)
+                  .WaitAndRetry(5, _ => TimeSpan.FromSeconds(3), (exception, timeSpan, context) => {})
                   .Execute(() => {
                       
                       using var producer = new ProducerBuilder<string, string>(config).Build();
@@ -1642,7 +1812,7 @@ public class EventStreamBroker(
             };
             
             await Policy.Handle<Exception>()
-                        .WaitAndRetryAsync(5, _ => TimeSpan.FromSeconds(3), (exception, timeSpan, context) => throw exception)
+                        .WaitAndRetryAsync(5, _ => TimeSpan.FromSeconds(3), (exception, timeSpan, context) => {})
                         .ExecuteAsync(async () => {
 
                             using var producer = new ProducerBuilder<string, string>(config).Build();
@@ -1659,7 +1829,8 @@ public class EventStreamBroker(
         }
         catch (Exception e)
         {
-            e.FileLogger(hostEnvironment, dateTime);
+            //fire&forget
+            e.FileLoggerAsync(hostEnvironment, dateTime, cancellationToken: cancellationToken);
             
             e.ElasticStackExceptionLogger(hostEnvironment, globalUniqueIdGenerator, dateTime, 
                 NameOfService, NameOfAction

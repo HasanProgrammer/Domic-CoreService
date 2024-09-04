@@ -21,9 +21,18 @@ public class ProducerEventStreamJob : IHostedService, IDisposable
     {
         _eventStreamBroker.NameOfAction  = nameof(ProducerEventStreamJob);
         _eventStreamBroker.NameOfService = _configuration.GetValue<string>("NameOfService");
-
+        
+        #if false
+        
+        //sync
         _timer =
             new Timer(state => Task.Run(() => _eventStreamBroker.Publish(cancellationToken), cancellationToken), null, TimeSpan.Zero, TimeSpan.FromSeconds(10));
+
+        #endif
+
+        //async
+        _timer =
+            new Timer(state => _eventStreamBroker.PublishAsync(cancellationToken), null, TimeSpan.Zero, TimeSpan.FromSeconds(10));
         
         return Task.CompletedTask;
     }

@@ -80,6 +80,14 @@ public interface IEventStreamBroker
     public void Publish(CancellationToken cancellationToken) => throw new NotImplementedException();
     
     /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="cancellationToken"></param>
+    /// <returns></returns>
+    /// <exception cref="NotImplementedException"></exception>
+    public Task PublishAsync(CancellationToken cancellationToken) => throw new NotImplementedException();
+    
+    /// <summary>
     /// This method is used to process messages in a [Topic] in a sequential manner
     /// </summary>
     /// <param name="topic"></param>

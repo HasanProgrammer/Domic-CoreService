@@ -13,6 +13,7 @@ namespace Domic.Core.Infrastructure.Extensions;
 public static class ExceptionExtension
 {
     private static object _lock = new();
+    private static SemaphoreSlim _asyncLock = new(1, 1);
     
     /// <summary>
     /// 
@@ -32,6 +33,39 @@ public static class ExceptionExtension
             using StreamWriter streamWriter = new(logsPath, append: true);
 
             streamWriter.WriteLine($"\n Date: {dateTime.ToPersianShortDate(DateTime.Now)} | Message: {exception.Message} | Source: {exception.ToString()} \n");
+        }
+    }
+    
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="exception"></param>
+    /// <param name="environment"></param>
+    /// <param name="dateTime"></param>
+    /// <param name="cancellationToken"></param>
+    public static async Task FileLoggerAsync(this Exception exception, IHostEnvironment environment, IDateTime dateTime, 
+        CancellationToken cancellationToken
+    )
+    {
+        await _asyncLock.WaitAsync(cancellationToken);
+        
+        try
+        {
+            string logsPath = Path.Combine(environment.ContentRootPath, "CoreLogs", "Logs.txt");
+
+            if (!File.Exists(logsPath))
+                File.Create(logsPath);
+        
+            await using StreamWriter streamWriter = new(logsPath, append: true);
+
+            await streamWriter.WriteLineAsync(
+                $"\n Date: {dateTime.ToPersianShortDate(DateTime.Now)} | Message: {exception.Message} | Source: {exception.ToString()} \n"
+            );
+        }
+        catch (Exception e) {}
+        finally
+        {
+            _asyncLock.Release();
         }
     }
 

@@ -1,4 +1,6 @@
-﻿using System.Reflection;
+﻿#pragma warning disable CS4014 // Because this call is not awaited, execution of the current method continues before the call is completed
+
+using System.Reflection;
 using System.Text;
 using Domic.Core.Common.ClassConsts;
 using Domic.Core.Common.ClassEnums;
@@ -26,6 +28,7 @@ namespace Domic.Core.Infrastructure.Concretes;
 public class MessageBroker : IMessageBroker
 {
     private static object _lock = new();
+    private static SemaphoreSlim _asyncLock = new(1, 1);
 
     private readonly IConnection _connection;
     private readonly IHostEnvironment _hostEnvironment;
@@ -63,38 +66,35 @@ public class MessageBroker : IMessageBroker
 
     public void Publish<TMessage>(MessageBrokerDto<TMessage> messageBroker) where TMessage : class
     {
-        var retryPolicy = Policy.Handle<Exception>()
-                                .WaitAndRetry(5, _ => TimeSpan.FromSeconds(3), 
-                                    (exception, timeSpan, context) => throw exception
-                                );
+        Policy.Handle<Exception>()
+              .WaitAndRetry(5, _ => TimeSpan.FromSeconds(3), (exception, timeSpan, context) => {})
+              .Execute(() => {
 
-        retryPolicy.Execute(() => {
-            
-            using var channel = _connection.CreateModel();
+                using var channel = _connection.CreateModel();
 
-            switch (messageBroker.ExchangeType)
-            {
-                case Exchange.Direct :
-                    channel.PublishMessageToDirectExchange(
-                        messageBroker.Message.Serialize(), messageBroker.Exchange, messageBroker.Route, 
-                        messageBroker.Headers
-                    );
-                break;
+                switch (messageBroker.ExchangeType)
+                {
+                    case Exchange.Direct :
+                        channel.PublishMessageToDirectExchange(
+                            messageBroker.Message.Serialize(), messageBroker.Exchange, messageBroker.Route, 
+                            messageBroker.Headers
+                        );
+                    break;
 
-                case Exchange.FanOut :
-                    channel.PublishMessageToFanOutExchange(
-                        messageBroker.Message.Serialize(), messageBroker.Exchange
-                    );
-                break;
+                    case Exchange.FanOut :
+                        channel.PublishMessageToFanOutExchange(
+                            messageBroker.Message.Serialize(), messageBroker.Exchange
+                        );
+                    break;
 
-                case Exchange.Unknown :
-                    channel.PublishMessage(messageBroker.Message.Serialize(), messageBroker.Queue);
-                break;
+                    case Exchange.Unknown :
+                        channel.PublishMessage(messageBroker.Message.Serialize(), messageBroker.Queue);
+                    break;
 
-                default: throw new ArgumentOutOfRangeException();
-            }
-            
-        });
+                    default: throw new ArgumentOutOfRangeException();
+                }
+
+            });
     }
 
     public void Subscribe<TMessage>(string queue) where TMessage : class
@@ -193,7 +193,8 @@ public class MessageBroker : IMessageBroker
         }
         catch (Exception e)
         {
-            e.FileLogger(_hostEnvironment, _dateTime);
+            //fire&forget
+            e.FileLoggerAsync(_hostEnvironment, _dateTime, cancellationToken: cancellationToken);
             
             e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, 
                 NameOfService, NameOfAction
@@ -235,7 +236,8 @@ public class MessageBroker : IMessageBroker
         }
         catch (Exception e)
         {
-            e.FileLogger(_hostEnvironment, _dateTime);
+            //fire&forget
+            e.FileLoggerAsync(_hostEnvironment, _dateTime, cancellationToken: cancellationToken);
             
             e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, 
                 NameOfService, NameOfAction
@@ -331,7 +333,7 @@ public class MessageBroker : IMessageBroker
                     NameOfAction
                 );
 
-                commandUnitOfWork?.Rollback();
+                _TryRollback(commandUnitOfWork);
             }
             finally
             {
@@ -342,6 +344,111 @@ public class MessageBroker : IMessageBroker
                 catch (Exception e){}
             }
         }
+    }
+
+    public async Task PublishAsync(CancellationToken cancellationToken)
+    {
+        //just one worker ( Task ) in current machine ( instance ) can process outbox events => lock
+        await _asyncLock.WaitAsync(cancellationToken);
+        
+        //ScopeServices Trigger
+        using IServiceScope serviceScope = _serviceScopeFactory.CreateAsyncScope();
+
+        var commandUnitOfWork =
+            serviceScope.ServiceProvider.GetRequiredService(_GetTypeOfCommandUnitOfWork()) as ICoreCommandUnitOfWork;
+
+        var redisCache = serviceScope.ServiceProvider.GetRequiredService<IInternalDistributedCache>();
+        var eventCommandRepository = serviceScope.ServiceProvider.GetRequiredService<IEventCommandRepository>();
+
+        IModel channel = default;
+        
+        try
+        {
+            channel = _connection.CreateModel();
+            
+            var eventLocks = new List<string>();
+            
+            await commandUnitOfWork.TransactionAsync(cancellationToken: cancellationToken);
+
+            var events =
+                await eventCommandRepository.FindAllWithOrderingAsync(Order.Date, cancellationToken: cancellationToken);
+            
+            foreach (Event targetEvent in events)
+            {
+                #region DistributedLock
+
+                var lockEventKey = $"LockEventId-{targetEvent.Id}";
+                
+                //ReleaseDistributedLock
+                await redisCache.DeleteKeyAsync(lockEventKey, cancellationToken);
+                
+                //AcquireDistributedLock
+                var lockEventSuccessfully = await redisCache.SetCacheValueAsync(
+                    new KeyValuePair<string, string>(lockEventKey, targetEvent.Id), CacheSetType.NotExists, 
+                    cancellationToken: cancellationToken
+                );
+
+                #endregion
+
+                if (lockEventSuccessfully)
+                {
+                    eventLocks.Add(lockEventKey);
+                    
+                    if (targetEvent.IsActive == IsActive.Active)
+                    {
+                        _EventPublishHandler(channel, targetEvent);
+
+                        var nowDateTime        = DateTime.Now;
+                        var nowPersianDateTime = _dateTime.ToPersianShortDate(nowDateTime);
+
+                        targetEvent.IsActive              = IsActive.InActive;
+                        targetEvent.UpdatedAt_EnglishDate = nowDateTime;
+                        targetEvent.UpdatedAt_PersianDate = nowPersianDateTime;
+
+                        eventCommandRepository.Change(targetEvent);
+                    }
+                    else
+                        eventCommandRepository.Remove(targetEvent);
+                }
+            }
+
+            await commandUnitOfWork.CommitAsync(cancellationToken);
+            
+            //ReleaseDistributedLocks
+            foreach (var eventlock in eventLocks)
+                await redisCache.DeleteKeyAsync(eventlock, cancellationToken);
+        }
+        catch (Exception e)
+        {
+            //fire&forget
+            e.FileLoggerAsync(_hostEnvironment, _dateTime, cancellationToken: cancellationToken);
+            
+            e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, 
+                NameOfService, NameOfAction
+            );
+            
+            //fire&forget
+            e.CentralExceptionLoggerAsync(_hostEnvironment, _globalUniqueIdGenerator, this, _dateTime, NameOfService, 
+                NameOfAction, cancellationToken
+            );
+
+            await _TryRollbackAsync(commandUnitOfWork, cancellationToken);
+        }
+        finally
+        {
+            _asyncLock.Release();
+
+            try
+            {
+                channel?.Dispose();
+            }
+            catch (Exception e)
+            {
+                //fire&forget
+                e.FileLoggerAsync(_hostEnvironment, _dateTime, cancellationToken: cancellationToken);
+            }
+        }
+        
     }
 
     public void Subscribe(string queue)
@@ -411,7 +518,8 @@ public class MessageBroker : IMessageBroker
         }
         catch (Exception e)
         {
-            e.FileLogger(_hostEnvironment, _dateTime);
+            //fire&forget
+            e.FileLoggerAsync(_hostEnvironment, _dateTime, cancellationToken: cancellationToken);
             
             e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, 
                 NameOfService, NameOfAction
@@ -525,7 +633,7 @@ public class MessageBroker : IMessageBroker
                 NameOfService, NameOfAction
             );
             
-            unitOfWork?.Rollback();
+            _TryRollback(unitOfWork);
 
             _RequeueMessageAsDeadLetter(channel, args);
         }
@@ -612,13 +720,14 @@ public class MessageBroker : IMessageBroker
         }
         catch (Exception e)
         {
-            e.FileLogger(_hostEnvironment, _dateTime);
+            //fire&forget
+            e.FileLoggerAsync(_hostEnvironment, _dateTime, cancellationToken: cancellationToken);
             
             e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, 
                 NameOfService, NameOfAction
             );
-            
-            if(unitOfWork is not null) await unitOfWork.RollbackAsync(cancellationToken);
+
+            await _TryRollbackAsync(unitOfWork, cancellationToken);
 
             _RequeueMessageAsDeadLetter(channel, args);
         }
@@ -717,7 +826,7 @@ public class MessageBroker : IMessageBroker
                 NameOfService, NameOfAction
             );
             
-            unitOfWork?.Rollback();
+            _TryRollback(unitOfWork);
 
             _RequeueMessageAsDeadLetter(channel, args);
         }
@@ -809,14 +918,15 @@ public class MessageBroker : IMessageBroker
         }
         catch (Exception e)
         {
-            e.FileLogger(_hostEnvironment, _dateTime);
+            //fire&forget
+            e.FileLoggerAsync(_hostEnvironment, _dateTime, cancellationToken);
             
             e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, 
                 NameOfService, NameOfAction
             );
-            
-            if(unitOfWork is not null) await unitOfWork.RollbackAsync(cancellationToken);
 
+            await _TryRollbackAsync(unitOfWork, cancellationToken);
+            
             _RequeueMessageAsDeadLetter(channel, args);
         }
     }
@@ -1006,9 +1116,9 @@ public class MessageBroker : IMessageBroker
             e.CentralExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, this, _dateTime, service, 
                 eventBusHandlerType is not null ? eventBusHandlerType.Name : NameOfAction
             );
-
-            unitOfWork?.Rollback();
-
+            
+            _TryRollback(unitOfWork);
+            
             _RequeueMessageAsDeadLetter(channel, args);
         }
     }
@@ -1155,24 +1265,60 @@ public class MessageBroker : IMessageBroker
         }
         catch (Exception e)
         {
-            e.FileLogger(_hostEnvironment, _dateTime);
+            //fire&forget
+            e.FileLoggerAsync(_hostEnvironment, _dateTime, cancellationToken: cancellationToken);
             
             e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, 
                 NameOfService, NameOfAction
             );
             
-            e.CentralExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, this, _dateTime, service, 
-                eventBusHandlerType is not null ? eventBusHandlerType.Name : NameOfAction
+            //fire&forget
+            e.CentralExceptionLoggerAsync(_hostEnvironment, _globalUniqueIdGenerator, this, _dateTime, service, 
+                eventBusHandlerType is not null ? eventBusHandlerType.Name : NameOfAction, 
+                cancellationToken: cancellationToken
             );
 
-            if (unitOfWork is not null) await unitOfWork.RollbackAsync(cancellationToken);
+            await _TryRollbackAsync(unitOfWork, cancellationToken);
 
             _RequeueMessageAsDeadLetter(channel, args);
         }
     }
     
     /*---------------------------------------------------------------*/
+
+    private void _TryRollback(IUnitOfWork unitOfWork)
+    {
+        try
+        {
+            Policy.Handle<Exception>()
+                  .WaitAndRetry(5, _ => TimeSpan.FromSeconds(3), (exception, timeSpan, context) => {})
+                  .Execute(() => unitOfWork?.Rollback());
+        }
+        catch (Exception e)
+        {
+            e.FileLogger(_hostEnvironment, _dateTime);
+        }
+    }
     
+    private Task _TryRollbackAsync(IUnitOfWork unitOfWork, CancellationToken cancellationToken)
+    {
+        try
+        {
+            if (unitOfWork is not null)
+                return Policy.Handle<Exception>()
+                             .WaitAndRetryAsync(5, _ => TimeSpan.FromSeconds(3), (exception, timeSpan, context) => {})
+                             .ExecuteAsync(() => unitOfWork.RollbackAsync(cancellationToken));
+        }
+        catch (Exception e)
+        {
+            //fire&forget
+            e.FileLoggerAsync(_hostEnvironment, _dateTime, cancellationToken: cancellationToken);
+        }
+
+        return Task.CompletedTask;
+    }
+    
+    //todo: should be retriable ( Polly )
     private void _RequeueMessageAsDeadLetter(IModel channel, BasicDeliverEventArgs args)
     {
         try
@@ -1200,6 +1346,7 @@ public class MessageBroker : IMessageBroker
         return ( Convert.ToInt32(countRetry) > maxRetryAttribute?.Count , Convert.ToInt32(countRetry) );
     }
     
+    //todo: should be retriable ( Polly )
     private void _TrySendAckMessage(IModel channel, BasicDeliverEventArgs args)
     {
         try
