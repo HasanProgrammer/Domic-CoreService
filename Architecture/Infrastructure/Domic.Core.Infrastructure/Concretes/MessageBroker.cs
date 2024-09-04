@@ -1297,6 +1297,8 @@ public class MessageBroker : IMessageBroker
         catch (Exception e)
         {
             e.FileLogger(_hostEnvironment, _dateTime);
+            
+            //todo: should be sending notification
         }
     }
     
@@ -1313,6 +1315,8 @@ public class MessageBroker : IMessageBroker
         {
             //fire&forget
             e.FileLoggerAsync(_hostEnvironment, _dateTime, cancellationToken: cancellationToken);
+            
+            //todo: should be sending notification
         }
 
         return Task.CompletedTask;
