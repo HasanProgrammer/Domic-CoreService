@@ -21,6 +21,15 @@ public interface IMessageBroker : IDisposable, IAsyncDisposable
     /// <summary>
     /// 
     /// </summary>
+    /// <param name="messageBroker"></param>
+    /// <typeparam name="TMessage"></typeparam>
+    /// <exception cref="NotImplementedException"></exception>
+    public Task PublishAsync<TMessage>(MessageBrokerDto<TMessage> messageBroker, CancellationToken cancellationToken)
+        where TMessage : class => throw new NotImplementedException();
+    
+    /// <summary>
+    /// 
+    /// </summary>
     /// <param name="queue"></param>
     /// <typeparam name="TMessage"></typeparam>
     /// <exception cref="NotImplementedException"></exception>

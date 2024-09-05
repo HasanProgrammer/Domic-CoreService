@@ -97,6 +97,38 @@ public class MessageBroker : IMessageBroker
             });
     }
 
+    public Task PublishAsync<TMessage>(MessageBrokerDto<TMessage> messageBroker, CancellationToken cancellationToken) 
+        where TMessage : class 
+        => Policy.Handle<Exception>()
+                 .WaitAndRetryAsync(5, _ => TimeSpan.FromSeconds(3), (exception, timeSpan, context) => {})
+                 .ExecuteAsync(() => 
+                     Task.Run(() => {
+                         using var channel = _connection.CreateModel();
+                         
+                         switch (messageBroker.ExchangeType)
+                         {
+                             case Exchange.Direct :
+                                 channel.PublishMessageToDirectExchange(
+                                     messageBroker.Message.Serialize(), messageBroker.Exchange, messageBroker.Route, 
+                                     messageBroker.Headers
+                                 );
+                                 break;
+     
+                             case Exchange.FanOut :
+                                 channel.PublishMessageToFanOutExchange(
+                                     messageBroker.Message.Serialize(), messageBroker.Exchange
+                                 );
+                                 break;
+     
+                             case Exchange.Unknown :
+                                 channel.PublishMessage(messageBroker.Message.Serialize(), messageBroker.Queue);
+                                 break;
+     
+                             default: throw new ArgumentOutOfRangeException();
+                         }
+                     }, cancellationToken)
+                 );
+
     public void Subscribe<TMessage>(string queue) where TMessage : class
     {
         try
@@ -262,12 +294,10 @@ public class MessageBroker : IMessageBroker
 
             var redisCache = serviceScope.ServiceProvider.GetRequiredService<IInternalDistributedCache>();
             var eventCommandRepository = serviceScope.ServiceProvider.GetRequiredService<IEventCommandRepository>();
-
-            IModel channel = default;
             
             try
             {
-                channel = _connection.CreateModel();
+                using var channel = _connection.CreateModel();
                 
                 var eventLocks = new List<string>();
                 
@@ -284,10 +314,10 @@ public class MessageBroker : IMessageBroker
 
                     var lockEventKey = $"LockEventId-{targetEvent.Id}";
                     
-                    //ReleaseLock
+                    //ReleaseDistributedLock
                     redisCache.DeleteKey(lockEventKey);
                     
-                    //AcquireLock
+                    //AcquireDistributedLock
                     var lockEventSuccessfully = redisCache.SetCacheValue(
                         new KeyValuePair<string, string>(lockEventKey, targetEvent.Id), CacheSetType.NotExists
                     );
@@ -318,7 +348,7 @@ public class MessageBroker : IMessageBroker
 
                 commandUnitOfWork.Commit();
                 
-                //ReleaseLocks
+                //ReleaseDistributedLocks
                 eventLocks.ForEach(@event => redisCache.DeleteKey(@event));
             }
             catch (Exception e)
@@ -334,14 +364,6 @@ public class MessageBroker : IMessageBroker
                 );
 
                 _TryRollback(commandUnitOfWork);
-            }
-            finally
-            {
-                try
-                {
-                    channel?.Dispose();
-                }
-                catch (Exception e){}
             }
         }
     }
@@ -359,12 +381,10 @@ public class MessageBroker : IMessageBroker
 
         var redisCache = serviceScope.ServiceProvider.GetRequiredService<IInternalDistributedCache>();
         var eventCommandRepository = serviceScope.ServiceProvider.GetRequiredService<IEventCommandRepository>();
-
-        IModel channel = default;
         
         try
         {
-            channel = _connection.CreateModel();
+            using var channel = _connection.CreateModel();
             
             var eventLocks = new List<string>();
             
@@ -437,18 +457,7 @@ public class MessageBroker : IMessageBroker
         finally
         {
             _asyncLock.Release();
-
-            try
-            {
-                channel?.Dispose();
-            }
-            catch (Exception e)
-            {
-                //fire&forget
-                e.FileLoggerAsync(_hostEnvironment, _dateTime, cancellationToken: cancellationToken);
-            }
         }
-        
     }
 
     public void Subscribe(string queue)
@@ -635,7 +644,7 @@ public class MessageBroker : IMessageBroker
             
             _TryRollback(unitOfWork);
 
-            _RequeueMessageAsDeadLetter(channel, args);
+            _TryRequeueMessageAsDeadLetter(channel, args);
         }
     }
     
@@ -729,7 +738,7 @@ public class MessageBroker : IMessageBroker
 
             await _TryRollbackAsync(unitOfWork, cancellationToken);
 
-            _RequeueMessageAsDeadLetter(channel, args);
+            _TryRequeueMessageAsDeadLetter(channel, args);
         }
     }
     
@@ -828,7 +837,7 @@ public class MessageBroker : IMessageBroker
             
             _TryRollback(unitOfWork);
 
-            _RequeueMessageAsDeadLetter(channel, args);
+            _TryRequeueMessageAsDeadLetter(channel, args);
         }
     }
     
@@ -927,7 +936,7 @@ public class MessageBroker : IMessageBroker
 
             await _TryRollbackAsync(unitOfWork, cancellationToken);
             
-            _RequeueMessageAsDeadLetter(channel, args);
+            _TryRequeueMessageAsDeadLetter(channel, args);
         }
     }
     
@@ -1119,7 +1128,7 @@ public class MessageBroker : IMessageBroker
             
             _TryRollback(unitOfWork);
             
-            _RequeueMessageAsDeadLetter(channel, args);
+            _TryRequeueMessageAsDeadLetter(channel, args);
         }
     }
     
@@ -1280,7 +1289,7 @@ public class MessageBroker : IMessageBroker
 
             await _TryRollbackAsync(unitOfWork, cancellationToken);
 
-            _RequeueMessageAsDeadLetter(channel, args);
+            _TryRequeueMessageAsDeadLetter(channel, args);
         }
     }
     
@@ -1322,12 +1331,15 @@ public class MessageBroker : IMessageBroker
         return Task.CompletedTask;
     }
     
-    //todo: should be retriable ( Polly )
-    private void _RequeueMessageAsDeadLetter(IModel channel, BasicDeliverEventArgs args)
+    private void _TryRequeueMessageAsDeadLetter(IModel channel, BasicDeliverEventArgs args)
     {
         try
         {
-            channel.BasicNack(args.DeliveryTag, false, false); //or _channel.BasicReject(args.DeliveryTag, false);
+            Policy.Handle<Exception>()
+                  .WaitAndRetry(5, _ => TimeSpan.FromSeconds(3), (exception, timeSpan, context) => {})
+                  .Execute(() =>
+                      channel.BasicNack(args.DeliveryTag, false, false) //or _channel.BasicReject(args.DeliveryTag, false)
+                  );
         }
         catch (Exception e)
         {
@@ -1337,6 +1349,31 @@ public class MessageBroker : IMessageBroker
                 NameOfService, NameOfAction
             );
         }
+    }
+    
+    private Task _TryRequeueMessageAsDeadLetterAsync(IModel channel, BasicDeliverEventArgs args, 
+        CancellationToken cancellationToken
+    )
+    {
+        try
+        {
+            return Policy.Handle<Exception>()
+                         .WaitAndRetryAsync(5, _ => TimeSpan.FromSeconds(3), (exception, timeSpan, context) => {})
+                         .ExecuteAsync(() =>
+                             Task.Run(() => channel.BasicNack(args.DeliveryTag, false, false), cancellationToken)
+                         );
+        }
+        catch (Exception e)
+        {
+            //fire&forget
+            e.FileLoggerAsync(_hostEnvironment, _dateTime, cancellationToken);
+            
+            e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, 
+                NameOfService, NameOfAction
+            );
+        }
+
+        return Task.CompletedTask;
     }
     
     private (bool result, int countOfRetry) _IsMaxRetryMessage(BasicDeliverEventArgs args, WithMaxRetryAttribute maxRetryAttribute)
@@ -1350,12 +1387,15 @@ public class MessageBroker : IMessageBroker
         return ( Convert.ToInt32(countRetry) > maxRetryAttribute?.Count , Convert.ToInt32(countRetry) );
     }
     
-    //todo: should be retriable ( Polly )
     private void _TrySendAckMessage(IModel channel, BasicDeliverEventArgs args)
     {
         try
         {
-            channel.BasicAck(args.DeliveryTag, false); //delete this message from queue
+            Policy.Handle<Exception>()
+                  .WaitAndRetry(5, _ => TimeSpan.FromSeconds(3), (exception, timeSpan, context) => {})
+                  .Execute(() =>
+                      channel.BasicAck(args.DeliveryTag, false) //delete this message from queue
+                  );
         }
         catch (Exception e)
         {
@@ -1365,6 +1405,31 @@ public class MessageBroker : IMessageBroker
                 NameOfService, NameOfAction
             );
         }
+    }
+    
+    private Task _TrySendAckMessageAsync(IModel channel, BasicDeliverEventArgs args, 
+        CancellationToken cancellationToken
+    )
+    {
+        try
+        {
+            return Policy.Handle<Exception>()
+                         .WaitAndRetryAsync(5, _ => TimeSpan.FromSeconds(3), (exception, timeSpan, context) => {})
+                         .ExecuteAsync(() =>
+                             Task.Run(() => channel.BasicAck(args.DeliveryTag, false), cancellationToken)
+                         );
+        }
+        catch (Exception e)
+        {
+            //fire&forget
+            e.FileLoggerAsync(_hostEnvironment, _dateTime, cancellationToken);
+            
+            e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, 
+                NameOfService, NameOfAction
+            );
+        }
+
+        return Task.CompletedTask;
     }
     
     private Type _GetTypeOfUnitOfWork(TransactionType transactionType)
