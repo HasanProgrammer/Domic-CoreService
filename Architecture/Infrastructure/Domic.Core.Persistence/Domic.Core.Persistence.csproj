@@ -5,7 +5,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>disable</Nullable>
     <PackageId>Domic.Architecture.Persistence</PackageId>
-    <PackageVersion>7.1.2</PackageVersion>
+    <PackageVersion>7.2.0</PackageVersion>
     <Authors>Karami.Domic</Authors>
   </PropertyGroup>
 
