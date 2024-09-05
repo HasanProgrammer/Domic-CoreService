@@ -29,7 +29,7 @@ public class InternalMessageBroker : IInternalMessageBroker
     private readonly IConnection              _connection;
     private readonly IConfiguration           _configuration;
     private readonly IHostEnvironment         _hostEnvironment;
-    private readonly IExternalMessageBroker           _externalMessageBroker;
+    private readonly IExternalMessageBroker   _externalMessageBroker;
     private readonly IServiceScopeFactory     _serviceScopeFactory;
     private readonly IGlobalUniqueIdGenerator _globalUniqueIdGenerator;
     private readonly IDateTime                _dateTime;
@@ -43,7 +43,7 @@ public class InternalMessageBroker : IInternalMessageBroker
         _serviceScopeFactory     = serviceScopeFactory;
         _hostEnvironment         = hostEnvironment;
         _configuration           = configuration;
-        _externalMessageBroker           = externalMessageBroker;
+        _externalMessageBroker   = externalMessageBroker;
         _globalUniqueIdGenerator = globalUniqueIdGenerator;
         
         var factory = new ConnectionFactory {
@@ -428,9 +428,9 @@ public class InternalMessageBroker : IInternalMessageBroker
 
             #endregion
 
-            unitOfWork?.Rollback();
+            _TryRollback(unitOfWork);
 
-            _RequeueMessageAsDeadLetter(channel, args, service, 
+            _TryRequeueMessageAsDeadLetter(channel, args, service, 
                 commandBusHandlerType is not null ? commandBusHandlerType.Name : NameOfAction
             );
         }
@@ -615,8 +615,9 @@ public class InternalMessageBroker : IInternalMessageBroker
                 }
             }
             
-            _TrySendAckMessage(channel, args, service, 
-                commandBusHandlerType is not null ? commandBusHandlerType.Name : NameOfAction
+            await _TrySendAckMessageAsync(channel, args, service, 
+                commandBusHandlerType is not null ? commandBusHandlerType.Name : NameOfAction,
+                cancellationToken
             );
         }
         catch (DomainException e)
@@ -627,8 +628,9 @@ public class InternalMessageBroker : IInternalMessageBroker
                 Body    = new { }
             };
             
-            _PushValidationNotification(channel, args, unitOfWork, connectionId?.ToString(), payload, service, 
-                commandBusHandlerType is not null ? commandBusHandlerType.Name : NameOfAction
+            await _PushValidationNotificationAsync(channel, args, unitOfWork, connectionId?.ToString(), payload,
+                service, commandBusHandlerType is not null ? commandBusHandlerType.Name : NameOfAction,
+                cancellationToken
             );
         }
         catch (UseCaseException e)
@@ -639,44 +641,142 @@ public class InternalMessageBroker : IInternalMessageBroker
                 Body    = new { }
             };
             
-            _PushValidationNotification(channel, args, unitOfWork, connectionId?.ToString(), payload, service, 
-                commandBusHandlerType is not null ? commandBusHandlerType.Name : NameOfAction
+            await _PushValidationNotificationAsync(channel, args, unitOfWork, connectionId?.ToString(), payload,
+                service, commandBusHandlerType is not null ? commandBusHandlerType.Name : NameOfAction,
+                cancellationToken
             );
         }
         catch (Exception e)
         {
             #region Logger
 
+            //fire&forget
+            e.FileLoggerAsync(_hostEnvironment, _dateTime, cancellationToken);
+            
+            e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, 
+                NameOfService, NameOfAction
+            );
+            
+            //fire&forget
+            e.CentralExceptionLoggerAsync(_hostEnvironment, _globalUniqueIdGenerator, _externalMessageBroker, _dateTime, 
+                service, commandBusHandlerType is not null ? commandBusHandlerType.Name : NameOfAction,
+                cancellationToken
+            );
+
+            #endregion
+
+            await _TryRollbackAsync(unitOfWork, cancellationToken);
+            await _TryRequeueMessageAsDeadLetterAsync(channel, args, service, 
+                commandBusHandlerType is not null ? commandBusHandlerType.Name : NameOfAction,
+                cancellationToken
+            );
+        }
+    }
+    
+    /*---------------------------------------------------------------*/
+    
+    private void _TryRollback(IUnitOfWork unitOfWork)
+    {
+        try
+        {
+            Policy.Handle<Exception>()
+                  .WaitAndRetry(5, _ => TimeSpan.FromSeconds(3), (exception, timeSpan, context) => {})
+                  .Execute(() => unitOfWork?.Rollback());
+        }
+        catch (Exception e)
+        {
+            e.FileLogger(_hostEnvironment, _dateTime);
+        }
+    }
+    
+    private Task _TryRollbackAsync(IUnitOfWork unitOfWork, CancellationToken cancellationToken)
+    {
+        try
+        {
+            if (unitOfWork is not null)
+                return Policy.Handle<Exception>()
+                             .WaitAndRetryAsync(5, _ => TimeSpan.FromSeconds(3), (exception, timeSpan, context) => {})
+                             .ExecuteAsync(() => unitOfWork.RollbackAsync(cancellationToken));
+        }
+        catch (Exception e)
+        {
+            //fire&forget
+            e.FileLoggerAsync(_hostEnvironment, _dateTime, cancellationToken: cancellationToken);
+        }
+
+        return Task.CompletedTask;
+    }
+    
+    private void _TryRequeueMessageAsDeadLetter(IModel channel, BasicDeliverEventArgs args, string service, 
+        string action
+    )
+    {
+        try
+        {
+            Policy.Handle<Exception>()
+                  .WaitAndRetry(5, _ => TimeSpan.FromSeconds(3), (exception, timeSpan, context) => {})
+                  .Execute(() =>
+                      channel.BasicNack(args.DeliveryTag, false, false) //or _channel.BasicReject(args.DeliveryTag, false)
+                  );
+        }
+        catch (Exception e)
+        {
             e.FileLogger(_hostEnvironment, _dateTime);
             
             e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, 
                 NameOfService, NameOfAction
             );
             
-            e.CentralExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _externalMessageBroker, _dateTime, service, 
-                commandBusHandlerType is not null ? commandBusHandlerType.Name : NameOfAction
-            );
-
-            #endregion
-
-            unitOfWork?.Rollback();
-
-            _RequeueMessageAsDeadLetter(channel, args, service, 
-                commandBusHandlerType is not null ? commandBusHandlerType.Name : NameOfAction
+            e.CentralExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _externalMessageBroker, _dateTime, 
+                service, action
             );
         }
     }
     
-    private void _RequeueMessageAsDeadLetter(IModel channel, BasicDeliverEventArgs args, string service, string action)
+    private Task _TryRequeueMessageAsDeadLetterAsync(IModel channel, BasicDeliverEventArgs args, string service,
+        string action, CancellationToken cancellationToken
+    )
     {
         try
         {
-            channel.BasicReject(args.DeliveryTag, false);
+            return Policy.Handle<Exception>()
+                         .WaitAndRetryAsync(5, _ => TimeSpan.FromSeconds(3), (exception, timeSpan, context) => {})
+                         .ExecuteAsync(() =>
+                             Task.Run(() => channel.BasicNack(args.DeliveryTag, false, false), cancellationToken)
+                         );
+        }
+        catch (Exception e)
+        {
+            //fire&forget
+            e.FileLoggerAsync(_hostEnvironment, _dateTime, cancellationToken);
+            
+            e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, 
+                NameOfService, NameOfAction
+            );
+            
+            //fire&forget
+            e.CentralExceptionLoggerAsync(_hostEnvironment, _globalUniqueIdGenerator, _externalMessageBroker, _dateTime, 
+                service, action, cancellationToken
+            );
+        }
+
+        return Task.CompletedTask;
+    }
+    
+    private void _TrySendAckMessage(IModel channel, BasicDeliverEventArgs args, string service, string action)
+    {
+        try
+        {
+            Policy.Handle<Exception>()
+                  .WaitAndRetry(5, _ => TimeSpan.FromSeconds(3), (exception, timeSpan, context) => {})
+                  .Execute(() =>
+                      channel.BasicAck(args.DeliveryTag, false) //delete this message from queue
+                  );
         }
         catch (Exception e)
         {
             e.FileLogger(_hostEnvironment, _dateTime);
-            
+
             e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, 
                 NameOfService, NameOfAction
             );
@@ -685,6 +785,36 @@ public class InternalMessageBroker : IInternalMessageBroker
                 action
             );
         }
+    }
+    
+    private Task _TrySendAckMessageAsync(IModel channel, BasicDeliverEventArgs args, string service, string action,
+        CancellationToken cancellationToken
+    )
+    {
+        try
+        {
+            return Policy.Handle<Exception>()
+                         .WaitAndRetryAsync(5, _ => TimeSpan.FromSeconds(3), (exception, timeSpan, context) => {})
+                         .ExecuteAsync(() =>
+                             Task.Run(() => channel.BasicAck(args.DeliveryTag, false), cancellationToken)
+                         );
+        }
+        catch (Exception e)
+        {
+            //fire&forget
+            e.FileLoggerAsync(_hostEnvironment, _dateTime, cancellationToken);
+
+            e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, 
+                NameOfService, NameOfAction
+            );
+            
+            //fire&forget
+            e.CentralExceptionLoggerAsync(_hostEnvironment, _globalUniqueIdGenerator, _externalMessageBroker, _dateTime, 
+                service, action, cancellationToken
+            );
+        }
+
+        return Task.CompletedTask;
     }
     
     private (bool result, int countOfRetry) _IsMaxRetryMessage(BasicDeliverEventArgs args, WithMaxRetryAttribute maxRetryAttribute)
@@ -698,25 +828,7 @@ public class InternalMessageBroker : IInternalMessageBroker
         return ( Convert.ToInt32(countRetry) > maxRetryAttribute?.Count , Convert.ToInt32(countRetry) );
     }
     
-    private void _TrySendAckMessage(IModel channel, BasicDeliverEventArgs args, string service, string action)
-    {
-        try
-        {
-            channel.BasicAck(args.DeliveryTag, false); //delete this message from queue
-        }
-        catch (Exception e)
-        {
-            e.FileLogger(_hostEnvironment, _dateTime);
-
-            e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, 
-                NameOfService, NameOfAction
-            );
-            
-            e.CentralExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _externalMessageBroker, _dateTime, service, 
-                action
-            );
-        }
-    }
+    /*---------------------------------------------------------------*/
     
     private Type _GetTypeOfCommandUnitOfWork()
     {
@@ -764,34 +876,6 @@ public class InternalMessageBroker : IInternalMessageBroker
             channel.BindQueueToDirectExchange(mainExchange, mainQueue, messageBroker.Route);
             channel.BindQueueToFanOutExchange(retryExchange_1, retryQueue);
             channel.BindQueueToFanOutExchange(retryExchange_2, mainQueue);
-        }
-    }
-    
-    private void _CleanCache(MethodInfo eventBusHandlerMethod, IServiceProvider serviceProvider, string service, 
-        string action
-    )
-    {
-        try
-        {
-            if (eventBusHandlerMethod.GetCustomAttribute(typeof(WithCleanCacheAttribute)) is WithCleanCacheAttribute withCleanCacheAttribute)
-            {
-                var redisCache = serviceProvider.GetRequiredService<IInternalDistributedCache>();
-
-                foreach (var key in withCleanCacheAttribute.Keies.Split("|"))
-                    redisCache.DeleteKey(key);
-            }
-        }
-        catch (Exception e)
-        {
-            e.FileLogger(_hostEnvironment, _dateTime);
-            
-            e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, 
-                NameOfService, NameOfAction
-            );
-            
-            e.CentralExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _externalMessageBroker, _dateTime, service, 
-                action
-            );
         }
     }
 
@@ -852,7 +936,7 @@ public class InternalMessageBroker : IInternalMessageBroker
         string connectionId, Payload payload, string service, string action
     )
     {
-        unitOfWork?.Rollback();
+        _TryRollback(unitOfWork);
 
         var hubConnection =
             new HubConnectionBuilder().WithUrl(_configuration.GetNotificationServiceHubUrl(_hostEnvironment)).Build();
@@ -883,5 +967,73 @@ public class InternalMessageBroker : IInternalMessageBroker
         }
 
         _TrySendAckMessage(channel, args, service, action);
+    }
+    
+    private async Task _PushValidationNotificationAsync(IModel channel, BasicDeliverEventArgs args,
+        IUnitOfWork unitOfWork, string connectionId, Payload payload, string service, string action, 
+        CancellationToken cancellationToken
+    )
+    {
+        await _TryRollbackAsync(unitOfWork, cancellationToken);
+
+        var hubConnection =
+            new HubConnectionBuilder().WithUrl(_configuration.GetNotificationServiceHubUrl(_hostEnvironment)).Build();
+
+        try
+        {
+            var notification = new NotificationMessage { ConnectionId = connectionId, Payload = payload };
+
+            await hubConnection.StartAsync();
+
+            await hubConnection.InvokeAsync("PushAsync", notification);
+        }
+        catch (Exception e)
+        {
+            //fire&forget
+            e.FileLoggerAsync(_hostEnvironment, _dateTime, cancellationToken);
+            
+            e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, 
+                NameOfService, NameOfAction
+            );
+            
+            //fire&forget
+            e.CentralExceptionLoggerAsync(_hostEnvironment, _globalUniqueIdGenerator, _externalMessageBroker, _dateTime, 
+                service, action, cancellationToken
+            );
+        }
+        finally
+        {
+            await hubConnection.DisposeAsync();
+        }
+
+        await _TrySendAckMessageAsync(channel, args, service, action, cancellationToken);
+    }
+    
+    private void _CleanCache(MethodInfo eventBusHandlerMethod, IServiceProvider serviceProvider, string service, 
+        string action
+    )
+    {
+        try
+        {
+            if (eventBusHandlerMethod.GetCustomAttribute(typeof(WithCleanCacheAttribute)) is WithCleanCacheAttribute withCleanCacheAttribute)
+            {
+                var redisCache = serviceProvider.GetRequiredService<IInternalDistributedCache>();
+
+                foreach (var key in withCleanCacheAttribute.Keies.Split("|"))
+                    redisCache.DeleteKey(key);
+            }
+        }
+        catch (Exception e)
+        {
+            e.FileLogger(_hostEnvironment, _dateTime);
+            
+            e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, 
+                NameOfService, NameOfAction
+            );
+            
+            e.CentralExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _externalMessageBroker, _dateTime, service, 
+                action
+            );
+        }
     }
 }
