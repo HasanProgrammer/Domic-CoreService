@@ -33,12 +33,12 @@ public static class ServerCallContextExtension
     /// 
     /// </summary>
     /// <param name="context"></param>
-    /// <param name="messageBroker"></param>
+    /// <param name="externalMessageBroker"></param>
     /// <param name="globalUniqueIdGenerator"></param>
     /// <param name="dateTime"></param>
     /// <param name="serviceName"></param>
     /// <param name="payload"></param>
-    public static void CentralRequestLogger(this ServerCallContext context, IMessageBroker messageBroker,
+    public static void CentralRequestLogger(this ServerCallContext context, IExternalMessageBroker externalMessageBroker,
         IGlobalUniqueIdGenerator globalUniqueIdGenerator, IDateTime dateTime, string serviceName, object payload
     )
     {
@@ -65,7 +65,7 @@ public static class ServerCallContextExtension
             Route        = Broker.StateTracker_Request_Route
         };
             
-        messageBroker.Publish<SystemRequest>(dto);
+        externalMessageBroker.Publish<SystemRequest>(dto);
     }
 
     /// <summary>
@@ -74,13 +74,13 @@ public static class ServerCallContextExtension
     /// <param name="context"></param>
     /// <param name="hostEnvironment"></param>
     /// <param name="globalUniqueIdGenerator"></param>
-    /// <param name="messageBroker"></param>
+    /// <param name="externalMessageBroker"></param>
     /// <param name="dateTime"></param>
     /// <param name="serviceName"></param>
     /// <param name="payload"></param>
     /// <param name="cancellationToken"></param>
     public static async Task CentralRequestLoggerAsync(this ServerCallContext context, IHostEnvironment hostEnvironment, 
-        IGlobalUniqueIdGenerator globalUniqueIdGenerator, IMessageBroker messageBroker, IDateTime dateTime, 
+        IGlobalUniqueIdGenerator globalUniqueIdGenerator, IExternalMessageBroker externalMessageBroker, IDateTime dateTime, 
         string serviceName, object payload, CancellationToken cancellationToken
     )
     {
@@ -109,7 +109,7 @@ public static class ServerCallContextExtension
                 Route        = Broker.StateTracker_Request_Route
             };
             
-            await Task.Run(() => messageBroker.Publish<SystemRequest>(dto), cancellationToken);
+            await Task.Run(() => externalMessageBroker.Publish<SystemRequest>(dto), cancellationToken);
         }
         catch (Exception e)
         {
@@ -119,7 +119,7 @@ public static class ServerCallContextExtension
                 context.Method
             );
             
-            e.CentralExceptionLogger(hostEnvironment, globalUniqueIdGenerator, messageBroker, dateTime, serviceName, 
+            e.CentralExceptionLogger(hostEnvironment, globalUniqueIdGenerator, externalMessageBroker, dateTime, serviceName, 
                 context.Method
             );
         }
@@ -134,7 +134,7 @@ public static class ServerCallContextExtension
     /// <param name="dateTime"></param>
     /// <param name="serviceName"></param>
     /// <param name="payload"></param>
-    public static void CentralRequestLoggerAsStream(this ServerCallContext context, IEventStreamBroker streamBroker,
+    public static void CentralRequestLoggerAsStream(this ServerCallContext context, IExternalEventStreamBroker streamBroker,
         IGlobalUniqueIdGenerator globalUniqueIdGenerator, IDateTime dateTime, string serviceName, object payload
     )
     {
@@ -163,7 +163,7 @@ public static class ServerCallContextExtension
     /// <param name="context"></param>
     /// <param name="hostEnvironment"></param>
     /// <param name="globalUniqueIdGenerator"></param>
-    /// <param name="eventStreamBroker"></param>
+    /// <param name="externalEventStreamBroker"></param>
     /// <param name="dateTime"></param>
     /// <param name="serviceName"></param>
     /// <param name="payload"></param>
@@ -171,7 +171,7 @@ public static class ServerCallContextExtension
     /// <returns></returns>
     public static async Task CentralRequestLoggerAsStreamAsync(this ServerCallContext context, 
         IHostEnvironment hostEnvironment, IGlobalUniqueIdGenerator globalUniqueIdGenerator, 
-        IEventStreamBroker eventStreamBroker, IDateTime dateTime, string serviceName, object payload, 
+        IExternalEventStreamBroker externalEventStreamBroker, IDateTime dateTime, string serviceName, object payload, 
         CancellationToken cancellationToken
     )
     {
@@ -193,7 +193,7 @@ public static class ServerCallContextExtension
                 CreatedAt_PersianDate = nowPersianDateTime
             };
             
-            await Task.Run(() => eventStreamBroker.Publish<SystemRequest>("StateTracker", systemRequest), cancellationToken);
+            await Task.Run(() => externalEventStreamBroker.Publish<SystemRequest>("StateTracker", systemRequest), cancellationToken);
         }
         catch (Exception e)
         {
@@ -203,7 +203,7 @@ public static class ServerCallContextExtension
                 context.Method
             );
             
-            e.CentralExceptionLoggerAsStream(hostEnvironment, globalUniqueIdGenerator, eventStreamBroker, dateTime,
+            e.CentralExceptionLoggerAsStream(hostEnvironment, globalUniqueIdGenerator, externalEventStreamBroker, dateTime,
                 serviceName, context.Method
             );
         }

@@ -8,12 +8,12 @@ public class StreamLogger : IStreamLogger
 {
     private const string StateTrackerTopic = "StateTracker";
     
-    private readonly IEventStreamBroker       _eventStreamBroker;
+    private readonly IExternalEventStreamBroker       _externalEventStreamBroker;
     private readonly IGlobalUniqueIdGenerator _globalUniqueIdGenerator;
 
-    public StreamLogger(IEventStreamBroker eventStreamBroker, IGlobalUniqueIdGenerator globalUniqueIdGenerator)
+    public StreamLogger(IExternalEventStreamBroker externalEventStreamBroker, IGlobalUniqueIdGenerator globalUniqueIdGenerator)
     {
-        _eventStreamBroker       = eventStreamBroker;
+        _externalEventStreamBroker       = externalEventStreamBroker;
         _globalUniqueIdGenerator = globalUniqueIdGenerator;
     }
 
@@ -26,7 +26,7 @@ public class StreamLogger : IStreamLogger
             Item        = item
         };
         
-        _eventStreamBroker.Publish(StateTrackerTopic, newLog);
+        _externalEventStreamBroker.Publish(StateTrackerTopic, newLog);
     }
 
     public Task RecordAsync(string uniqueKey, string serviceName, object item,
@@ -39,7 +39,7 @@ public class StreamLogger : IStreamLogger
             ServiceName = serviceName , 
             Item        = item
         };
-        
-        return Task.Run(() => _eventStreamBroker.Publish(StateTrackerTopic, newLog), cancellationToken);
+
+        return _externalEventStreamBroker.PublishAsync(StateTrackerTopic, newLog, cancellationToken: cancellationToken);
     }
 }

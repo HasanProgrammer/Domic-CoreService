@@ -10,19 +10,19 @@ namespace Domic.Core.WebAPI.Jobs;
 
 public class MessageStreamConsumerJob : IHostedService
 {
-    private readonly IEventStreamBroker _eventStreamBroker;
+    private readonly IExternalEventStreamBroker _externalEventStreamBroker;
     private readonly IConfiguration _configuration;
 
-    public MessageStreamConsumerJob(IEventStreamBroker eventStreamBroker, IConfiguration configuration)
+    public MessageStreamConsumerJob(IExternalEventStreamBroker externalEventStreamBroker, IConfiguration configuration)
     {
-        _eventStreamBroker = eventStreamBroker;
+        _externalEventStreamBroker = externalEventStreamBroker;
         _configuration = configuration;
     }
 
     public Task StartAsync(CancellationToken cancellationToken)
     {
-        _eventStreamBroker.NameOfAction  = nameof(MessageStreamConsumerJob);
-        _eventStreamBroker.NameOfService = _configuration.GetValue<string>("NameOfService");
+        _externalEventStreamBroker.NameOfAction  = nameof(MessageStreamConsumerJob);
+        _externalEventStreamBroker.NameOfService = _configuration.GetValue<string>("NameOfService");
         
         var useCaseTypes = Assembly.Load(new AssemblyName("Domic.UseCase")).GetTypes();
         
@@ -52,14 +52,14 @@ public class MessageStreamConsumerJob : IHostedService
     
     private void _LongRunningListenerAsNonBlockingAndSequential(string topic, CancellationToken cancellationToken)
     {
-        Task.Factory.StartNew(() => _eventStreamBroker.SubscribeMessage(topic, cancellationToken),
+        Task.Factory.StartNew(() => _externalEventStreamBroker.SubscribeMessage(topic, cancellationToken),
             TaskCreationOptions.LongRunning
         );
     }
     
     private void _LongRunningListenerAsNonBlockingAndAsynchronously(string topic, CancellationToken cancellationToken)
     {
-        Task.Factory.StartNew(() => _eventStreamBroker.SubscribeMessageAsynchronously(topic, cancellationToken),
+        Task.Factory.StartNew(() => _externalEventStreamBroker.SubscribeMessageAsynchronously(topic, cancellationToken),
             TaskCreationOptions.LongRunning
         );
     }

@@ -113,12 +113,12 @@ public static class ExceptionExtension
     /// <param name="e"></param>
     /// <param name="hostEnvironment"></param>
     /// <param name="globalUniqueIdGenerator"></param>
-    /// <param name="messageBroker"></param>
+    /// <param name="externalMessageBroker"></param>
     /// <param name="dateTime"></param>
     /// <param name="service"></param>
     /// <param name="action"></param>
     public static void CentralExceptionLogger(this Exception e, IHostEnvironment hostEnvironment, 
-        IGlobalUniqueIdGenerator globalUniqueIdGenerator, IMessageBroker messageBroker, IDateTime dateTime, 
+        IGlobalUniqueIdGenerator globalUniqueIdGenerator, IExternalMessageBroker externalMessageBroker, IDateTime dateTime, 
         string service, string action
     )
     {
@@ -144,7 +144,7 @@ public static class ExceptionExtension
                 Route        = Broker.StateTracker_Exception_Route
             };
 
-            messageBroker.Publish<SystemException>(dto);
+            externalMessageBroker.Publish<SystemException>(dto);
         }
         catch (Exception exception)
         {
@@ -158,13 +158,13 @@ public static class ExceptionExtension
     /// <param name="e"></param>
     /// <param name="hostEnvironment"></param>
     /// <param name="globalUniqueIdGenerator"></param>
-    /// <param name="messageBroker"></param>
+    /// <param name="externalMessageBroker"></param>
     /// <param name="dateTime"></param>
     /// <param name="service"></param>
     /// <param name="action"></param>
     /// <param name="cancellationToken"></param>
     public static async Task CentralExceptionLoggerAsync(this Exception e, IHostEnvironment hostEnvironment,
-        IGlobalUniqueIdGenerator globalUniqueIdGenerator, IMessageBroker messageBroker, IDateTime dateTime, 
+        IGlobalUniqueIdGenerator globalUniqueIdGenerator, IExternalMessageBroker externalMessageBroker, IDateTime dateTime, 
         string service, string action, CancellationToken cancellationToken
     )
     {
@@ -190,7 +190,7 @@ public static class ExceptionExtension
                 Route        = Broker.StateTracker_Exception_Route
             };
 
-            await messageBroker.PublishAsync<SystemException>(dto, cancellationToken);
+            await externalMessageBroker.PublishAsync<SystemException>(dto, cancellationToken);
         }
         catch (Exception exception)
         {
@@ -205,12 +205,12 @@ public static class ExceptionExtension
     /// <param name="e"></param>
     /// <param name="hostEnvironment"></param>
     /// <param name="globalUniqueIdGenerator"></param>
-    /// <param name="eventStreamBroker"></param>
+    /// <param name="externalEventStreamBroker"></param>
     /// <param name="dateTime"></param>
     /// <param name="service"></param>
     /// <param name="action"></param>
     public static void CentralExceptionLoggerAsStream(this Exception e, IHostEnvironment hostEnvironment, 
-        IGlobalUniqueIdGenerator globalUniqueIdGenerator, IEventStreamBroker eventStreamBroker, IDateTime dateTime, 
+        IGlobalUniqueIdGenerator globalUniqueIdGenerator, IExternalEventStreamBroker externalEventStreamBroker, IDateTime dateTime, 
         string service, string action
     )
     {
@@ -229,7 +229,7 @@ public static class ExceptionExtension
                 CreatedAt_PersianDate = nowPersianDateTime
             };
             
-            eventStreamBroker.Publish<SystemException>("StateTracker", systemException);
+            externalEventStreamBroker.Publish<SystemException>("StateTracker", systemException);
         }
         catch (Exception exception)
         {
@@ -243,13 +243,13 @@ public static class ExceptionExtension
     /// <param name="e"></param>
     /// <param name="hostEnvironment"></param>
     /// <param name="globalUniqueIdGenerator"></param>
-    /// <param name="eventStreamBroker"></param>
+    /// <param name="externalEventStreamBroker"></param>
     /// <param name="dateTime"></param>
     /// <param name="service"></param>
     /// <param name="action"></param>
     /// <param name="cancellationToken"></param>
     public static async Task CentralExceptionLoggerAsStreamAsync(this Exception e, IHostEnvironment hostEnvironment, 
-        IGlobalUniqueIdGenerator globalUniqueIdGenerator, IEventStreamBroker eventStreamBroker, IDateTime dateTime, 
+        IGlobalUniqueIdGenerator globalUniqueIdGenerator, IExternalEventStreamBroker externalEventStreamBroker, IDateTime dateTime, 
         string service, string action, CancellationToken cancellationToken
     )
     {
@@ -268,7 +268,7 @@ public static class ExceptionExtension
                 CreatedAt_PersianDate = nowPersianDateTime
             };
             
-            await eventStreamBroker.PublishAsync<SystemException>("StateTracker", systemException, 
+            await externalEventStreamBroker.PublishAsync<SystemException>("StateTracker", systemException, 
                 cancellationToken: cancellationToken
             );
         }

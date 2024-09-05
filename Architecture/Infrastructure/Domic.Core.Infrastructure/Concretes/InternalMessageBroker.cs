@@ -1,4 +1,6 @@
-﻿using System.Reflection;
+﻿#pragma warning disable CS4014 // Because this call is not awaited, execution of the current method continues before the call is completed
+
+using System.Reflection;
 using System.Text;
 using Domic.Core.Domain.Contracts.Interfaces;
 using Domic.Core.Domain.Exceptions;
@@ -17,24 +19,23 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Newtonsoft.Json;
 using Polly;
-using Polly.Retry;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 
 namespace Domic.Core.Infrastructure.Concretes;
 
-public class AsyncCommandBroker : IAsyncCommandBroker
+public class InternalMessageBroker : IInternalMessageBroker
 {
     private readonly IConnection              _connection;
     private readonly IConfiguration           _configuration;
     private readonly IHostEnvironment         _hostEnvironment;
-    private readonly IMessageBroker           _messageBroker;
+    private readonly IExternalMessageBroker           _externalMessageBroker;
     private readonly IServiceScopeFactory     _serviceScopeFactory;
     private readonly IGlobalUniqueIdGenerator _globalUniqueIdGenerator;
     private readonly IDateTime                _dateTime;
 
-    public AsyncCommandBroker(IDateTime dateTime, IServiceScopeFactory serviceScopeFactory,
-        IHostEnvironment hostEnvironment, IConfiguration configuration, IMessageBroker messageBroker, 
+    public InternalMessageBroker(IDateTime dateTime, IServiceScopeFactory serviceScopeFactory,
+        IHostEnvironment hostEnvironment, IConfiguration configuration, IExternalMessageBroker externalMessageBroker, 
         IGlobalUniqueIdGenerator globalUniqueIdGenerator
     )
     {
@@ -42,7 +43,7 @@ public class AsyncCommandBroker : IAsyncCommandBroker
         _serviceScopeFactory     = serviceScopeFactory;
         _hostEnvironment         = hostEnvironment;
         _configuration           = configuration;
-        _messageBroker           = messageBroker;
+        _externalMessageBroker           = externalMessageBroker;
         _globalUniqueIdGenerator = globalUniqueIdGenerator;
         
         var factory = new ConnectionFactory {
@@ -66,24 +67,47 @@ public class AsyncCommandBroker : IAsyncCommandBroker
         var commandBusType = useCaseTypes.FirstOrDefault(type => type == command.GetType());
         var messageBroker  = commandBusType.GetCustomAttribute(typeof(QueueableAttribute)) as QueueableAttribute;
 
-        var retryPolicy = Policy.Handle<Exception>()
-                                .WaitAndRetry(5, _ => TimeSpan.FromSeconds(3), 
-                                    (exception, timeSpan, context) => throw exception
-                                );
+        Policy.Handle<Exception>()
+              .WaitAndRetry(5, _ => TimeSpan.FromSeconds(3), (exception, timeSpan, context) => {})
+              .Execute(() => {
+                  
+                  using var channel = _connection.CreateModel();
+  
+                  channel.PublishMessageToDirectExchange(
+                      command.Serialize(), messageBroker.Exchange, messageBroker.Route,
+                      new Dictionary<string, object> {
+                          { "Command", commandBusType.Name },
+                          { "Namespace", commandBusType.Namespace }
+                      }
+                  );
+                  
+              });
+    }
 
-        retryPolicy.Execute(() => {
-            
-            using var channel = _connection.CreateModel();
+    public Task PublishAsync<TCommand>(TCommand command, CancellationToken cancellationToken) 
+        where TCommand : IAsyncCommand
+    {
+        var useCaseTypes   = Assembly.Load(new AssemblyName("Domic.UseCase")).GetTypes();
+        var commandBusType = useCaseTypes.FirstOrDefault(type => type == command.GetType());
+        var messageBroker  = commandBusType.GetCustomAttribute(typeof(QueueableAttribute)) as QueueableAttribute;
 
-            channel.PublishMessageToDirectExchange(
-                command.Serialize(), messageBroker.Exchange, messageBroker.Route,
-                new Dictionary<string, object> {
-                    { "Command"   , commandBusType.Name      },
-                    { "Namespace" , commandBusType.Namespace }
-                }
-            );
-            
-        });
+        return Policy.Handle<Exception>()
+                     .WaitAndRetryAsync(5, _ => TimeSpan.FromSeconds(3), (exception, timeSpan, context) => {})
+                     .ExecuteAsync(() => 
+                         Task.Run(() => {
+                             
+                             using var channel = _connection.CreateModel();
+  
+                             channel.PublishMessageToDirectExchange(
+                                 command.Serialize(), messageBroker.Exchange, messageBroker.Route,
+                                 new Dictionary<string, object> {
+                                     { "Command", commandBusType.Name },
+                                     { "Namespace", commandBusType.Namespace }
+                                 }
+                             );
+                             
+                         }, cancellationToken)
+                     );
     }
 
     public void Subscribe(string queue)
@@ -117,7 +141,7 @@ public class AsyncCommandBroker : IAsyncCommandBroker
                 NameOfAction
             );
             
-            e.CentralExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _messageBroker, _dateTime, 
+            e.CentralExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _externalMessageBroker, _dateTime, 
                 NameOfService, NameOfAction
             );
         }
@@ -161,14 +185,16 @@ public class AsyncCommandBroker : IAsyncCommandBroker
         }
         catch (Exception e)
         {
-            e.FileLogger(_hostEnvironment, _dateTime);
+            //fire&forget
+            e.FileLoggerAsync(_hostEnvironment, _dateTime, cancellationToken);
             
             e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, NameOfService, 
                 NameOfAction
             );
             
-            e.CentralExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _messageBroker, _dateTime, 
-                NameOfService, NameOfAction
+            //fire&forget
+            e.CentralExceptionLoggerAsync(_hostEnvironment, _globalUniqueIdGenerator, _externalMessageBroker, _dateTime, 
+                NameOfService, NameOfAction, cancellationToken
             );
         }
     }
@@ -396,7 +422,7 @@ public class AsyncCommandBroker : IAsyncCommandBroker
                 NameOfService, NameOfAction
             );
             
-            e.CentralExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _messageBroker, _dateTime, service, 
+            e.CentralExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _externalMessageBroker, _dateTime, service, 
                 commandBusHandlerType is not null ? commandBusHandlerType.Name : NameOfAction
             );
 
@@ -627,7 +653,7 @@ public class AsyncCommandBroker : IAsyncCommandBroker
                 NameOfService, NameOfAction
             );
             
-            e.CentralExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _messageBroker, _dateTime, service, 
+            e.CentralExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _externalMessageBroker, _dateTime, service, 
                 commandBusHandlerType is not null ? commandBusHandlerType.Name : NameOfAction
             );
 
@@ -655,7 +681,7 @@ public class AsyncCommandBroker : IAsyncCommandBroker
                 NameOfService, NameOfAction
             );
             
-            e.CentralExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _messageBroker, _dateTime, service, 
+            e.CentralExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _externalMessageBroker, _dateTime, service, 
                 action
             );
         }
@@ -686,7 +712,7 @@ public class AsyncCommandBroker : IAsyncCommandBroker
                 NameOfService, NameOfAction
             );
             
-            e.CentralExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _messageBroker, _dateTime, service, 
+            e.CentralExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _externalMessageBroker, _dateTime, service, 
                 action
             );
         }
@@ -763,7 +789,7 @@ public class AsyncCommandBroker : IAsyncCommandBroker
                 NameOfService, NameOfAction
             );
             
-            e.CentralExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _messageBroker, _dateTime, service, 
+            e.CentralExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _externalMessageBroker, _dateTime, service, 
                 action
             );
         }
@@ -812,7 +838,7 @@ public class AsyncCommandBroker : IAsyncCommandBroker
                 NameOfService, NameOfAction
             );
             
-            e.CentralExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _messageBroker, _dateTime, service, 
+            e.CentralExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _externalMessageBroker, _dateTime, service, 
                 action
             );
         }
@@ -847,7 +873,7 @@ public class AsyncCommandBroker : IAsyncCommandBroker
                 NameOfService, NameOfAction
             );
             
-            e.CentralExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _messageBroker, _dateTime, service, 
+            e.CentralExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _externalMessageBroker, _dateTime, service, 
                 action
             );
         }

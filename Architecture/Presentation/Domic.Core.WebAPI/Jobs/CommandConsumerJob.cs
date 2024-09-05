@@ -9,9 +9,9 @@ namespace Domic.Core.WebAPI.Jobs;
 public class CommandConsumerJob : IHostedService
 {
     private readonly IConfiguration      _configuration;
-    private readonly IAsyncCommandBroker _commandBroker;
+    private readonly IInternalMessageBroker _commandBroker;
 
-    public CommandConsumerJob(IAsyncCommandBroker commandBroker, IConfiguration configuration)
+    public CommandConsumerJob(IInternalMessageBroker commandBroker, IConfiguration configuration)
     {
         _configuration = configuration;
         _commandBroker = commandBroker;

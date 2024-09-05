@@ -23,11 +23,11 @@ using Environment = System.Environment;
 
 namespace Domic.Core.Infrastructure.Concretes;
 
-public class EventStreamBroker(
+public class ExternalEventStreamBroker(
     ISerializer serializer, IServiceProvider serviceProvider, IHostEnvironment hostEnvironment, IDateTime dateTime,
     IGlobalUniqueIdGenerator globalUniqueIdGenerator, IServiceScopeFactory serviceScopeFactory,
     IConfiguration configuration
-) : IEventStreamBroker
+) : IExternalEventStreamBroker
 {
     private static object _lock = new();
     private static SemaphoreSlim _asyncLock = new(1, 1);

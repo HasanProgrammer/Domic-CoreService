@@ -26,8 +26,8 @@ public class FullExceptionHandlerInterceptor : Interceptor
     private readonly IConfiguration   _configuration;
     private readonly IHostEnvironment _hostEnvironment;
 
-    private IMessageBroker           _messageBroker;
-    private IEventStreamBroker       _eventStreamBroker;
+    private IExternalMessageBroker           _externalMessageBroker;
+    private IExternalEventStreamBroker       _externalEventStreamBroker;
     private IDateTime                _dateTime;
     private ICoreCommandUnitOfWork   _coreCommandUnitOfWork;
     private IGlobalUniqueIdGenerator _globalUniqueIdGenerator;
@@ -78,17 +78,17 @@ public class FullExceptionHandlerInterceptor : Interceptor
 
             if (loggerType.Messaging)
             {
-                _messageBroker = context.GetHttpContext().RequestServices.GetRequiredService<IMessageBroker>();
+                _externalMessageBroker = context.GetHttpContext().RequestServices.GetRequiredService<IExternalMessageBroker>();
                 
-                context.CentralRequestLoggerAsync(_hostEnvironment, _globalUniqueIdGenerator, _messageBroker, _dateTime, 
+                context.CentralRequestLoggerAsync(_hostEnvironment, _globalUniqueIdGenerator, _externalMessageBroker, _dateTime, 
                     serviceName, request, context.CancellationToken
                 );
             }
             else
             {
-                _eventStreamBroker = context.GetHttpContext().RequestServices.GetRequiredService<IEventStreamBroker>();
+                _externalEventStreamBroker = context.GetHttpContext().RequestServices.GetRequiredService<IExternalEventStreamBroker>();
                 
-                context.CentralRequestLoggerAsStreamAsync(_hostEnvironment, _globalUniqueIdGenerator, _eventStreamBroker, 
+                context.CentralRequestLoggerAsStreamAsync(_hostEnvironment, _globalUniqueIdGenerator, _externalEventStreamBroker, 
                     _dateTime, serviceName, request, context.CancellationToken
                 );
             }
@@ -159,15 +159,15 @@ public class FullExceptionHandlerInterceptor : Interceptor
                 context.Method
             );
 
-            if (_messageBroker is not null)
+            if (_externalMessageBroker is not null)
             {
-                e.CentralExceptionLoggerAsync(_hostEnvironment, _globalUniqueIdGenerator, _messageBroker, _dateTime, 
+                e.CentralExceptionLoggerAsync(_hostEnvironment, _globalUniqueIdGenerator, _externalMessageBroker, _dateTime, 
                     serviceName, context.Method, context.CancellationToken
                 );
             }
             else
             {
-                e.CentralExceptionLoggerAsStreamAsync(_hostEnvironment, _globalUniqueIdGenerator, _eventStreamBroker, 
+                e.CentralExceptionLoggerAsStreamAsync(_hostEnvironment, _globalUniqueIdGenerator, _externalEventStreamBroker, 
                     _dateTime, serviceName, context.Method, context.CancellationToken
                 );
             }

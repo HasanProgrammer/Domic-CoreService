@@ -23,7 +23,7 @@ public class ExceptionHandler
     
     private IConfiguration           _configuration;
     private IHostEnvironment         _hostEnvironment;
-    private IMessageBroker           _messageBroker;
+    private IExternalMessageBroker           _externalMessageBroker;
     private IDateTime                _dateTime;
     private IGlobalUniqueIdGenerator _globalUniqueIdGenerator;
 
@@ -46,10 +46,10 @@ public class ExceptionHandler
             _configuration           = context.RequestServices.GetRequiredService<IConfiguration>();
             _hostEnvironment         = context.RequestServices.GetRequiredService<IHostEnvironment>();
             _dateTime                = context.RequestServices.GetRequiredService<IDateTime>();
-            _messageBroker           = context.RequestServices.GetRequiredService<IMessageBroker>(); 
+            _externalMessageBroker           = context.RequestServices.GetRequiredService<IExternalMessageBroker>(); 
             _globalUniqueIdGenerator = context.RequestServices.GetRequiredService<IGlobalUniqueIdGenerator>();
             
-            context.CentralRequestLoggerAsync(_hostEnvironment, _globalUniqueIdGenerator, _messageBroker, _dateTime, 
+            context.CentralRequestLoggerAsync(_hostEnvironment, _globalUniqueIdGenerator, _externalMessageBroker, _dateTime, 
                 serviceName, default
             );
 
@@ -172,7 +172,7 @@ public class ExceptionHandler
             serviceName, context.Request.Path
         );
         
-        exception.CentralExceptionLoggerAsync(_hostEnvironment, _globalUniqueIdGenerator, _messageBroker, _dateTime, 
+        exception.CentralExceptionLoggerAsync(_hostEnvironment, _globalUniqueIdGenerator, _externalMessageBroker, _dateTime, 
             serviceName, context.Request.Path, default
         );
 

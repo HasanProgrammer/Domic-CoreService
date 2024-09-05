@@ -6,21 +6,21 @@ namespace Domic.Core.WebAPI.Jobs;
 
 public class ProducerEventJob : IHostedService, IDisposable
 {
-    private readonly IMessageBroker _messageBroker;
+    private readonly IExternalMessageBroker _externalMessageBroker;
     private readonly IConfiguration _configuration;
 
     private Timer _timer;
 
-    public ProducerEventJob(IMessageBroker messageBroker, IConfiguration configuration)
+    public ProducerEventJob(IExternalMessageBroker externalMessageBroker, IConfiguration configuration)
     {
-        _messageBroker = messageBroker;
+        _externalMessageBroker = externalMessageBroker;
         _configuration = configuration;
     }
 
     public Task StartAsync(CancellationToken cancellationToken)
     {
-        _messageBroker.NameOfAction  = nameof(ProducerEventJob);
-        _messageBroker.NameOfService = _configuration.GetValue<string>("NameOfService");
+        _externalMessageBroker.NameOfAction  = nameof(ProducerEventJob);
+        _externalMessageBroker.NameOfService = _configuration.GetValue<string>("NameOfService");
 
         #if false
         
@@ -30,7 +30,7 @@ public class ProducerEventJob : IHostedService, IDisposable
         #endif
         
         _timer =
-            new Timer(state => _messageBroker.PublishAsync(cancellationToken), null, TimeSpan.Zero, TimeSpan.FromSeconds(5));
+            new Timer(state => _externalMessageBroker.PublishAsync(cancellationToken), null, TimeSpan.Zero, TimeSpan.FromSeconds(5));
         
         return Task.CompletedTask;
     }

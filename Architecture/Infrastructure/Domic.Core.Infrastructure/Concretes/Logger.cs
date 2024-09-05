@@ -9,12 +9,12 @@ namespace Domic.Core.Infrastructure.Concretes;
 
 public class Logger : ILogger
 {
-    private readonly IMessageBroker           _messageBroker;
+    private readonly IExternalMessageBroker           _externalMessageBroker;
     private readonly IGlobalUniqueIdGenerator _globalUniqueIdGenerator;
 
-    public Logger(IMessageBroker messageBroker, IGlobalUniqueIdGenerator globalUniqueIdGenerator)
+    public Logger(IExternalMessageBroker externalMessageBroker, IGlobalUniqueIdGenerator globalUniqueIdGenerator)
     {
-        _messageBroker           = messageBroker;
+        _externalMessageBroker           = externalMessageBroker;
         _globalUniqueIdGenerator = globalUniqueIdGenerator;
     }
 
@@ -34,7 +34,7 @@ public class Logger : ILogger
             Route        = Broker.StateTracker_Log_Route
         };
         
-        _messageBroker.Publish(messageBrokerDto);
+        _externalMessageBroker.Publish(messageBrokerDto);
     }
 
     public Task RecordAsync(string uniqueKey, string serviceName, object item,
@@ -55,6 +55,6 @@ public class Logger : ILogger
             Route        = Broker.StateTracker_Log_Route
         };
         
-        return Task.Run(() => _messageBroker.Publish(messageBrokerDto), cancellationToken);
+        return Task.Run(() => _externalMessageBroker.Publish(messageBrokerDto), cancellationToken);
     }
 }

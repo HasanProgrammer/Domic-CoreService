@@ -46,7 +46,7 @@ public class Mediator : IMediator
     public void DispatchAsFireAndForget(IAsyncCommand command)
     {
         var asyncCommandBroker =
-            _serviceProvider.GetRequiredService(typeof(IAsyncCommandBroker)) as IAsyncCommandBroker;
+            _serviceProvider.GetRequiredService(typeof(IInternalMessageBroker)) as IInternalMessageBroker;
         
         //ToDo : ( Tech Debt ) => Should be used retry pattern with tools like [Polly]
         asyncCommandBroker.Publish(command);
@@ -127,7 +127,7 @@ public class Mediator : IMediator
         Task.Run(() => {
             
             var asyncCommandBroker =
-                _serviceProvider.GetRequiredService(typeof(IAsyncCommandBroker)) as IAsyncCommandBroker;
+                _serviceProvider.GetRequiredService(typeof(IInternalMessageBroker)) as IInternalMessageBroker;
             
             //ToDo : ( Tech Debt ) => Should be used retry pattern with tools like [Polly]
             asyncCommandBroker.Publish(command);

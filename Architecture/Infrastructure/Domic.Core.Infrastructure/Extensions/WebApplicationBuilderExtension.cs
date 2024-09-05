@@ -408,7 +408,7 @@ public static class WebApplicationBuilderExtension
     public static void RegisterCommandQueryUseCases(this WebApplicationBuilder builder)
     {
         builder.Services.AddTransient(typeof(IMediator), typeof(Mediator));
-        builder.Services.AddSingleton(typeof(IAsyncCommandBroker), typeof(AsyncCommandBroker));
+        builder.Services.AddSingleton(typeof(IInternalMessageBroker), typeof(InternalMessageBroker));
         
         Type[] useCaseAssemblyTypes = Assembly.Load(new AssemblyName("Domic.UseCase")).GetTypes();
         
@@ -425,7 +425,7 @@ public static class WebApplicationBuilderExtension
     /// <param name="builder"></param>
     public static void RegisterMessageBroker(this WebApplicationBuilder builder)
     {
-        builder.Services.AddSingleton(typeof(IMessageBroker), typeof(MessageBroker));
+        builder.Services.AddSingleton(typeof(IExternalMessageBroker), typeof(ExternalMessageBroker));
 
         Type[] useCaseAssemblyTypes = Assembly.Load(new AssemblyName("Domic.UseCase")).GetTypes();
         
@@ -439,7 +439,7 @@ public static class WebApplicationBuilderExtension
     /// <param name="builder"></param>
     public static void RegisterEventStreamBroker(this WebApplicationBuilder builder)
     {
-        builder.Services.AddSingleton(typeof(IEventStreamBroker), typeof(EventStreamBroker));
+        builder.Services.AddSingleton(typeof(IExternalEventStreamBroker), typeof(ExternalEventStreamBroker));
 
         Type[] useCaseAssemblyTypes = Assembly.Load(new AssemblyName("Domic.UseCase")).GetTypes();
         

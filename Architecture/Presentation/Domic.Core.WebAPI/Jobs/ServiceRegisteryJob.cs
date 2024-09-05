@@ -17,17 +17,17 @@ namespace Domic.Core.WebAPI.Jobs;
 
 public class ServiceRegisteryJob : IHostedService
 {
-    private readonly IMessageBroker       _messageBroker;
+    private readonly IExternalMessageBroker       _externalMessageBroker;
     private readonly IConfiguration       _configuration;
     private readonly IHostEnvironment     _hostEnvironment;
     private readonly IServiceScopeFactory _serviceScopeFactory;
 
     public ServiceRegisteryJob(IConfiguration configuration, IHostEnvironment hostEnvironment, 
-        IMessageBroker messageBroker, IServiceScopeFactory serviceScopeFactory
+        IExternalMessageBroker externalMessageBroker, IServiceScopeFactory serviceScopeFactory
     )
     {
         _configuration       = configuration;
-        _messageBroker       = messageBroker;
+        _externalMessageBroker       = externalMessageBroker;
         _hostEnvironment     = hostEnvironment;
         _serviceScopeFactory = serviceScopeFactory;
     }
@@ -46,7 +46,7 @@ public class ServiceRegisteryJob : IHostedService
 
         try
         {
-            await _messageBroker.PublishAsync(new MessageBrokerDto<ServiceStatus> {
+            await _externalMessageBroker.PublishAsync(new MessageBrokerDto<ServiceStatus> {
                 Message = new ServiceStatus {
                     Id        = globalUniqueIdGenerator.GetRandom(6),
                     Name      = serviceName         ,

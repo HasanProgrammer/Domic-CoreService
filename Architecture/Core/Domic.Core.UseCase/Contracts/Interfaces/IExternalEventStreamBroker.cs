@@ -1,6 +1,6 @@
 ﻿namespace Domic.Core.UseCase.Contracts.Interfaces;
 
-public interface IEventStreamBroker
+public interface IExternalEventStreamBroker
 {
     public string NameOfAction  { get; set; }
     public string NameOfService { get; set; }

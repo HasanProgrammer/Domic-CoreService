@@ -10,19 +10,19 @@ namespace Domic.Core.WebAPI.Jobs;
 
 public class EventRetriableStreamConsumerJob : IHostedService
 {
-    private readonly IEventStreamBroker _eventStreamBroker;
+    private readonly IExternalEventStreamBroker _externalEventStreamBroker;
     private readonly IConfiguration _configuration;
 
-    public EventRetriableStreamConsumerJob(IEventStreamBroker eventStreamBroker, IConfiguration configuration)
+    public EventRetriableStreamConsumerJob(IExternalEventStreamBroker externalEventStreamBroker, IConfiguration configuration)
     {
-        _eventStreamBroker = eventStreamBroker;
+        _externalEventStreamBroker = externalEventStreamBroker;
         _configuration = configuration;
     }
 
     public Task StartAsync(CancellationToken cancellationToken)
     {
-        _eventStreamBroker.NameOfAction  = nameof(EventRetriableStreamConsumerJob);
-        _eventStreamBroker.NameOfService = _configuration.GetValue<string>("NameOfService");
+        _externalEventStreamBroker.NameOfAction  = nameof(EventRetriableStreamConsumerJob);
+        _externalEventStreamBroker.NameOfService = _configuration.GetValue<string>("NameOfService");
         
         var useCaseTypes = Assembly.Load(new AssemblyName("Domic.UseCase")).GetTypes();
         
@@ -39,7 +39,7 @@ public class EventRetriableStreamConsumerJob : IHostedService
         foreach (var topic in topics)
             if (topic is not null)
             {
-                var retryTopic = $"{_eventStreamBroker.NameOfService}-Retry-{topic}";
+                var retryTopic = $"{_externalEventStreamBroker.NameOfService}-Retry-{topic}";
                 
                 if (_configuration.GetValue<bool>("IsExternalBrokerConsumingAsync"))
                     _LongRunningListenerAsNonBlockingAndAsynchronously(retryTopic, cancellationToken);
@@ -56,14 +56,14 @@ public class EventRetriableStreamConsumerJob : IHostedService
     
     private void _LongRunningListenerAsNonBlockingAndSynchronously(string topic, CancellationToken cancellationToken)
     {
-        Task.Factory.StartNew(() => _eventStreamBroker.SubscribeRetriable(topic, cancellationToken),
+        Task.Factory.StartNew(() => _externalEventStreamBroker.SubscribeRetriable(topic, cancellationToken),
             TaskCreationOptions.LongRunning
         );
     }
     
     private void _LongRunningListenerAsNonBlockingAndAsynchronously(string topic, CancellationToken cancellationToken)
     {
-        Task.Factory.StartNew(() => _eventStreamBroker.SubscribeRetriableAsynchronously(topic, cancellationToken),
+        Task.Factory.StartNew(() => _externalEventStreamBroker.SubscribeRetriableAsynchronously(topic, cancellationToken),
             TaskCreationOptions.LongRunning
         );
     }

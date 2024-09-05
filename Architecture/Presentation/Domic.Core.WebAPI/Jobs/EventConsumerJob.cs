@@ -9,19 +9,19 @@ namespace Domic.Core.WebAPI.Jobs;
 
 public class EventConsumerJob : IHostedService
 {
-    private readonly IMessageBroker _messageBroker;
+    private readonly IExternalMessageBroker _externalMessageBroker;
     private readonly IConfiguration _configuration;
 
-    public EventConsumerJob(IMessageBroker messageBroker, IConfiguration configuration)
+    public EventConsumerJob(IExternalMessageBroker externalMessageBroker, IConfiguration configuration)
     {
-        _messageBroker = messageBroker;
+        _externalMessageBroker = externalMessageBroker;
         _configuration = configuration;
     }
 
     public Task StartAsync(CancellationToken cancellationToken)
     {
-        _messageBroker.NameOfAction  = nameof(EventConsumerJob);
-        _messageBroker.NameOfService = _configuration.GetValue<string>("NameOfService");
+        _externalMessageBroker.NameOfAction  = nameof(EventConsumerJob);
+        _externalMessageBroker.NameOfService = _configuration.GetValue<string>("NameOfService");
         
         var domainTypes = Assembly.Load(new AssemblyName("Domic.Domain")).GetTypes();
         
@@ -49,14 +49,14 @@ public class EventConsumerJob : IHostedService
 
     private void _LongRunningListenerAsNonBlocking(string queue)
     {
-        Task.Factory.StartNew(() => _messageBroker.Subscribe(queue),
+        Task.Factory.StartNew(() => _externalMessageBroker.Subscribe(queue),
             TaskCreationOptions.LongRunning
         );
     }
     
     private void _LongRunningListenerAsNonBlocking(string queue, CancellationToken cancellationToken)
     {
-        Task.Factory.StartNew(() => _messageBroker.SubscribeAsynchronously(queue, cancellationToken),
+        Task.Factory.StartNew(() => _externalMessageBroker.SubscribeAsynchronously(queue, cancellationToken),
             TaskCreationOptions.LongRunning
         );
     }

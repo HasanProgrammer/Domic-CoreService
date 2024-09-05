@@ -25,7 +25,7 @@ using RabbitMQ.Client.Events;
 
 namespace Domic.Core.Infrastructure.Concretes;
 
-public class MessageBroker : IMessageBroker
+public class ExternalMessageBroker : IExternalMessageBroker
 {
     private static object _lock = new();
     private static SemaphoreSlim _asyncLock = new(1, 1);
@@ -37,7 +37,7 @@ public class MessageBroker : IMessageBroker
     private readonly IGlobalUniqueIdGenerator _globalUniqueIdGenerator;
     private readonly IConfiguration _configuration;
 
-    public MessageBroker(IConfiguration configuration, IHostEnvironment hostEnvironment, 
+    public ExternalMessageBroker(IConfiguration configuration, IHostEnvironment hostEnvironment, 
         IServiceScopeFactory serviceScopeFactory, IDateTime dateTime, IGlobalUniqueIdGenerator globalUniqueIdGenerator
     )
     {

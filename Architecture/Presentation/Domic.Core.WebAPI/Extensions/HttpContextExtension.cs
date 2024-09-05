@@ -66,11 +66,11 @@ public static class HttpContextExtension
     /// </summary>
     /// <param name="context"></param>
     /// <param name="globalUniqueIdGenerator"></param>
-    /// <param name="messageBroker"></param>
+    /// <param name="externalMessageBroker"></param>
     /// <param name="dateTime"></param>
     /// <param name="serviceName"></param>
     public static void CentralRequestLogger(this HttpContext context, 
-        IGlobalUniqueIdGenerator globalUniqueIdGenerator, IMessageBroker messageBroker, IDateTime dateTime, 
+        IGlobalUniqueIdGenerator globalUniqueIdGenerator, IExternalMessageBroker externalMessageBroker, IDateTime dateTime, 
         string serviceName
     )
     {
@@ -108,7 +108,7 @@ public static class HttpContextExtension
             Route        = Broker.StateTracker_Request_Route
         };
                 
-        messageBroker.Publish<SystemRequest>(dto);
+        externalMessageBroker.Publish<SystemRequest>(dto);
     }
 
     /// <summary>
@@ -117,12 +117,12 @@ public static class HttpContextExtension
     /// <param name="context"></param>
     /// <param name="hostEnvironment"></param>
     /// <param name="globalUniqueIdGenerator"></param>
-    /// <param name="messageBroker"></param>
+    /// <param name="externalMessageBroker"></param>
     /// <param name="dateTime"></param>
     /// <param name="serviceName"></param>
     /// <param name="cancellationToken"></param>
     public static async Task CentralRequestLoggerAsync(this HttpContext context, IHostEnvironment hostEnvironment, 
-        IGlobalUniqueIdGenerator globalUniqueIdGenerator, IMessageBroker messageBroker, IDateTime dateTime, 
+        IGlobalUniqueIdGenerator globalUniqueIdGenerator, IExternalMessageBroker externalMessageBroker, IDateTime dateTime, 
         string serviceName, CancellationToken cancellationToken
     )
     {
@@ -162,7 +162,7 @@ public static class HttpContextExtension
                 Route        = Broker.StateTracker_Request_Route
             };
                 
-            await Task.Run(() => messageBroker.Publish<SystemRequest>(dto), cancellationToken);
+            await Task.Run(() => externalMessageBroker.Publish<SystemRequest>(dto), cancellationToken);
         }
         catch (Exception e)
         {
