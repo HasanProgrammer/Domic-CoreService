@@ -103,6 +103,7 @@ public class MessageBroker : IMessageBroker
                  .WaitAndRetryAsync(5, _ => TimeSpan.FromSeconds(3), (exception, timeSpan, context) => {})
                  .ExecuteAsync(() => 
                      Task.Run(() => {
+                         
                          using var channel = _connection.CreateModel();
                          
                          switch (messageBroker.ExchangeType)
@@ -112,20 +113,21 @@ public class MessageBroker : IMessageBroker
                                      messageBroker.Message.Serialize(), messageBroker.Exchange, messageBroker.Route, 
                                      messageBroker.Headers
                                  );
-                                 break;
+                            break;
      
                              case Exchange.FanOut :
                                  channel.PublishMessageToFanOutExchange(
                                      messageBroker.Message.Serialize(), messageBroker.Exchange
                                  );
-                                 break;
+                             break;
      
                              case Exchange.Unknown :
                                  channel.PublishMessage(messageBroker.Message.Serialize(), messageBroker.Queue);
-                                 break;
+                             break;
      
                              default: throw new ArgumentOutOfRangeException();
                          }
+                         
                      }, cancellationToken)
                  );
 
@@ -725,7 +727,7 @@ public class MessageBroker : IMessageBroker
                 }
             }
             
-            _TrySendAckMessage(channel, args);
+            await _TrySendAckMessageAsync(channel, args, cancellationToken);
         }
         catch (Exception e)
         {
@@ -737,8 +739,7 @@ public class MessageBroker : IMessageBroker
             );
 
             await _TryRollbackAsync(unitOfWork, cancellationToken);
-
-            _TryRequeueMessageAsDeadLetter(channel, args);
+            await _TryRequeueMessageAsDeadLetterAsync(channel, args, cancellationToken);
         }
     }
     
@@ -923,7 +924,7 @@ public class MessageBroker : IMessageBroker
                 }
             }
             
-            _TrySendAckMessage(channel, args);
+            await _TrySendAckMessageAsync(channel, args, cancellationToken);
         }
         catch (Exception e)
         {
@@ -935,8 +936,7 @@ public class MessageBroker : IMessageBroker
             );
 
             await _TryRollbackAsync(unitOfWork, cancellationToken);
-            
-            _TryRequeueMessageAsDeadLetter(channel, args);
+            await _TryRequeueMessageAsDeadLetterAsync(channel, args, cancellationToken);
         }
     }
     
@@ -1288,8 +1288,7 @@ public class MessageBroker : IMessageBroker
             );
 
             await _TryRollbackAsync(unitOfWork, cancellationToken);
-
-            _TryRequeueMessageAsDeadLetter(channel, args);
+            await _TryRequeueMessageAsDeadLetterAsync(channel, args, cancellationToken);
         }
     }
     
@@ -1306,8 +1305,6 @@ public class MessageBroker : IMessageBroker
         catch (Exception e)
         {
             e.FileLogger(_hostEnvironment, _dateTime);
-            
-            //todo: should be sending notification
         }
     }
     
@@ -1324,8 +1321,6 @@ public class MessageBroker : IMessageBroker
         {
             //fire&forget
             e.FileLoggerAsync(_hostEnvironment, _dateTime, cancellationToken: cancellationToken);
-            
-            //todo: should be sending notification
         }
 
         return Task.CompletedTask;
@@ -1376,17 +1371,6 @@ public class MessageBroker : IMessageBroker
         return Task.CompletedTask;
     }
     
-    private (bool result, int countOfRetry) _IsMaxRetryMessage(BasicDeliverEventArgs args, WithMaxRetryAttribute maxRetryAttribute)
-    {
-        var xDeath = args.BasicProperties.Headers?.FirstOrDefault(header => header.Key.Equals("x-death")).Value;
-
-        var xDeathInfo = (xDeath as List<object>)?.FirstOrDefault() as Dictionary<string, object>;
-                
-        var countRetry = xDeathInfo?.FirstOrDefault(header => header.Key.Equals("count")).Value;
-
-        return ( Convert.ToInt32(countRetry) > maxRetryAttribute?.Count , Convert.ToInt32(countRetry) );
-    }
-    
     private void _TrySendAckMessage(IModel channel, BasicDeliverEventArgs args)
     {
         try
@@ -1431,6 +1415,19 @@ public class MessageBroker : IMessageBroker
 
         return Task.CompletedTask;
     }
+    
+    private (bool result, int countOfRetry) _IsMaxRetryMessage(BasicDeliverEventArgs args, WithMaxRetryAttribute maxRetryAttribute)
+    {
+        var xDeath = args.BasicProperties.Headers?.FirstOrDefault(header => header.Key.Equals("x-death")).Value;
+
+        var xDeathInfo = (xDeath as List<object>)?.FirstOrDefault() as Dictionary<string, object>;
+                
+        var countRetry = xDeathInfo?.FirstOrDefault(header => header.Key.Equals("count")).Value;
+
+        return ( Convert.ToInt32(countRetry) > maxRetryAttribute?.Count , Convert.ToInt32(countRetry) );
+    }
+    
+    /*---------------------------------------------------------------*/
     
     private Type _GetTypeOfUnitOfWork(TransactionType transactionType)
     {

@@ -189,8 +189,8 @@ public static class ExceptionExtension
                 Exchange     = Broker.Exception_Exchange,
                 Route        = Broker.StateTracker_Exception_Route
             };
-            
-            await Task.Run(() => messageBroker.Publish<SystemException>(dto), cancellationToken);
+
+            await messageBroker.PublishAsync<SystemException>(dto, cancellationToken);
         }
         catch (Exception exception)
         {
