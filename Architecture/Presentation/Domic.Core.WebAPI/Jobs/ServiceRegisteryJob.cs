@@ -32,7 +32,7 @@ public class ServiceRegisteryJob : IHostedService
         _serviceScopeFactory = serviceScopeFactory;
     }
 
-    public Task StartAsync(CancellationToken cancellationToken)
+    public async Task StartAsync(CancellationToken cancellationToken)
     {
         var serviceName = _configuration.GetValue<string>("NameOfService");
         var serviceHost = Environment.GetEnvironmentVariable("Host");
@@ -46,7 +46,7 @@ public class ServiceRegisteryJob : IHostedService
 
         try
         {
-            _messageBroker.Publish(new MessageBrokerDto<ServiceStatus> {
+            await _messageBroker.PublishAsync(new MessageBrokerDto<ServiceStatus> {
                 Message = new ServiceStatus {
                     Id        = globalUniqueIdGenerator.GetRandom(6),
                     Name      = serviceName         ,
@@ -59,7 +59,7 @@ public class ServiceRegisteryJob : IHostedService
                 Exchange     = Broker.ServiceRegistry_Exchange ,
                 Route        = Broker.ServiceRegistry_Route    ,
                 Queue        = Broker.ServiceRegistry_Queue 
-            });
+            }, cancellationToken);
         }
         catch (Exception e)
         {
@@ -68,8 +68,6 @@ public class ServiceRegisteryJob : IHostedService
                 cancellationToken: cancellationToken
             );
         }
-
-        return Task.CompletedTask;
     }
 
     public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;

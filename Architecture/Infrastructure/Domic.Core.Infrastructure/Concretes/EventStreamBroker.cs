@@ -402,7 +402,6 @@ public class EventStreamBroker(
     public async Task PublishAsync(CancellationToken cancellationToken)
     {
         //just one worker ( Task ) in current machine ( instance ) can process outbox events => lock
-
         await _asyncLock.WaitAsync(cancellationToken);
         
         //ScopeServices Trigger
@@ -796,7 +795,7 @@ public class EventStreamBroker(
 
             _TryRollback(unitOfWork);
             
-            var isSuccessRetry = _RetryEventOrMessageOfTopic($"{NameOfService}-Retry-{topic}", payload, countOfRetry: 1);
+            var isSuccessRetry = _TryRetryEventOrMessageOfTopic($"{NameOfService}-Retry-{topic}", payload, countOfRetry: 1);
 
             if (isSuccessRetry)
                 _TryCommitOffset(consumer, consumeResult);
@@ -925,7 +924,7 @@ public class EventStreamBroker(
             
             countOfRetryValue++;
             
-            var isSuccessRetry = _RetryEventOrMessageOfTopic($"{NameOfService}-Retry-{topic}", payload, countOfRetryValue);
+            var isSuccessRetry = _TryRetryEventOrMessageOfTopic($"{NameOfService}-Retry-{topic}", payload, countOfRetryValue);
             
             if(isSuccessRetry)
                 _TryCommitOffset(consumer, consumeResult);
@@ -1012,7 +1011,7 @@ public class EventStreamBroker(
                 }
             }
             
-            _TryCommitOffset(consumer, consumeResult);
+            await _TryCommitOffsetAsync(consumer, consumeResult, cancellationToken);
         }
         catch (Exception e)
         {
@@ -1032,10 +1031,10 @@ public class EventStreamBroker(
             await _TryRollbackAsync(unitOfWork, cancellationToken);
             
             var isSuccessRetry =
-                await _RetryEventOrMessageOfTopicAsync($"{NameOfService}-Retry-{topic}", payload, countOfRetry: 1, cancellationToken);
+                await _TryRetryEventOrMessageOfTopicAsync($"{NameOfService}-Retry-{topic}", payload, countOfRetry: 1, cancellationToken);
             
             if(isSuccessRetry)
-                _TryCommitOffset(consumer, consumeResult);
+                await _TryCommitOffsetAsync(consumer, consumeResult, cancellationToken);
         }
     }
     
@@ -1141,7 +1140,7 @@ public class EventStreamBroker(
                 }
             }
             
-            _TryCommitOffset(consumer, consumeResult);
+            await _TryCommitOffsetAsync(consumer, consumeResult, cancellationToken);
         }
         catch (Exception e)
         {
@@ -1163,10 +1162,10 @@ public class EventStreamBroker(
             countOfRetryValue++;
             
             var isSuccessRetry =
-                await _RetryEventOrMessageOfTopicAsync($"{NameOfService}-Retry-{topic}", payload, countOfRetryValue, cancellationToken);
+                await _TryRetryEventOrMessageOfTopicAsync($"{NameOfService}-Retry-{topic}", payload, countOfRetryValue, cancellationToken);
             
             if(isSuccessRetry)
-                _TryCommitOffset(consumer, consumeResult);
+                await _TryCommitOffsetAsync(consumer, consumeResult, cancellationToken);
         }
     }
     
@@ -1327,7 +1326,7 @@ public class EventStreamBroker(
 
             _TryRollback(unitOfWork);
             
-            var isSuccessRetry = _RetryEventOrMessageOfTopic($"{NameOfService}-Retry-{topic}", @event, countOfRetry: 1);
+            var isSuccessRetry = _TryRetryEventOrMessageOfTopic($"{NameOfService}-Retry-{topic}", @event, countOfRetry: 1);
             
             if(isSuccessRetry)
                 _TryCommitOffset(consumer, consumeResult);
@@ -1452,7 +1451,7 @@ public class EventStreamBroker(
             
             countOfRetryValue++;
             
-            var isSuccessRetry = _RetryEventOrMessageOfTopic($"{NameOfService}-Retry-{topic}", @event, countOfRetryValue);
+            var isSuccessRetry = _TryRetryEventOrMessageOfTopic($"{NameOfService}-Retry-{topic}", @event, countOfRetryValue);
             
             if(isSuccessRetry)
                 _TryCommitOffset(consumer, consumeResult);
@@ -1536,7 +1535,7 @@ public class EventStreamBroker(
                 }
             }
             
-            _TryCommitOffset(consumer, consumeResult);
+            await _TryCommitOffsetAsync(consumer, consumeResult, cancellationToken);
         }
         catch (Exception e)
         {
@@ -1556,10 +1555,10 @@ public class EventStreamBroker(
             await _TryRollbackAsync(unitOfWork, cancellationToken);
             
             var isSuccessRetry = 
-                await _RetryEventOrMessageOfTopicAsync($"{NameOfService}-Retry-{topic}", @event, countOfRetry: 1, cancellationToken);
+                await _TryRetryEventOrMessageOfTopicAsync($"{NameOfService}-Retry-{topic}", @event, countOfRetry: 1, cancellationToken);
             
             if(isSuccessRetry)
-                _TryCommitOffset(consumer, consumeResult);
+                await _TryCommitOffsetAsync(consumer, consumeResult, cancellationToken);
         }
     }
     
@@ -1662,7 +1661,7 @@ public class EventStreamBroker(
                 }
             }
             
-            _TryCommitOffset(consumer, consumeResult);
+            await _TryCommitOffsetAsync(consumer, consumeResult, cancellationToken);
         }
         catch (Exception e)
         {
@@ -1684,10 +1683,10 @@ public class EventStreamBroker(
             countOfRetryValue++;
             
             var isSuccessRetry =
-                await _RetryEventOrMessageOfTopicAsync($"{NameOfService}-Retry-{topic}", @event, countOfRetryValue, cancellationToken);
+                await _TryRetryEventOrMessageOfTopicAsync($"{NameOfService}-Retry-{topic}", @event, countOfRetryValue, cancellationToken);
             
             if(isSuccessRetry)
-                _TryCommitOffset(consumer, consumeResult);
+                await _TryCommitOffsetAsync(consumer, consumeResult, cancellationToken);
         }
     }
     
@@ -1724,19 +1723,6 @@ public class EventStreamBroker(
 
         return Task.CompletedTask;
     }
-    
-    private Type _GetTypeOfUnitOfWork(TransactionType transactionType)
-    {
-        var domainTypes = Assembly.Load(new AssemblyName("Domic.Domain")).GetTypes();
-
-        return transactionType switch {
-            TransactionType.Query => 
-                domainTypes.FirstOrDefault(type => type.GetInterfaces().Any(i => i == typeof(ICoreQueryUnitOfWork))),
-            TransactionType.Command => 
-                domainTypes.FirstOrDefault(type => type.GetInterfaces().Any(i => i == typeof(ICoreCommandUnitOfWork))),
-            _ => throw new ArgumentNotFoundException("Must be defined transaction type!")
-        };
-    }
 
     private void _TryCommitOffset(IConsumer<string, string> consumer, ConsumeResult<string, string> consumeResult)
     {
@@ -1752,7 +1738,28 @@ public class EventStreamBroker(
         }
     }
     
-    private bool _RetryEventOrMessageOfTopic(string topic, object payload, int countOfRetry)
+    private Task _TryCommitOffsetAsync(IConsumer<string, string> consumer, ConsumeResult<string, string> consumeResult,
+        CancellationToken cancellationToken
+    )
+    {
+        try
+        {
+            return Policy.Handle<Exception>()
+                         .WaitAndRetryAsync(5, _ => TimeSpan.FromSeconds(3), (exception, timeSpan, context) => {})
+                         .ExecuteAsync(() =>
+                             Task.Run(() => consumer.Commit(consumeResult), cancellationToken)
+                         );
+        }
+        catch (Exception e)
+        {
+            //fire&forget
+            e.FileLoggerAsync(hostEnvironment, dateTime, cancellationToken);
+        }
+
+        return Task.CompletedTask;
+    }
+    
+    private bool _TryRetryEventOrMessageOfTopic(string topic, object payload, int countOfRetry)
     {
         try
         {
@@ -1795,7 +1802,7 @@ public class EventStreamBroker(
         return true;
     }
     
-    private async Task<bool> _RetryEventOrMessageOfTopicAsync(string topic, object payload, int countOfRetry,
+    private async Task<bool> _TryRetryEventOrMessageOfTopicAsync(string topic, object payload, int countOfRetry,
         CancellationToken cancellationToken
     )
     {
@@ -1840,5 +1847,20 @@ public class EventStreamBroker(
         }
 
         return true;
+    }
+    
+    /*---------------------------------------------------------------*/
+    
+    private Type _GetTypeOfUnitOfWork(TransactionType transactionType)
+    {
+        var domainTypes = Assembly.Load(new AssemblyName("Domic.Domain")).GetTypes();
+
+        return transactionType switch {
+            TransactionType.Query => 
+                domainTypes.FirstOrDefault(type => type.GetInterfaces().Any(i => i == typeof(ICoreQueryUnitOfWork))),
+            TransactionType.Command => 
+                domainTypes.FirstOrDefault(type => type.GetInterfaces().Any(i => i == typeof(ICoreCommandUnitOfWork))),
+            _ => throw new ArgumentNotFoundException("Must be defined transaction type!")
+        };
     }
 }
