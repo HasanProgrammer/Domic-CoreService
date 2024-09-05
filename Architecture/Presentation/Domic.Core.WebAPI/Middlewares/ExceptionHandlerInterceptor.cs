@@ -24,11 +24,12 @@ public class ExceptionHandlerInterceptor : Interceptor
 {
     private readonly IConfiguration   _configuration;
     private readonly IHostEnvironment _hostEnvironment;
+    private readonly LoggerType       _loggerType;
     
-    private IExternalMessageBroker           _externalMessageBroker;
-    private IExternalEventStreamBroker       _externalEventStreamBroker;
-    private IDateTime                _dateTime;
-    private IGlobalUniqueIdGenerator _globalUniqueIdGenerator;
+    private IExternalMessageBroker     _externalMessageBroker;
+    private IExternalEventStreamBroker _externalEventStreamBroker;
+    private IDateTime                  _dateTime;
+    private IGlobalUniqueIdGenerator   _globalUniqueIdGenerator;
     
     /// <summary>
     /// 
@@ -39,6 +40,7 @@ public class ExceptionHandlerInterceptor : Interceptor
     /// <param name="icommandUnitOfWorkType"></param>
     public ExceptionHandlerInterceptor(IConfiguration configuration, IHostEnvironment hostEnvironment)
     {
+        _loggerType      = _configuration.GetSection("LoggerType").Get<LoggerType>();
         _configuration   = configuration;
         _hostEnvironment = hostEnvironment;
     }
@@ -57,7 +59,6 @@ public class ExceptionHandlerInterceptor : Interceptor
         ServerCallContext context , UnaryServerMethod<TRequest, TResponse> continuation
     )
     {
-        var loggerType  = _configuration.GetSection("LoggerType").Get<LoggerType>();
         var serviceName = _configuration.GetValue<string>("NameOfService");
         
         try
@@ -65,18 +66,22 @@ public class ExceptionHandlerInterceptor : Interceptor
             _dateTime                = context.GetHttpContext().RequestServices.GetRequiredService<IDateTime>();
             _globalUniqueIdGenerator = context.GetHttpContext().RequestServices.GetRequiredService<IGlobalUniqueIdGenerator>();
 
-            if (loggerType.Messaging)
+            if (_loggerType.Messaging)
             {
-                _externalMessageBroker = context.GetHttpContext().RequestServices.GetRequiredService<IExternalMessageBroker>();
+                _externalMessageBroker =
+                    context.GetHttpContext().RequestServices.GetRequiredService<IExternalMessageBroker>();
                 
-                context.CentralRequestLoggerAsync(_hostEnvironment, _globalUniqueIdGenerator, _externalMessageBroker, _dateTime,
-                    serviceName, request, context.CancellationToken
+                //fire&forget
+                context.CentralRequestLoggerAsync(_hostEnvironment, _globalUniqueIdGenerator, _externalMessageBroker, 
+                    _dateTime, serviceName, request, context.CancellationToken
                 );
             }
             else
             {
-                _externalEventStreamBroker = context.GetHttpContext().RequestServices.GetRequiredService<IExternalEventStreamBroker>();
+                _externalEventStreamBroker =
+                    context.GetHttpContext().RequestServices.GetRequiredService<IExternalEventStreamBroker>();
                 
+                //fire&forget
                 context.CentralRequestLoggerAsStreamAsync(_hostEnvironment, _globalUniqueIdGenerator, 
                     _externalEventStreamBroker, _dateTime, serviceName, request, context.CancellationToken
                 );
@@ -110,24 +115,23 @@ public class ExceptionHandlerInterceptor : Interceptor
         {
             #region Logger
 
-            e.FileLogger(_hostEnvironment, _dateTime);
+            //fire&forget
+            e.FileLoggerAsync(_hostEnvironment, _dateTime, context.CancellationToken);
             
             e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, serviceName, 
                 context.Method
             );
 
-            if (_externalMessageBroker is not null)
-            {
-                e.CentralExceptionLoggerAsync(_hostEnvironment, _globalUniqueIdGenerator, _externalMessageBroker, _dateTime, 
-                    serviceName, context.Method, context.CancellationToken
-                );
-            }
-            else
-            {
-                e.CentralExceptionLoggerAsStreamAsync(_hostEnvironment, _globalUniqueIdGenerator, _externalEventStreamBroker, 
+            if (_loggerType.Messaging)
+                //fire&forget
+                e.CentralExceptionLoggerAsync(_hostEnvironment, _globalUniqueIdGenerator, _externalMessageBroker, 
                     _dateTime, serviceName, context.Method, context.CancellationToken
                 );
-            }
+            else
+                //fire&forget
+                e.CentralExceptionLoggerAsStreamAsync(_hostEnvironment, _globalUniqueIdGenerator, 
+                    _externalEventStreamBroker, _dateTime, serviceName, context.Method, context.CancellationToken
+                );
 
             #endregion
 

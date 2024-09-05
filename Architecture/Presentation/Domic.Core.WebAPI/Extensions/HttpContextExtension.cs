@@ -1,4 +1,6 @@
-﻿using Domic.Core.Domain.Constants;
+﻿#pragma warning disable CS4014 // Because this call is not awaited, execution of the current method continues before the call is completed
+
+using Domic.Core.Domain.Constants;
 using Domic.Core.Domain.Contracts.Interfaces;
 using Domic.Core.Domain.Entities;
 using Domic.Core.Domain.Enumerations;
@@ -12,6 +14,8 @@ namespace Domic.Core.WebAPI.Extensions;
 
 public static class HttpContextExtension
 {
+    private const string StateTrackerTopic = "StateTracker";
+    
     /// <summary>
     /// 
     /// </summary>
@@ -161,12 +165,116 @@ public static class HttpContextExtension
                 Exchange     = Broker.Request_Exchange,
                 Route        = Broker.StateTracker_Request_Route
             };
-                
-            await Task.Run(() => externalMessageBroker.Publish<SystemRequest>(dto), cancellationToken);
+
+            await externalMessageBroker.PublishAsync<SystemRequest>(dto, cancellationToken);
         }
         catch (Exception e)
         {
-            e.FileLogger(hostEnvironment, dateTime);
+            //fire&forget
+            e.FileLoggerAsync(hostEnvironment, dateTime, cancellationToken);
+            
+            e.ElasticStackExceptionLogger(hostEnvironment, globalUniqueIdGenerator, dateTime, serviceName, 
+                context.Request.Path
+            );
+        }
+    }
+    
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="context"></param>
+    /// <param name="globalUniqueIdGenerator"></param>
+    /// <param name="externalEventStreamBroker"></param>
+    /// <param name="dateTime"></param>
+    /// <param name="serviceName"></param>
+    public static void CentralRequestLoggerAsStream(this HttpContext context, 
+        IGlobalUniqueIdGenerator globalUniqueIdGenerator, IExternalEventStreamBroker externalEventStreamBroker, 
+        IDateTime dateTime, string serviceName
+    )
+    {
+        var httpRequest = context.Request;
+            
+        if(!httpRequest.Body.CanSeek)
+            httpRequest.EnableBuffering();
+
+        httpRequest.Body.Position = 0;
+
+        StreamReader streamReader = new(httpRequest.Body);
+
+        var payload = streamReader.ReadToEndAsync().GetAwaiter().GetResult();
+            
+        httpRequest.Body.Position = 0;
+
+        var nowDateTime        = DateTime.Now;
+        var nowPersianDateTime = dateTime.ToPersianShortDate(nowDateTime);
+            
+        var systemRequest = new SystemRequest {
+            Id        = globalUniqueIdGenerator.GetRandom(6) ,
+            IpClient  = context.GetClientIP()                ,
+            Service   = serviceName                          ,
+            Action    = context.Request.Path                 ,
+            Header    = context.Request.Headers.Serialize()  ,
+            Payload   = payload                              ,
+            CreatedAt_EnglishDate = nowDateTime              ,
+            CreatedAt_PersianDate = nowPersianDateTime
+        };
+                
+        externalEventStreamBroker.Publish<SystemRequest>(StateTrackerTopic, systemRequest);
+    }
+
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="context"></param>
+    /// <param name="hostEnvironment"></param>
+    /// <param name="globalUniqueIdGenerator"></param>
+    /// <param name="externalEventStreamBroker"></param>
+    /// <param name="dateTime"></param>
+    /// <param name="serviceName"></param>
+    /// <param name="cancellationToken"></param>
+    public static async Task CentralRequestLoggerAsStreamAsync(this HttpContext context, 
+        IHostEnvironment hostEnvironment, IGlobalUniqueIdGenerator globalUniqueIdGenerator, 
+        IExternalEventStreamBroker externalEventStreamBroker, IDateTime dateTime, string serviceName, 
+        CancellationToken cancellationToken
+    )
+    {
+        try
+        {
+            var httpRequest = context.Request;
+            
+            if(!httpRequest.Body.CanSeek)
+                httpRequest.EnableBuffering();
+
+            httpRequest.Body.Position = 0;
+
+            StreamReader streamReader = new(httpRequest.Body);
+
+            var payload = await streamReader.ReadToEndAsync(cancellationToken);
+            
+            httpRequest.Body.Position = 0;
+            
+            var nowDateTime        = DateTime.Now;
+            var nowPersianDateTime = dateTime.ToPersianShortDate(nowDateTime);
+            
+            var systemRequest = new SystemRequest {
+                Id        = globalUniqueIdGenerator.GetRandom(6) ,
+                IpClient  = context.GetClientIP()                ,
+                Service   = serviceName                          ,
+                Action    = context.Request.Path                 ,
+                Header    = context.Request.Headers.Serialize()  ,
+                Payload   = payload                              ,
+                CreatedAt_EnglishDate = nowDateTime              ,
+                CreatedAt_PersianDate = nowPersianDateTime
+            };
+
+            await externalEventStreamBroker.PublishAsync<SystemRequest>(StateTrackerTopic, systemRequest, 
+                cancellationToken: cancellationToken
+            );
+        }
+        catch (Exception e)
+        {
+            //fire&forget
+            e.FileLoggerAsync(hostEnvironment, dateTime, cancellationToken);
             
             e.ElasticStackExceptionLogger(hostEnvironment, globalUniqueIdGenerator, dateTime, serviceName, 
                 context.Request.Path

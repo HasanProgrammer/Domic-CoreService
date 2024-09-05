@@ -2,6 +2,7 @@
 
 using Domic.Core.Common.ClassExceptions;
 using Domic.Core.Common.ClassExtensions;
+using Domic.Core.Common.ClassModels;
 using Domic.Core.Domain.Contracts.Interfaces;
 using Domic.Core.Domain.Exceptions;
 using Domic.Core.WebAPI.Exceptions;
@@ -20,12 +21,14 @@ namespace Domic.Core.WebAPI.Middlewares;
 public class ExceptionHandler
 {
     private readonly RequestDelegate _next;
+    private readonly LoggerType _loggerType;
     
-    private IConfiguration           _configuration;
-    private IHostEnvironment         _hostEnvironment;
-    private IExternalMessageBroker           _externalMessageBroker;
-    private IDateTime                _dateTime;
-    private IGlobalUniqueIdGenerator _globalUniqueIdGenerator;
+    private IConfiguration             _configuration;
+    private IHostEnvironment           _hostEnvironment;
+    private IExternalMessageBroker     _externalMessageBroker;
+    private IExternalEventStreamBroker _externalEventStreamBroker;
+    private IDateTime                  _dateTime;
+    private IGlobalUniqueIdGenerator   _globalUniqueIdGenerator;
 
     /// <summary>
     /// 
@@ -35,6 +38,7 @@ public class ExceptionHandler
     {
         _next = next;
         _configuration = configuration;
+        _loggerType  = _configuration.GetSection("LoggerType").Get<LoggerType>();
     }
 
     public async Task Invoke(HttpContext context)
@@ -46,12 +50,26 @@ public class ExceptionHandler
             _configuration           = context.RequestServices.GetRequiredService<IConfiguration>();
             _hostEnvironment         = context.RequestServices.GetRequiredService<IHostEnvironment>();
             _dateTime                = context.RequestServices.GetRequiredService<IDateTime>();
-            _externalMessageBroker           = context.RequestServices.GetRequiredService<IExternalMessageBroker>(); 
             _globalUniqueIdGenerator = context.RequestServices.GetRequiredService<IGlobalUniqueIdGenerator>();
             
-            context.CentralRequestLoggerAsync(_hostEnvironment, _globalUniqueIdGenerator, _externalMessageBroker, _dateTime, 
-                serviceName, default
-            );
+            if (_loggerType.Messaging)
+            {
+                _externalMessageBroker = context.RequestServices.GetRequiredService<IExternalMessageBroker>();
+                
+                //fire&forget
+                context.CentralRequestLoggerAsync(_hostEnvironment, _globalUniqueIdGenerator, _externalMessageBroker, 
+                    _dateTime, serviceName, context.RequestAborted
+                );
+            }
+            else
+            {
+                _externalEventStreamBroker = context.RequestServices.GetRequiredService<IExternalEventStreamBroker>();
+                
+                //fire&forget
+                context.CentralRequestLoggerAsStreamAsync(_hostEnvironment, _globalUniqueIdGenerator, 
+                    _externalEventStreamBroker, _dateTime, serviceName, context.RequestAborted
+                );
+            }
 
             await _next(context);
         }
@@ -166,15 +184,23 @@ public class ExceptionHandler
     {
         #region Logger
 
-        exception.FileLogger(_hostEnvironment, _dateTime);
+        //fire&forget
+        exception.FileLoggerAsync(_hostEnvironment, _dateTime, context.RequestAborted);
         
         exception.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, 
             serviceName, context.Request.Path
         );
-        
-        exception.CentralExceptionLoggerAsync(_hostEnvironment, _globalUniqueIdGenerator, _externalMessageBroker, _dateTime, 
-            serviceName, context.Request.Path, default
-        );
+
+        if (_loggerType.Messaging)
+            //fire&forget
+            exception.CentralExceptionLoggerAsync(_hostEnvironment, _globalUniqueIdGenerator, _externalMessageBroker,
+                _dateTime, serviceName, context.Request.Path, context.RequestAborted
+            );
+        else
+            //fire&forget
+            exception.CentralExceptionLoggerAsStreamAsync(_hostEnvironment, _globalUniqueIdGenerator, 
+                _externalEventStreamBroker, _dateTime, serviceName, context.Request.Path, context.RequestAborted
+            );
 
         #endregion
             
