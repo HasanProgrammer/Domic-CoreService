@@ -100,7 +100,7 @@ public static class WebApplicationBuilderExtension
     /// 
     /// </summary>
     /// <param name="builder"></param>
-    public static void RegisterEventStreamSubscriber(this WebApplicationBuilder builder)
+    public static void RegisterEventsStreamSubscriber(this WebApplicationBuilder builder)
     {
         builder.Services.AddHostedService<EventStreamConsumerJob>();
         builder.Services.AddHostedService<EventRetriableStreamConsumerJob>();
@@ -110,7 +110,7 @@ public static class WebApplicationBuilderExtension
     /// 
     /// </summary>
     /// <param name="builder"></param>
-    public static void RegisterMessageStreamSubscriber(this WebApplicationBuilder builder)
+    public static void RegisterMessagesStreamSubscriber(this WebApplicationBuilder builder)
     {
         builder.Services.AddHostedService<MessageStreamConsumerJob>();
         builder.Services.AddHostedService<MessageRetriableStreamConsumerJob>();
