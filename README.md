@@ -13,7 +13,9 @@ This service acts as a foundational layer for all backend services in the overal
 
 - **Monitoring Tools** :
     - This project integrates several powerful tools for monitoring all errors, requests, and more. These tools are essential for maintaining visibility into the system's health and performance, ensuring that any issues are quickly identified and addressed
-      In the following sections, we will provide a detailed explanation of how to use these monitoring tools and their functionality. You will learn how to effectively track errors, monitor incoming requests, and gain insights into the overall performance of your services .
+      In the following sections, we will provide a detailed explanation of how to use these monitoring tools and their functionality. You will learn how to effectively track errors, monitor incoming requests, and gain insights into the overall performance of your     s       ervices .
+    - For monitoring all `Events` and `Logs`, the system uses tools such as **FileStorage** - **ELK** and its central service, **StateTracker** from the Domic project . This setup is used to record and report all created events, as well as to log errors and system 
+      request logs, which are collected in a MongoDB database .
 
 - **Infrastructure Tools** :
     - Includes tools for leveraging .NET infrastructure capabilities more effectively .
@@ -25,7 +27,7 @@ This service acts as a foundational layer for all backend services in the overal
 
 To begin, we'll cover how to use the implemented tools within this codebase .
 
-Each layer in this project, such as the **Domain Layer**, **UseCase Layer**, and others, has its own unique `PackageId` . These layers are packaged for use in public Microsoft NuGet repositories or private/company-specific NuGet servers . This means that each layer must be packaged and uploaded to the NuGet server, allowing other services to consume these packages accordingly within their own layers .
+Each layer in this project, such as the **Domain Layer** - **UseCase Layer**, and others, has its own unique `PackageId` . These layers are packaged for use in public Microsoft NuGet repositories or private/company-specific NuGet servers . This means that each layer must be packaged and uploaded to the NuGet server, allowing other services to consume these packages accordingly within their own layers .
 
 Below is a simple example illustrating how this works :
 
