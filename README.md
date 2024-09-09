@@ -19,10 +19,6 @@ This service acts as a foundational layer for all backend services in the overal
     - Includes tools for leveraging .NET infrastructure capabilities more effectively .
     - Supports patterns such as Middleware and Mediator with high configurability for professional use .
 
-### Detailed Documentation
-
-Each of these tools, along with their configuration and usage instructions, will be detailed further in the upcoming sections .
-
 ### Getting Started
 
 To begin, we'll cover how to use the implemented tools within this codebase .
@@ -42,7 +38,7 @@ In the following sections, we will explain in detail how to package and publish 
 
 ---
 
-### Getting Started with Domic Tools
+### Mediator ( for handle CQS | CQRS )
 
 To begin and understand how to utilize the tools provided by this project (Domic), let's start with the **Mediator** tool .
 
@@ -80,3 +76,27 @@ public class CreateCommandHandler : ICommandHandler<CreateCommand, string>
 ```
 
 3 . The same applies to the **Query** section . To implement your Query logic, you should use the `IQuery` and `IQueryHandler` interfaces provided in `Domic-CoreService`, just as you did for the Command section .
+
+```
+public class ReadAllUserQuery : IQuery<UsersDto> //any result type
+{
+}
+
+public class ReadAllUserQueryHandler : IQueryHandler<ReadAllUserQuery, UsersDto>
+{
+    public ReadAllUserQueryHandler(){}
+
+    public UsersDto Handle(ReadAllPaginatedQuery query)
+    {
+        //logic
+    }
+
+    public Task<UsersDto> HandleAsync(ReadAllPaginatedQuery query, CancellationToken cancellationToken)
+    {
+        //logic
+
+        return Task.CompleteTask;
+    }
+}
+
+```
