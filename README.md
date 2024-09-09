@@ -52,7 +52,7 @@ To use the Mediator tool (which implements the Mediator pattern), you need to fo
 
 ![image](https://github.com/user-attachments/assets/f61cff8d-fd8e-4a03-82f2-7122ff389f9a)
 
-2 . For the **CommandHandler** section, you should follow the steps shown in the image below . First, implement the corresponding Handler class and inherit from the `ICommandHandler` interface provided in `Domic-CoreService`. For implementing your core logic, you have two methods at your disposal: `Handle` and `HandleAsync`. Depending on your requirements, you can choose to use either of these methods .
+2 . For the **CommandHandler** section, you should follow the steps shown in the image below . First, implement the corresponding Handler class and inherit from the `ICommandHandler` interface provided in `Domic-CoreService`. For implementing your core logic, you have two methods at your disposal : `Handle` and `HandleAsync`. Depending on your requirements, you can choose to use either of these methods .
 
 ![image](https://github.com/user-attachments/assets/224654f2-5886-4acc-8e65-ba3fbd2bd714)
 
