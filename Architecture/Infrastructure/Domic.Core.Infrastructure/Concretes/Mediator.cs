@@ -11,6 +11,7 @@ namespace Domic.Core.Infrastructure.Concretes;
 public class Mediator : IMediator
 {
     private static object _lock = new();
+    private static SemaphoreSlim _asyncLock = new(1, 1);
     
     private readonly IServiceProvider _serviceProvider;
 
@@ -64,60 +65,29 @@ public class Mediator : IMediator
                                           ??
                                           throw new Exception("HandleAsync function not found !");
 
-        #region Validator
-
-        //If the validation of this part is false, an exception will be thrown and the code will not be executed .
-        
-        if (commandHandlerMethod.GetCustomAttribute(typeof(WithValidationAttribute)) is not null)
+        if (commandHandlerMethod.GetCustomAttribute(typeof(WithPessimisticConcurrencyAttribute)) is not null)
         {
-            Type validatorType       = typeof(IValidator<>);
-            Type[] validatorArgTypes = { command.GetType() };
-            Type fullValidatorType   = validatorType.MakeGenericType(validatorArgTypes);
+            await _asyncLock.WaitAsync(cancellationToken);
 
-            dynamic validator       = _serviceProvider.GetRequiredService(fullValidatorType);
-            object validationResult = await validator.ValidateAsync((dynamic) command, (dynamic) cancellationToken);
-
-            var fieldValidationResult = 
-                commandHandlerType.GetField("_validationResult", BindingFlags.NonPublic | BindingFlags.Instance);
-            
-            if (fieldValidationResult is not null)
+            try
             {
-                if (
-                    !fieldValidationResult.IsPrivate  || 
-                    !fieldValidationResult.IsInitOnly ||
-                    fieldValidationResult.FieldType != typeof(object)
-                )
-                    throw new Exception("The [ _validationResult ] field must be private and readonly & return an object");
+                await _ValidationAsync(commandHandler, commandHandlerType, commandHandlerMethod, command, cancellationToken);
                 
-                fieldValidationResult.SetValue(commandHandler, validationResult);
+                var result = await _InvokeHandleMethodAsync(commandHandler, commandHandlerMethod, command, cancellationToken);
+
+                return result;
+            }
+            catch (Exception e)
+            {
+                _asyncLock.Release();
+                throw;
             }
         }
 
-        #endregion
-
-        #region Transaction
-
-        if (commandHandlerMethod.GetCustomAttribute(typeof(WithTransactionAttribute)) is WithTransactionAttribute transactionAttr)
-        {
-            var unitOfWork = _serviceProvider.GetRequiredService(_GetTypeOfUnitOfWork()) as ICoreCommandUnitOfWork;
-            
-            await unitOfWork.TransactionAsync(transactionAttr.IsolationLevel, cancellationToken);
-            
-            var result = await (Task<TResult>)commandHandlerMethod.Invoke(commandHandler, new object[]{ command , cancellationToken });
-            
-            await unitOfWork.CommitAsync(cancellationToken);
-
-            _CleanCache(commandHandlerMethod);
-
-            return result;
-        }
-
-        #endregion
-
+        await _ValidationAsync(commandHandler, commandHandlerType, commandHandlerMethod, command, cancellationToken);
+        
         var resultWithoutTransaction =
-            await (Task<TResult>)commandHandlerMethod.Invoke(commandHandler, new object[]{ command , cancellationToken });
-
-        _CleanCache(commandHandlerMethod);
+            await _InvokeHandleMethodAsync(commandHandler, commandHandlerMethod, command, cancellationToken);
         
         return resultWithoutTransaction;
     }
@@ -354,6 +324,67 @@ public class Mediator : IMediator
                 )
                     throw new Exception("The [ _validationResult ] field must be private and readonly & return an object");
                 
+                fieldValidationResult.SetValue(commandHandler, validationResult);
+            }
+        }
+    }
+    
+    private async Task<TResult> _InvokeHandleMethodAsync<TResult>(object commandHandler, MethodInfo commandHandlerMethod,
+        ICommand<TResult> command, CancellationToken cancellationToken
+    )
+    {
+        #region Transaction
+
+        if (commandHandlerMethod.GetCustomAttribute(typeof(WithTransactionAttribute)) is WithTransactionAttribute transactionAttr)
+        {
+            var unitOfWork = _serviceProvider.GetRequiredService(_GetTypeOfUnitOfWork()) as ICoreCommandUnitOfWork;
+            
+            await unitOfWork.TransactionAsync(transactionAttr.IsolationLevel, cancellationToken);
+            
+            var result = await (Task<TResult>)commandHandlerMethod.Invoke(commandHandler, new object[]{ command , cancellationToken });
+            
+            await unitOfWork.CommitAsync(cancellationToken);
+
+            _CleanCache(commandHandlerMethod);
+
+            return result;
+        }
+
+        #endregion
+        
+        var resultWithoutTransaction =
+            await (Task<TResult>)commandHandlerMethod.Invoke(commandHandler, new object[]{ command , cancellationToken });
+        
+        _CleanCache(commandHandlerMethod);
+        
+        return resultWithoutTransaction;
+    }
+    
+    private async Task _ValidationAsync<TResult>(object commandHandler, Type commandHandlerType,
+        MethodInfo commandHandlerMethod, ICommand<TResult> command, CancellationToken cancellationToken
+    )
+    {
+        if (commandHandlerMethod.GetCustomAttribute(typeof(WithValidationAttribute)) is not null)
+        {
+            Type validatorType       = typeof(IValidator<>);
+            Type[] validatorArgTypes = { command.GetType() };
+            Type fullValidatorType   = validatorType.MakeGenericType(validatorArgTypes);
+
+            dynamic validator       = _serviceProvider.GetRequiredService(fullValidatorType);
+            object validationResult = await validator.ValidateAsync((dynamic) command, (dynamic) cancellationToken);
+
+            var fieldValidationResult =
+                commandHandlerType.GetField("_validationResult", BindingFlags.NonPublic | BindingFlags.Instance);
+                    
+            if (fieldValidationResult is not null)
+            {
+                if (
+                    !fieldValidationResult.IsPrivate  || 
+                    !fieldValidationResult.IsInitOnly ||
+                    fieldValidationResult.FieldType != typeof(object)
+                )
+                    throw new Exception("The [ _validationResult ] field must be private and readonly & return an object");
+                        
                 fieldValidationResult.SetValue(commandHandler, validationResult);
             }
         }
