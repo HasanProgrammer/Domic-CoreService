@@ -4,20 +4,22 @@ This service acts as a foundational layer for all backend services in the overal
 
 ### Key Features
 
-1. **Event and Message Handling** :
+1 . **Event and Message Handling** :
     - Provides advanced tools for working with events and messages across services .
     - Highly configurable to ensure seamless integration with messaging systems such as `RabbitMQ` and `Kafka` .
 
-2. **Distributed Caching** :
+2 . **Distributed Caching** :
     - Tools for better and more efficient use of distributed caches like `Redis` .
 
-3. **Monitoring Tools** :
+3 . **Monitoring Tools** :
     - This project integrates several powerful tools for monitoring all errors, requests, and more. These tools are essential for maintaining visibility into the system's health and performance, ensuring that any issues are quickly identified and addressed
       In the following sections, we will provide a detailed explanation of how to use these monitoring tools and their functionality. You will learn how to effectively track errors, monitor incoming requests, and gain insights into the overall performance of your services .
 
-4. **Infrastructure Tools** :
+4 . **Infrastructure Tools** :
     - Includes tools for leveraging .NET infrastructure capabilities more effectively .
     - Supports patterns such as Middleware and Mediator with high configurability for professional use .
+
+---
 
 ### Getting Started
 
@@ -35,8 +37,6 @@ Below is a simple example illustrating how this works :
 In this architecture, services utilize the packages of various layers ( like Domain or UseCase layers ) by referencing the respective NuGet packages . This modular approach allows for better reusability, maintainability, and separation of concerns within your microservices .
 
 In the following sections, we will explain in detail how to package and publish each layer and how to integrate these packages into other services .
-
----
 
 ### Mediator ( for handle CQS | CQRS )
 
@@ -74,6 +74,36 @@ public class CreateCommandHandler : ICommandHandler<CreateCommand, string>
 }
 
 ```
+
+In addition to the above, there are advanced techniques for writing cleaner and more readable code, such as using Attributes. I will explain how to use these techniques in the following sections.
+
+2-1 . **WithTransaction Attribute**
+
+```
+public class CreateCommandHandler : ICommandHandler<CreateCommand, string>
+{
+    public CreateCommandHandler(){}
+
+    [WithTransaction]
+    public string Handle(CreateCommand command)
+    {
+        //logic
+    }
+
+    [WithTransaction]
+    public Task<string> HandleAsync(CreateCommand command, CancellationToken cancellationToken)
+    {
+        //logic
+
+        return Task.CompleteTask;
+    }
+}
+
+```
+
+This **Attribute** wraps around your `Handle` or `HandleAsync` methods to manage transactions . To ensure that this Attribute functions correctly, you need to follow these steps :
+
+
 
 3 . The same applies to the **Query** section . To implement your Query logic, you should use the `IQuery` and `IQueryHandler` interfaces provided in `Domic-CoreService`, just as you did for the Command section .
 
