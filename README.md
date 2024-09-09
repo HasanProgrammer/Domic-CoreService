@@ -1,6 +1,13 @@
 ### Overview
 
 This service acts as a foundational layer for all backend services in the overall microservices architecture . It includes advanced tools and structures designed to support the development of future services, with a focus on flexibility and configurability .
+The infrastructure projects for all the business applications that rely on this service are listed as follows :
+
+- Domic-WebAPIGateWay : https://github.com/HasanProgrammer/Domic-WebAPIGateWay
+- Domic-DiscoveryService : https://github.com/HasanProgrammer/Domic-DiscoveryService
+- Domic-StateTrackerService : https://github.com/HasanProgrammer/Domic-StateTrackerService
+- Domic-UserService : https://github.com/HasanProgrammer/Domic-UserService
+- Domic-AuthService : https://github.com/HasanProgrammer/Domic-AuthService
 
 ### Key Features
 
