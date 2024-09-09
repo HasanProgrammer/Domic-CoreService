@@ -47,7 +47,7 @@ To begin and understand how to utilize the tools provided by this project (Domic
 
 To use the Mediator tool (which implements the Mediator pattern), you need to follow the steps shown in the images below, along with brief explanations for each part .
 
-1 . As shown in the code below ( sample ) to define **Commands** within the project, you should follow these steps. First, create a class for your Command, and then inherit from the interface implemented in `Domic-CoreService` .
+1 . As shown in the code below ( sample ) to define **Commands** within the project, you should follow these steps. First, create a class for your Command, and then inherit from the interface implemented in `Domic-CoreService`
 
 ```
 public class CreateUserCommand : ICommand<string> //any result type
@@ -56,7 +56,7 @@ public class CreateUserCommand : ICommand<string> //any result type
 }
 ```
 
-2 . For the **CommandHandler** section, you should follow the steps shown in the image below . First, implement the corresponding Handler class and inherit from the `ICommandHandler` interface provided in `Domic-CoreService`. For implementing your core logic, you have two methods at your disposal : `Handle` and `HandleAsync`. Depending on your requirements, you can choose to use either of these methods .
+2 . For the **CommandHandler** section, you should follow the steps shown in the image below . First, implement the corresponding Handler class and inherit from the `ICommandHandler` interface provided in `Domic-CoreService`. For implementing your core logic, you have two methods at your disposal : `Handle` and `HandleAsync`. Depending on your requirements, you can choose to use either of these methods
 
 ```
 public class CreateCommandHandler : ICommandHandler<CreateCommand, string>
@@ -77,7 +77,7 @@ public class CreateCommandHandler : ICommandHandler<CreateCommand, string>
 }
 ```
 
-In addition to the above, there are advanced techniques for writing cleaner and more readable code, such as using Attributes. I will explain how to use these techniques in the following sections.
+In addition to the above, there are advanced techniques for writing cleaner and more readable code, such as using Attributes. I will explain how to use these techniques in the following sections .
 
 2-1 . **WithTransaction Attribute**
 
@@ -111,7 +111,7 @@ public interface ICommandUnitOfWork : ICoreCommandUnitOfWork;
 ```
 - Template ( Domic-TemplateService ) : https://github.com/HasanProgrammer/Domic-TicketService
 
-- In the next step, you need to implement this interface in the **Infrastructure layer** . This implementation, based on EF Core and SQL Server, is provided in the default template project .
+- In the next step, you need to implement this interface in the **Infrastructure layer** . This implementation, based on EF Core and SQL Server, is provided in the default template project
 ```
 public class CommandUnitOfWork : ICommandUnitOfWork
 {
@@ -163,7 +163,7 @@ public class CommandUnitOfWork : ICommandUnitOfWork
 }
 ```
 
-- Within this Attribute, there is a property called **Isolation Level** that represents the isolation level of the `Persist` operation . By modifying this Isolation Level, you can adjust the level of `Pessimistic Locking` .
+- Within this Attribute, there is a property called **Isolation Level** that represents the isolation level of the `Persist` operation . By modifying this Isolation Level, you can adjust the level of `Pessimistic Locking`
 ```
 public class CreateCommandHandler : ICommandHandler<CreateCommand, string>
 {
@@ -176,6 +176,49 @@ public class CreateCommandHandler : ICommandHandler<CreateCommand, string>
     }
 
     [WithTransaction(IsolationLevel = IsolationLevel.RepeatableRead)]
+    public Task<string> HandleAsync(CreateCommand command, CancellationToken cancellationToken)
+    {
+        //logic
+
+        return Task.CompleteTask;
+    }
+}
+```
+
+2-2 . **WithValidation Attribute**
+
+- To use this feature, simply follow the code example below . If your Command logic requires validation to be performed first, you need to use this Attribute . For this Attribute to be effective, you must create a class that implements `IValidator` for the corresponding Command . A key point when using this Attribute is that if you use the `Handle` method for your Command logic, you must implement the `Validate` method in your `IValidator` implementation, and vice versa
+```
+public class CreateUserCommandValidator : IValidator<CreateUserCommand>
+{
+    public CreateUserCommandValidator(){}
+
+    public object Validate(CreateUserCommand input)
+    {
+        //logic
+
+        return default;
+    }
+
+    public Task<object> ValidateAsync(CreateUserCommand input, CancellationToken cancellationToken)
+    {
+        //logic
+
+        return default;
+    }
+}
+
+public class CreateCommandHandler : ICommandHandler<CreateCommand, string>
+{
+    public CreateCommandHandler(){}
+
+    [WithValidation]
+    public string Handle(CreateCommand command)
+    {
+        //logic
+    }
+
+    [WithValidation]
     public Task<string> HandleAsync(CreateCommand command, CancellationToken cancellationToken)
     {
         //logic
