@@ -40,8 +40,6 @@ In this architecture, services utilize the packages of various layers (like Doma
 
 In the following sections, we will explain in detail how to package and publish each layer and how to integrate these packages into other services .
 
-Sure! Here's the translation :
-
 ---
 
 ### Getting Started with Domic Tools
