@@ -48,12 +48,35 @@ To begin and understand how to utilize the tools provided by this project (Domic
 
 To use the Mediator tool (which implements the Mediator pattern), you need to follow the steps shown in the images below, along with brief explanations for each part .
 
-1 . As shown in the image below, to define **Commands** within the project, you should follow these steps. First, create a class for your Command, and then inherit from the interface implemented in `Domic-CoreService` .
+1 . As shown in the code below ( sample ), to define **Commands** within the project, you should follow these steps. First, create a class for your Command, and then inherit from the interface implemented in `Domic-CoreService` .
 
-![image](https://github.com/user-attachments/assets/f61cff8d-fd8e-4a03-82f2-7122ff389f9a)
+```
+public class CreateUserCommand : ICommand<string> //any result type
+{
+    //some properties
+}
+```
 
 2 . For the **CommandHandler** section, you should follow the steps shown in the image below . First, implement the corresponding Handler class and inherit from the `ICommandHandler` interface provided in `Domic-CoreService`. For implementing your core logic, you have two methods at your disposal : `Handle` and `HandleAsync`. Depending on your requirements, you can choose to use either of these methods .
 
-![image](https://github.com/user-attachments/assets/224654f2-5886-4acc-8e65-ba3fbd2bd714)
+```
+public class CreateCommandHandler : ICommandHandler<CreateCommand, string>
+{
+    public CreateCommandHandler(){}
+
+    public string Handle(CreateCommand command)
+    {
+        //logic
+    }
+
+    public Task<string> HandleAsync(CreateCommand command, CancellationToken cancellationToken)
+    {
+        //logic
+
+        return Task.CompleteTask;
+    }
+}
+
+```
 
 3 . The same applies to the **Query** section . To implement your Query logic, you should use the `IQuery` and `IQueryHandler` interfaces provided in `Domic-CoreService`, just as you did for the Command section .
