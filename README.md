@@ -29,10 +29,10 @@ Below is a simple example illustrating how this works :
 
 #### Example:
 
-- **Domain Layer of TicketService** (usage) :
+- **Domain Layer of TicketService** ( usage ) :
    - Depends on the **Domain Layer package** of `Domic-CoreService` from the NuGet server .
 
-In this architecture, services utilize the packages of various layers (like Domain or UseCase layers) by referencing the respective NuGet packages . This modular approach allows for better reusability, maintainability, and separation of concerns within your microservices .
+In this architecture, services utilize the packages of various layers ( like Domain or UseCase layers ) by referencing the respective NuGet packages . This modular approach allows for better reusability, maintainability, and separation of concerns within your microservices .
 
 In the following sections, we will explain in detail how to package and publish each layer and how to integrate these packages into other services .
 
