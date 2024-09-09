@@ -187,7 +187,7 @@ public class CreateCommandHandler : ICommandHandler<CreateCommand, string>
 
 2-2 . **WithValidation Attribute**
 
-- To use this feature, simply follow the code example below . If your Command logic requires validation to be performed first, you need to use this Attribute . For this Attribute to be effective, you must create a class that implements `IValidator` for the corresponding Command . A key point when using this Attribute is that if you use the `Handle` method for your Command logic, you must implement the `Validate` method in your `IValidator` implementation, and vice versa
+- To use this feature, simply follow the code example below . If your `Command` logic requires validation to be performed first, you need to use this Attribute . For this Attribute to be effective, you must create a class that implements `IValidator` for the corresponding Command . A key point when using this Attribute is that if you use the `Handle` method for your Command logic, you must implement the `Validate` method in your `IValidator` implementation, and vice versa
 ```
 public class CreateUserCommandValidator : IValidator<CreateUserCommand>
 {
