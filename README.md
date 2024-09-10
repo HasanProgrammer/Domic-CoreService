@@ -58,5 +58,36 @@ public class CreateCommandHandler : ICommandHandler<CreateCommand, string>
 ```
 
 </div>
+ 
+2 . برای تعریف کلاس های مربوط به لاجیک بخش `Query` هم می توانید مطابق دستورات زیر عمل نمایید
+
+<div dir="ltr">
+
+```csharp
+public class ReadAllQuery : IQuery<Dto> //any result type
+{
+}
+
+public class ReadAllQueryHandler : IQueryHandler<ReadAllQuery, Dto>
+{
+    public ReadAllQueryHandler(){}
+
+    public Dto Handle(ReadAllQuery query)
+    {
+        //query
+        
+        return default;
+    }
+    
+    public Task<Dto> HandleAsync(ReadAllQuery query, CancellationToken cancellationToken)
+    {
+        //query
+        
+        return Task.CompleteTask;
+    }
+}
+```
+
+</div>
 
 </div>
