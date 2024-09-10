@@ -18,7 +18,45 @@ https://github.com/HasanProgrammer/Domic-TemplateService : `Domic-TemplateServic
     - دارای سامانه مشخص برای دریافت و لاگ تمامی رخدادهای موجود در سرویس ها ( `Snapshot` ) در قالب سرویس مجزا تحت عنوان ( `StateTracker` )
 - برخورداری از ابزار لاگ مرکزی یا همان سرویس ( `StateTracker` ) برای مدیریت لاگ خطاهای ایجاد شده در سرویس ها و لاگ رخدادها و یا لاگ های ایجاد شده در سطح کدهای نوشته شده در سرویس ها با ابزار مربوطه ( `Logger` و `StreamLogger` )
 - برخورداری از زیرساخت مناسب برای استفاده از ابزارهای `Third Party` استفاده شده به جهت مدیریت لاگ خطاهای سیستمی مانند ابزارهای `ELK` و نیز برخورداری از لاگ مبتنی بر `FileStorage` به طور پیشفرض
+- و کلی امکانات و ابزارهای دیگر که توضیح کامل هر کدام از این ابزارها در این مستند به تفصیل بیان خواهد شد
 
 ---
+
+### ابزار `Mediator` برای مدیریت الگوی `CQRS`
+
+در این پروژه برای آنکه بتوانید منطق های بخش `Command` و بخش `Query` خود را مجزا کنید می توانید این ابزار که با نام `Mediator` در این پروژه پیاده سازی شده است را مورد استفاده قرار دهید .
+در ابتدا اجازه دهید نحوه پیاده سازی کلاس های مربوط به بخش `Command` و بخش `Query` را مورد ارزیابی قرار دهیم و در انتها به نحوه دسترسی به این منطق ها با استفاده از واسط `Mediator` می پردازیم .
+
+1 . نحوه تعریف کلاس های مربوط به بخش `Command` مطابق زیر می باشد
+
+<div dir="ltr">
+
+```csharp
+public class CreateCommand : ICommand<string> //any result type
+{
+    //some properties
+}
+
+public class CreateCommandHandler : ICommandHandler<CreateCommand, string>
+{
+    public CreateCommandHandler(){}
+    
+    public string Handle(CreateCommand command)
+    {
+       //logic
+        
+        return default;
+    }
+
+    public Task<string> HandleAsync(CreateCommand command, CancellationToken cancellationToken)
+    {
+       //logic
+        
+        return Task.CompleteTask;
+    }
+}
+```
+
+</div>
 
 </div>
