@@ -89,8 +89,10 @@ public class ReadAllQueryHandler : IQueryHandler<ReadAllQuery, Dto>
 ```
 
 </div>
+
+---
  
-قابلیت های پیشرفته ابزار `Mediator`###
+### قابلیت های پیشرفته ابزار `Mediator`
 
 1 . `WithTransaction` Attribute
 
