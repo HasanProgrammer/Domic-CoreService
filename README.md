@@ -5,8 +5,6 @@
 
 </details>
 
-<div dir="rtl">
-
 <style>
     /**
     *
@@ -80,6 +78,8 @@
              url('.github/IranSans/ttf/IRANSansWeb.ttf')        format('truetype');
     }
 </style>
+
+<div dir="rtl">
 
 <details style="font-family: IRANSans">
 
