@@ -5,9 +5,9 @@
 
 </details>
 
-<div dir="rtl">
+<div dir="rtl" style="font-family: IRANSans">
 
-<style hidden="hidden">
+<style>
 
 /**
     *
@@ -83,7 +83,7 @@
 
 </style>
 
-<details style="font-family: IRANSans">
+<details>
 
 <summary>Persian</summary>
 
