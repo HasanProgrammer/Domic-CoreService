@@ -56,7 +56,7 @@ public class CreateCommandHandler : ICommandHandler<CreateCommand, string>
     {
        //logic
         
-        return Task.CompleteTask;
+       return Task.FromResult<string>(default);
     }
 }
 ```
@@ -87,7 +87,7 @@ public class ReadAllQueryHandler : IQueryHandler<ReadAllQuery, Dto>
     {
         //query
         
-        return Task.CompleteTask;
+        return Task.FromResult<Dto>(default);
     }
 }
 ```
@@ -198,7 +198,7 @@ public class CreateCommandHandler : ICommandHandler<CreateCommand, string>
     {
        //logic
         
-        return Task.CompleteTask;
+       return Task.FromResult<string>(default);
     }
 }
 ```
@@ -234,7 +234,7 @@ public class CreateCommandHandler : ICommandHandler<CreateCommand, string>
     {
        //logic
         
-        return Task.CompleteTask;
+       return Task.FromResult<string>(default);
     }
 }
 ```
