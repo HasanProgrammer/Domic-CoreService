@@ -1,4 +1,13 @@
-<style>
+<details>
+
+<summary>English</summary>
+
+
+</details>
+
+<div dir="rtl">
+
+<style hidden="hidden">
 
 /**
     *
@@ -74,17 +83,6 @@
 
 </style>
 
-<body>
-
-<details>
-
-<summary>English</summary>
-
-
-</details>
-
-<div dir="rtl">
-
 <details style="font-family: IRANSans">
 
 <summary>Persian</summary>
@@ -97,5 +95,3 @@
 </details>
 
 </div>
-
-</body>
