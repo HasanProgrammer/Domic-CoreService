@@ -10,8 +10,6 @@ namespace Domic.Core.Infrastructure.Concretes;
 
 public class Mediator : IMediator
 {
-    private static SemaphoreSlim _asyncLock = new(1, 1);
-    
     private readonly IServiceProvider _serviceProvider;
 
     public Mediator(IServiceProvider serviceProvider) => _serviceProvider = serviceProvider;
