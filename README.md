@@ -8,26 +8,27 @@ The infrastructure projects for all the business applications that rely on this 
 - Domic-StateTrackerService : https://github.com/HasanProgrammer/Domic-StateTrackerService
 - Domic-UserService : https://github.com/HasanProgrammer/Domic-UserService
 - Domic-AuthService : https://github.com/HasanProgrammer/Domic-AuthService
+- Domic-TemplateService : https://github.com/HasanProgrammer/Domic-TemplateService
 
 ### Key Features
 
 - **Event and Message Handling** :
-    - Provides advanced tools for working with events and messages across services
-    - Highly configurable to ensure seamless integration with messaging systems such as `RabbitMQ` and `Kafka`
+  - Provides advanced tools for working with events and messages across services
+  - Highly configurable to ensure seamless integration with messaging systems such as `RabbitMQ` and `Kafka`
 
 - **Distributed Caching** :
-    - Tools for better and more efficient use of distributed caches like `Redis`
+  - Tools for better and more efficient use of distributed caches like `Redis`
 
 - **Monitoring Tools** :
-    - This project integrates several powerful tools for monitoring all errors, requests, and more. These tools are essential for maintaining visibility into the system's health and performance, ensuring that any issues are quickly identified and addressed
-      In the following sections, we will provide a detailed explanation of how to use these monitoring tools and their functionality. You will learn how to effectively track errors, monitor incoming requests, and gain insights into the overall performance of your     s       ervices
-    - For monitoring all `Events` and `Logs`, the system uses tools such as **FileStorage** - **ELK** and its central service ( **StateTracker** ) from the `Domic` project . This setup is used to record and report all created events, as well as to log errors and system 
-      request logs, which are collected in a MongoDB database
+  - This project integrates several powerful tools for monitoring all errors, requests, and more. These tools are essential for maintaining visibility into the system's health and performance, ensuring that any issues are quickly identified and addressed
+    In the following sections, we will provide a detailed explanation of how to use these monitoring tools and their functionality. You will learn how to effectively track errors, monitor incoming requests, and gain insights into the overall performance of your     s       ervices
+  - For monitoring all `Events` and `Logs`, the system uses tools such as **FileStorage** - **ELK** and its central service ( **StateTracker** ) from the `Domic` project . This setup is used to record and report all created events, as well as to log errors and system
+    request logs, which are collected in a MongoDB database
 
 - **Infrastructure Tools** :
-    - Includes tools for leveraging .NET infrastructure capabilities more effectively
-    - Supports patterns such as `Middleware` and `Mediator` with high configurability for professional use
-    - Configuration and optimizations for tools such as **gRPC** - **Docker**, and many other .NET tools or third-party tools.
+  - Includes tools for leveraging .NET infrastructure capabilities more effectively
+  - Supports patterns such as `Middleware` and `Mediator` with high configurability for professional use
+  - Configuration and optimizations for tools such as **gRPC** - **Docker**, and many other .NET tools or third-party tools
 
 ---
 
@@ -42,7 +43,7 @@ Below is a simple example illustrating how this works :
 #### Example :
 
 - **Domain Layer of TicketService** ( usage ) :
-   - Depends on the **Domain Layer package** of `Domic-CoreService` from the NuGet server
+  - Depends on the **Domain Layer package** of `Domic-CoreService` from the NuGet server
 
 In this architecture, services utilize the packages of various layers ( like Domain or UseCase layers ) by referencing the respective NuGet packages . This modular approach allows for better reusability, maintainability, and separation of concerns within your microservices .
 
@@ -50,22 +51,22 @@ In the following sections, we will explain in detail how to package and publish 
 
 ### Mediator ( for handle CQS | CQRS )
 
-To begin and understand how to utilize the tools provided by this project (Domic), let's start with the **Mediator** tool .
+To begin and understand how to utilize the tools provided by this project ( Domic ), let's start with the **Mediator** tool .
 
-To use the Mediator tool (which implements the Mediator pattern), you need to follow the steps shown in the images below, along with brief explanations for each part .
+To use the Mediator tool ( which implements the Mediator pattern ), you need to follow the steps shown in the codes below, along with brief explanations for each part .
 
-1 . As shown in the code below ( sample ) to define **Commands** within the project, you should follow these steps. First, create a class for your Command, and then inherit from the interface implemented in `Domic-CoreService`
+1 . As shown in the code below ( sample ) to define **Commands** within the project, you should follow these steps . First, create a class for your Command, and then inherit from the interface implemented in `Domic-CoreService`
 
-```
+```csharp
 public class CreateUserCommand : ICommand<string> //any result type
 {
     //some properties
 }
 ```
 
-2 . For the **CommandHandler** section, you should follow the steps shown in the image below . First, implement the corresponding Handler class and inherit from the `ICommandHandler` interface provided in `Domic-CoreService`. For implementing your core logic, you have two methods at your disposal : `Handle` and `HandleAsync`. Depending on your requirements, you can choose to use either of these methods
+2 . For the **CommandHandler** section, you should follow the steps shown in the code below . First, implement the corresponding Handler class and inherit from the `ICommandHandler` interface provided in `Domic-CoreService`. For implementing your core logic, you have two methods at your disposal : `Handle` and `HandleAsync`. Depending on your requirements, you can choose to use either of these methods
 
-```
+```csharp
 public class CreateCommandHandler : ICommandHandler<CreateCommand, string>
 {
     public CreateCommandHandler(){}
@@ -84,11 +85,11 @@ public class CreateCommandHandler : ICommandHandler<CreateCommand, string>
 }
 ```
 
-In addition to the above, there are advanced techniques for writing cleaner and more readable code, such as using Attributes. I will explain how to use these techniques in the following sections .
+In addition to the above, there are advanced techniques for writing cleaner and more readable code, such as using Attributes . I will explain how to use these techniques in the following sections .
 
 2-1 . **WithTransaction Attribute**
 
-```
+```csharp
 public class CreateCommandHandler : ICommandHandler<CreateCommand, string>
 {
     public CreateCommandHandler(){}
@@ -113,13 +114,13 @@ This **Attribute** wraps around your `Handle` or `HandleAsync` methods to manage
 
 - First, you need to create the following interface in the **Domain layer** of your project ( for your projects, you should use the provided template, the link to which will be given later ) :
 
-```
+```csharp
 public interface ICommandUnitOfWork : ICoreCommandUnitOfWork;
 ```
 - Template ( Domic-TemplateService ) : https://github.com/HasanProgrammer/Domic-TicketService
 
 - In the next step, you need to implement this interface in the **Infrastructure layer** . This implementation, based on EF Core and SQL Server, is provided in the default template project
-```
+```csharp
 public class CommandUnitOfWork : ICommandUnitOfWork
 {
     private readonly SQLContext   _context;
@@ -171,19 +172,19 @@ public class CommandUnitOfWork : ICommandUnitOfWork
 ```
 
 - Within this Attribute, there is a property called **Isolation Level** that represents the isolation level of the `Persist` operation . By modifying this Isolation Level, you can adjust the level of `Pessimistic Locking`
-```
-public class CreateCommandHandler : ICommandHandler<CreateCommand, string>
+```csharp
+public class CreateUserCommandHandler : ICommandHandler<CreateUserCommand, string>
 {
-    public CreateCommandHandler(){}
+    public CreateUserCommandHandler(){}
 
     [WithTransaction(IsolationLevel = IsolationLevel.RepeatableRead)]
-    public string Handle(CreateCommand command)
+    public string Handle(CreateUserCommand command)
     {
         //logic
     }
 
     [WithTransaction(IsolationLevel = IsolationLevel.RepeatableRead)]
-    public Task<string> HandleAsync(CreateCommand command, CancellationToken cancellationToken)
+    public Task<string> HandleAsync(CreateUserCommand command, CancellationToken cancellationToken)
     {
         //logic
 
@@ -195,7 +196,7 @@ public class CreateCommandHandler : ICommandHandler<CreateCommand, string>
 2-2 . **WithValidation Attribute**
 
 - To use this feature, simply follow the code example below . If your `Command` logic requires validation to be performed first, you need to use this Attribute . For this Attribute to be effective, you must create a class that implements `IValidator` for the corresponding Command . A key point when using this Attribute is that if you use the `Handle` method for your `Command` logic, you must implement the `Validate` method in your `IValidator` implementation, and vice versa
-```
+```csharp
 public class CreateUserCommandValidator : IValidator<CreateUserCommand>
 {
     public CreateUserCommandValidator(){}
@@ -215,18 +216,18 @@ public class CreateUserCommandValidator : IValidator<CreateUserCommand>
     }
 }
 
-public class CreateCommandHandler : ICommandHandler<CreateCommand, string>
+public class CreateUserCommandHandler : ICommandHandler<CreateUserCommand, string>
 {
-    public CreateCommandHandler(){}
+    public CreateUserCommandHandler(){}
 
     [WithValidation]
-    public string Handle(CreateCommand command)
+    public string Handle(CreateUserCommand command)
     {
         //logic
     }
 
     [WithValidation]
-    public Task<string> HandleAsync(CreateCommand command, CancellationToken cancellationToken)
+    public Task<string> HandleAsync(CreateUserCommand command, CancellationToken cancellationToken)
     {
         //logic
 
@@ -235,9 +236,9 @@ public class CreateCommandHandler : ICommandHandler<CreateCommand, string>
 }
 ```
 
-3 . The same applies to the **Query** section . To implement your Query logic, you should use the `IQuery` and `IQueryHandler` interfaces provided in `Domic-CoreService`, just as you did for the Command section .
+3 . The same applies to the **Query** section . To implement your Query logic, you should use the `IQuery` and `IQueryHandler` interfaces provided in `Domic-CoreService`, just as you did for the Command section
 
-```
+```csharp
 public class ReadAllUserQuery : IQuery<UsersDto> //any result type
 {
 }
