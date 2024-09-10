@@ -1,3 +1,7 @@
+<details>
+
+<summary>English</summary>
+
 ### Overview
 
 This service acts as a foundational layer for all backend services in the overall microservices architecture . It includes advanced tools and structures designed to support the development of future services, with a focus on flexibility and configurability .
@@ -13,22 +17,22 @@ The infrastructure projects for all the business applications that rely on this 
 ### Key Features
 
 - **Event and Message Handling** :
-  - Provides advanced tools for working with events and messages across services
-  - Highly configurable to ensure seamless integration with messaging systems such as `RabbitMQ` and `Kafka`
+    - Provides advanced tools for working with events and messages across services
+    - Highly configurable to ensure seamless integration with messaging systems such as `RabbitMQ` and `Kafka`
 
 - **Distributed Caching** :
-  - Tools for better and more efficient use of distributed caches like `Redis`
+    - Tools for better and more efficient use of distributed caches like `Redis`
 
 - **Monitoring Tools** :
-  - This project integrates several powerful tools for monitoring all errors, requests, and more. These tools are essential for maintaining visibility into the system's health and performance, ensuring that any issues are quickly identified and addressed
-    In the following sections, we will provide a detailed explanation of how to use these monitoring tools and their functionality. You will learn how to effectively track errors, monitor incoming requests, and gain insights into the overall performance of your     s       ervices
-  - For monitoring all `Events` and `Logs`, the system uses tools such as **FileStorage** - **ELK** and its central service ( **StateTracker** ) from the `Domic` project . This setup is used to record and report all created events, as well as to log errors and system
-    request logs, which are collected in a MongoDB database
+    - This project integrates several powerful tools for monitoring all errors, requests, and more. These tools are essential for maintaining visibility into the system's health and performance, ensuring that any issues are quickly identified and addressed
+      In the following sections, we will provide a detailed explanation of how to use these monitoring tools and their functionality. You will learn how to effectively track errors, monitor incoming requests, and gain insights into the overall performance of your     s       ervices
+    - For monitoring all `Events` and `Logs`, the system uses tools such as **FileStorage** - **ELK** and its central service ( **StateTracker** ) from the `Domic` project . This setup is used to record and report all created events, as well as to log errors and system
+      request logs, which are collected in a MongoDB database
 
 - **Infrastructure Tools** :
-  - Includes tools for leveraging .NET infrastructure capabilities more effectively
-  - Supports patterns such as `Middleware` and `Mediator` with high configurability for professional use
-  - Configuration and optimizations for tools such as **gRPC** - **Docker**, and many other .NET tools or third-party tools
+    - Includes tools for leveraging .NET infrastructure capabilities more effectively
+    - Supports patterns such as `CQS` - `CQRS` - `Mediator` and etc with high configurability for professional use
+    - Configuration and optimizations for tools such as `gRPC` - `Docker`, and many other .NET tools or third-party tools
 
 ---
 
@@ -43,7 +47,7 @@ Below is a simple example illustrating how this works :
 #### Example :
 
 - **Domain Layer of TicketService** ( usage ) :
-  - Depends on the **Domain Layer package** of `Domic-CoreService` from the NuGet server
+    - Depends on the **Domain Layer package** of `Domic-CoreService` from the NuGet server
 
 In this architecture, services utilize the packages of various layers ( like Domain or UseCase layers ) by referencing the respective NuGet packages . This modular approach allows for better reusability, maintainability, and separation of concerns within your microservices .
 
@@ -171,7 +175,7 @@ public class CommandUnitOfWork : ICommandUnitOfWork
 }
 ```
 
-- Within this Attribute, there is a property called **Isolation Level** that represents the isolation level of the `Persist` operation . By modifying this Isolation Level, you can adjust the level of `Pessimistic Locking`
+- Within this Attribute, there is a property called `Isolation Level` that represents the isolation level of the `Persist` operation . By modifying this Isolation Level, you can adjust the level of `Pessimistic Locking` in database level
 ```csharp
 public class CreateUserCommandHandler : ICommandHandler<CreateUserCommand, string>
 {
@@ -260,3 +264,11 @@ public class ReadAllUserQueryHandler : IQueryHandler<ReadAllUserQuery, UsersDto>
     }
 }
 ```
+
+</details>
+
+<details>
+
+<summary>Persian</summary>
+
+</details>
