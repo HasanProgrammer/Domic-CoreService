@@ -89,5 +89,11 @@ public class ReadAllQueryHandler : IQueryHandler<ReadAllQuery, Dto>
 ```
 
 </div>
+ 
+قابلیت های پیشرفته ابزار `Mediator`###
+
+1 . `WithTransaction` Attribute
+
+از این `Attribute` برای مواقعی که نیاز دارید تا عملیات `Command` خود را در داخل یک `Transaction` مدیریت کنید، استفاده می شود که دارای یک `Property` تحت عنوان `IsolationLevel` می باشد که سطح قفل گزاری منطق شما را در داخل دیتابیس مدیریت می کند ( `Pesimestic Lock` )
 
 </div>
