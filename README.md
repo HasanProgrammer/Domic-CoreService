@@ -1,10 +1,3 @@
-<details>
-
-<summary>English</summary>
-
-
-</details>
-
 <div dir="rtl" style="font-family: IRANSans">
 
 <details>
