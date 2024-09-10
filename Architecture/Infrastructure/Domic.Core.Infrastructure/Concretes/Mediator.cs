@@ -10,7 +10,6 @@ namespace Domic.Core.Infrastructure.Concretes;
 
 public class Mediator : IMediator
 {
-    private static object _lock = new();
     private static SemaphoreSlim _asyncLock = new(1, 1);
     
     private readonly IServiceProvider _serviceProvider;
@@ -31,11 +30,26 @@ public class Mediator : IMediator
 
         if (commandHandlerMethod.GetCustomAttribute(typeof(WithPessimisticConcurrencyAttribute)) is not null)
         {
-            lock (_lock)
+            var lockField =
+                commandHandlerType.GetField("_lock", BindingFlags.NonPublic | BindingFlags.Static);
+            
+            if (lockField is not null)
             {
-                _Validation(commandHandler, commandHandlerType, commandHandlerMethod, command);
+                var conditions = (
+                    lockField.IsPrivate && 
+                    lockField.FieldType == typeof(object) && 
+                    lockField.GetValue(commandHandler) != null
+                );
                 
-                return _InvokeHandleMethod(commandHandler, commandHandlerMethod, command);
+                if (!conditions)
+                    throw new Exception("The [ _lock ] field must be private and static & return an object with value");
+                    
+                lock (lockField.GetValue(commandHandler))
+                {
+                    _Validation(commandHandler, commandHandlerType, commandHandlerMethod, command);
+                
+                    return _InvokeHandleMethod(commandHandler, commandHandlerMethod, command);
+                }
             }
         }
         
@@ -49,7 +63,6 @@ public class Mediator : IMediator
         var asyncCommandBroker =
             _serviceProvider.GetRequiredService(typeof(IInternalMessageBroker)) as IInternalMessageBroker;
         
-        //ToDo : ( Tech Debt ) => Should be used retry pattern with tools like [Polly]
         asyncCommandBroker.Publish(command);
     }
 
@@ -67,20 +80,37 @@ public class Mediator : IMediator
 
         if (commandHandlerMethod.GetCustomAttribute(typeof(WithPessimisticConcurrencyAttribute)) is not null)
         {
-            await _asyncLock.WaitAsync(cancellationToken);
-
-            try
+            var asyncLockField =
+                commandHandlerType.GetField("_asyncLock", BindingFlags.NonPublic | BindingFlags.Static);
+            
+            if (asyncLockField is not null)
             {
-                await _ValidationAsync(commandHandler, commandHandlerType, commandHandlerMethod, command, cancellationToken);
+                var conditions = (
+                    asyncLockField.IsPrivate &&
+                    asyncLockField.FieldType == typeof(SemaphoreSlim) &&
+                    asyncLockField.GetValue(commandHandler) != null
+                );
                 
-                var result = await _InvokeHandleMethodAsync(commandHandler, commandHandlerMethod, command, cancellationToken);
+                if (!conditions)
+                    throw new Exception("The [ _asyncLock ] field must be private and static & return an [ SemaphoreSlim ] with value");
 
-                return result;
-            }
-            catch (Exception e)
-            {
-                _asyncLock.Release();
-                throw;
+                var asyncLockValue = asyncLockField.GetValue(commandHandler) as SemaphoreSlim;
+                
+                await asyncLockValue.WaitAsync(cancellationToken);
+
+                try
+                {
+                    await _ValidationAsync(commandHandler, commandHandlerType, commandHandlerMethod, command, cancellationToken);
+                
+                    var result = await _InvokeHandleMethodAsync(commandHandler, commandHandlerMethod, command, cancellationToken);
+
+                    return result;
+                }
+                catch (Exception e)
+                {
+                    asyncLockValue.Release();
+                    throw;
+                }
             }
         }
 
