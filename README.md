@@ -96,6 +96,74 @@ public class ReadAllQueryHandler : IQueryHandler<ReadAllQuery, Dto>
 
 1 . `WithTransaction` Attribute
 
-از این `Attribute` برای مواقعی که نیاز دارید تا عملیات `Command` خود را در داخل یک `Transaction` مدیریت کنید، استفاده می شود که دارای یک `Property` تحت عنوان `IsolationLevel` می باشد که سطح قفل گزاری منطق شما را در داخل دیتابیس مدیریت می کند ( `Pesimestic Lock` )
+از این `Attribute` برای مواقعی که نیاز دارید تا عملیات `Command` خود را در داخل یک `Transaction` مدیریت کنید، استفاده می شود که دارای یک `Property` تحت عنوان `IsolationLevel` می باشد که سطح قفل گزاری منطق شما را در داخل دیتابیس مدیریت می کند ( `Pesemestic Lock` ) .
+در ابتدا برای استفاده از این ابزار می بایست در سطح لایه `Domain` سرویس مربوطه ، یک واسط پیاده سازی کرده که از واسط `ICoreCommandUnitOfWork` ارث بری کرده است، مطابق کد زیر :
+
+<div dir="ltr">
+
+```csharp
+public interface ICommandUnitOfWork : ICoreCommandUnitOfWork;
+```
+
+</div>
+
+سپس باید در لایه `Infrastructure` سرویس مربوطه این واسط پیاده سازی شود ، مطابق کد زیر :
+
+<div dir="ltr">
+
+```csharp
+public class CommandUnitOfWork : ICommandUnitOfWork
+{
+    private readonly SQLContext   _context;
+    private IDbContextTransaction _transaction;
+
+    public CommandUnitOfWork(SQLContext context) => _context = context; //Resource
+
+    public void Transaction(IsolationLevel isolationLevel) 
+        => _transaction = _context.Database.BeginTransaction(isolationLevel); //Resource
+
+    public async Task TransactionAsync(IsolationLevel isolationLevel = IsolationLevel.ReadCommitted,
+        CancellationToken cancellationToken = new CancellationToken())
+    {
+        _transaction = await _context.Database.BeginTransactionAsync(isolationLevel, cancellationToken); //Resource
+    }
+
+    public void Commit()
+    {
+        _context.SaveChanges();
+        _transaction.Commit();
+    }
+
+    public async Task CommitAsync(CancellationToken cancellationToken)
+    {
+        await _context.SaveChangesAsync(cancellationToken);
+        await _transaction.CommitAsync(cancellationToken);
+    }
+
+    public void Rollback() => _transaction?.Rollback();
+
+    public Task RollbackAsync(CancellationToken cancellationToken)
+    {
+        if (_transaction is not null)
+            return _transaction.RollbackAsync(cancellationToken);
+
+        return Task.CompletedTask;
+    }
+
+    public void Dispose() => _transaction?.Dispose();
+
+    public ValueTask DisposeAsync()
+    {
+        if (_transaction is not null)
+            return _transaction.DisposeAsync();
+
+        return ValueTask.CompletedTask;
+    }
+}
+```
+
+</div>
+
+**توجه** : **در نظر داشته باشید که این موارد به طور پیشفرض در سرویس `Template` پیاده سازی شده اند**
 
 </div>
