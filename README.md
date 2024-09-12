@@ -453,7 +453,7 @@ public class CreateCommandHandler : ICommandHandler<CreateCommand, string>
 <div dir="ltr">
 
 ```csharp
-//for distributed cahce of current service
+//for current service distributed cahce
 public class MemoryCache : IInternalDistributedCacheHandler<List<Dto>>
 {
     public MemoryCache(){}
@@ -475,7 +475,7 @@ public class MemoryCache : IInternalDistributedCacheHandler<List<Dto>>
     }
 }
 
-//for distributed cahce of all services ( global )
+//for all services distributed cahce ( global | share cahce )
 public class MemoryCache : IExternalDistributedCacheHandler<List<Dto>>
 {
     public MemoryCache(){}
