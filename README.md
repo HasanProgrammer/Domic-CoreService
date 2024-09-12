@@ -254,6 +254,20 @@ public class CreateCommandHandler : ICommandHandler<CreateCommand, string>
 ```
 </div>
 
+🔥 **توجه** : **برای کارکرد صحیح `WithTransaction` در سرویس خود ، می بایست این `Attribute` را فعال سازی نمایید**
+
+برای فعال سازی `WithTransaction` در سرویس خود می بایست در لایه `Presentation` و در فایل `Program.cs` دستورات زیر را اعمال نمایید .
+
+<div dir="ltr">
+
+```csharp
+WebApplicationBuilder builder = WebApplication.CreateBuilder();
+
+builder.RegisterCommandRepositories();
+```
+
+</div>
+
 2 . استفاده از `WithValidationAttribute`
 
 از این `Attribute` برای مواقعی که نیاز به اعتبارسنجی `Command` یا `Query` خود دارید استفاده می شود . برای شروع می بایست کلاس مربوط به `Validator` را ایجاد نمایید و سپس اقدام به گذاشتن `WithValidation` نمایید .
