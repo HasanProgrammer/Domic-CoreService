@@ -446,6 +446,10 @@ public class CreateCommandHandler : ICommandHandler<CreateCommand, string>
 
 برای مدیریت پیشرفته تر و خوانا تر `Cache` های نوشته شده در سطح پروژه که بر اساس دیتابیس `Redis` پیاده سازی شده است می توانید ، مطابق دستور العمل های زیر اقدام نمایید .
 
+🔥 **توجه** : **از واسط `IInternalDistributedCache` برای `Redis` متعلق به سرویس جاری استفاده می شود و سرویس های دیگر به این `Cache` دسترسی ندارند**
+
+🔥 **توجه** : **از واسط `IExternalDistributedCache` برای `Redis` متعلق به همه سرویس ها استفاده می شود ، درواقع پیاده کننده این واسط از `Redis` مشترک برای همه سرویس ها استفاده می کند**
+
 1 . تعریف کلاس مربوط به منطق دیتای مورد نیاز برای `Cache`
 
 در ابتدا ، شما می بایست کلاس مربوط به منطق `Cache` خود را مطابق دستورات زیر ایجاد نمایید .
@@ -494,6 +498,40 @@ public class MemoryCache : IExternalDistributedCacheHandler<List<Dto>>
         //query
         
         return Task.FromResult(new());
+    }
+}
+```
+</div>
+
+2 . فراخوانی `Cache` مربوطه در قسمت مورد نیاز
+
+حال برای استفاده از مقدار `Cache` شده ( مطابق دستورات فوق ) می بایست ، از واسط متناسب با `InternalCache` و یا `ExternalCache` استفاده نمود . برای این مهم دو واسط `IInternalDistributedCacheMediator` و `IExternalDistributedCacheMediator` پیاده سازی شده اند که می توان از آنها مطابق دستورات زیر استفاده کرد .
+
+<div dir="ltr">
+
+```csharp
+public class Query : IQuery<List<Dto>>
+{
+}
+
+public class QueryHandler : IQueryHandler<Query, List<Dto>>
+{
+    private readonly IInternalDistributedCacheMediator _cacheMediator;
+
+    public QueryHandler(IInternalDistributedCacheMediator cacheMediator) => _cacheMediator = cacheMediator;
+
+    public List<Dto> HandleAsync(Query query)
+    {
+        var result = _cacheMediator.Get<List<Dto>>(cancellationToken);
+
+        return result;
+    }
+    
+    public async Task<List<Dto>> HandleAsync(Query query, CancellationToken cancellationToken)
+    {
+        var result = await _cacheMediator.GetAsync<List<Dto>>(cancellationToken);
+
+        return result;
     }
 }
 ```
