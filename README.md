@@ -302,6 +302,44 @@ public class CreateCommandHandler : ICommandHandler<CreateCommand, string>
 ```
 </div>
 
+🔥 **توجه** : **در کد بالا و در بخش مربوط به کلاس `Validator` مربوطه ، شما می توانید نتیجه متد `Validate` و یا `ValidateAsync` را که یک `object` می باشد در داخل `CommandHandler` مربوطه مورد استفاده قرار دهید**
+
+برای این مهم ، کافی است که در قسمت `CommandHandler` خود یک متغیر از نوع `object` و با نام `validationResult_` و به شکل `readonly` ایجاد نمایید .
+
+<div dir="ltr">
+
+```csharp
+public class CreateCommand : ICommand<string> //any result type
+{
+    //some properties
+}
+
+public class CreateCommandHandler : ICommandHandler<CreateCommand, string>
+{
+    private readonly object _validationResult;
+    
+    public CreateCommandHandler(){}
+
+    [WithValidation]
+    public string Handle(CreateCommand command)
+    {
+       //logic
+        
+        return default;
+    }
+
+    [WithValidation]
+    public Task<string> HandleAsync(CreateCommand command, CancellationToken cancellationToken)
+    {
+       //logic
+        
+       return Task.FromResult<string>(default);
+    }
+}
+```
+
+</div>
+
 3 . استفاده از `WithCleanCacheAttribute`
 
 در قسمت `Command` در مواقعی نیاز دارید که پس از اجرا شدن لاجیک بخش مربوطه ، `Cache` مربوط به موجودیت مورد نظر را حذف نمایید تا مجدد در درخواست دیگری که برای قسمت `Query` مربوطه ارسال می شود ، `Cache` مربوطه ایجاد شود .
