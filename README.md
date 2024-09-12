@@ -551,7 +551,9 @@ public class QueryHandler : IQueryHandler<Query, List<Dto>>
 ```
 </div>
 
-3 . در نهایت برای فعال سازی این قابلیت در سرویس خود ، می بایست در لایه `Presentation` و در فایل `Program.cs` از دستور زیر استفاده نمایید .
+3 . فعال سازی ابزار `DistributedCache` در سرویس مربوطه
+
+در نهایت برای فعال سازی این قابلیت در سرویس خود ، می بایست در لایه `Presentation` و در فایل `Program.cs` از دستور زیر استفاده نمایید .
 
 <div dir="ltr">
 
