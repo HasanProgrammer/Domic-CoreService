@@ -520,7 +520,7 @@ public class QueryHandler : IQueryHandler<Query, List<Dto>>
 
     public QueryHandler(IInternalDistributedCacheMediator cacheMediator) => _cacheMediator = cacheMediator;
 
-    public List<Dto> HandleAsync(Query query)
+    public List<Dto> Handle(Query query)
     {
         var result = _cacheMediator.Get<List<Dto>>(cancellationToken);
 
