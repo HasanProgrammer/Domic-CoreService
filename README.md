@@ -371,6 +371,8 @@ public class CreateCommandHandler : ICommandHandler<CreateCommand, string>
 ```
 </div>
 
+🔥 **توجه** : **در کد بالا ، حتما می بایست نام متغیر مربوط به کلید قفل گذاری ، `lock_` باشد**
+
 برای استفاده از این `Attribute` و در کنار متد `HandleAsync` بخش مربوط به `Command` باید مطابق دستورات زیر عمل نمایید .
 
 <div dir="ltr">
@@ -397,5 +399,7 @@ public class CreateCommandHandler : ICommandHandler<CreateCommand, string>
 }
 ```
 </div>
+
+🔥 **توجه** : **در کد بالا ، حتما می بایست نام متغیر مربوط به کلید قفل گذاری ، `asyncLock_` باشد**
 
 </div>
