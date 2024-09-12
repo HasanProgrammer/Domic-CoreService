@@ -302,4 +302,40 @@ public class CreateCommandHandler : ICommandHandler<CreateCommand, string>
 ```
 </div>
 
+3 . استفاده از `WithCleanCacheAttribute`
+
+در قسمت `Command` در مواقعی نیاز دارید که پس از اجرا شدن لاجیک بخش مربوطه `Cache` مربوط به موجودیت مورد نظر را حذف نمایید تا مجدد در درخواست دیگری که برای قسمت `Query` مربوطه ارسال می شود ، `Cache` مربوطه ایجاد شود .
+برای سهولت در این کار می توانید از این ویژگی مطابق کد های زیر استفاده نمایید .
+
+<div dir="ltr">
+
+```csharp
+public class CreateCommand : ICommand<string> //any result type
+{
+    //some properties
+}
+
+public class CreateCommandHandler : ICommandHandler<CreateCommand, string>
+{
+    public CreateCommandHandler(){}
+
+    [WithCleanCache(Keies = "Key1|Key2|...")]
+    public string Handle(CreateCommand command)
+    {
+       //logic
+        
+        return default;
+    }
+
+    [WithCleanCache(Keies = "Key1|Key2|...")]
+    public Task<string> HandleAsync(CreateCommand command, CancellationToken cancellationToken)
+    {
+       //logic
+        
+       return Task.FromResult<string>(default);
+    }
+}
+```
+</div>
+
 </div>
