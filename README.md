@@ -100,7 +100,7 @@ public class ReadAllQueryHandler : IQueryHandler<ReadAllQuery, Dto>
 
 1 . استفاده از `WithTransactionAttribute`
 
-از این `Attribute` برای مواقعی که نیاز دارید تا عملیات `Command` خود را در داخل یک `Transaction` مدیریت کنید، استفاده می شود که دارای یک `Property` تحت عنوان `IsolationLevel` می باشد که سطح قفل گزاری منطق شما را در داخل دیتابیس مدیریت می کند ( `Pesemestic Lock` ) .
+از این `Attribute` برای مواقعی که نیاز دارید تا عملیات `Command` خود را در داخل یک `Transaction` مدیریت کنید، استفاده می شود که دارای یک `Property` تحت عنوان `IsolationLevel` می باشد که سطح قفل گزاری منطق شما را در داخل دیتابیس مدیریت می کند ( `Pessimistic Lock` ) .
 
 در ابتدا برای استفاده از این ابزار می بایست در سطح لایه `Domain` سرویس مربوطه ، یک واسط پیاده سازی کرده که از واسط `ICoreCommandUnitOfWork` ارث بری کرده است، مطابق کد زیر :
 
@@ -328,6 +328,66 @@ public class CreateCommandHandler : ICommandHandler<CreateCommand, string>
     }
 
     [WithCleanCache(Keies = "Key1|Key2|...")]
+    public Task<string> HandleAsync(CreateCommand command, CancellationToken cancellationToken)
+    {
+       //logic
+        
+       return Task.FromResult<string>(default);
+    }
+}
+```
+</div>
+
+4 . استفاده از `WithPessimisticConcurrencyAttribute`
+
+در مواقعی که نیاز دارید تا منطق بخش مربوط به `Command` خود را که یک `Critical Section` می باشد در داخل بلوک `lock` قرار دهید که تنها یک یا تعداد مشخصی `Thread` بتوانند به آن بخش `Critical` دسترسی داشته باشند ، می توانید از این `Attribute` استفاده نمایید .
+
+🔥 **توجه** : **برای متد `Handle` باید در داخل `CommandHandler` خود یک متغیر از نوع `object` ایجاد نمایید و برای `HandleAsync` باید یک متغیر از نوع `SemaphoreSlim` ایجاد نمایید**
+
+برای استفاده از این `Attribute` و در کنار متد `Handle` بخش مربوط به `Command` باید مطابق دستورات زیر عمل نمایید .
+
+<div dir="ltr">
+
+```csharp
+public class CreateCommand : ICommand<string> //any result type
+{
+    //some properties
+}
+
+public class CreateCommandHandler : ICommandHandler<CreateCommand, string>
+{
+    private static object _lock = new();
+    
+    public CreateCommandHandler(){}
+
+    [WithPessimisticConcurrency]
+    public string Handle(CreateCommand command)
+    {
+       //logic
+        
+        return default;
+    }
+}
+```
+</div>
+
+برای استفاده از این `Attribute` و در کنار متد `HandleAsync` بخش مربوط به `Command` باید مطابق دستورات زیر عمل نمایید .
+
+<div dir="ltr">
+
+```csharp
+public class CreateCommand : ICommand<string> //any result type
+{
+    //some properties
+}
+
+public class CreateCommandHandler : ICommandHandler<CreateCommand, string>
+{
+    private static SemaphoreSlim _asyncLock = new(1, 1); //custom count of thread
+    
+    public CreateCommandHandler(){}
+
+    [WithPessimisticConcurrency]
     public Task<string> HandleAsync(CreateCommand command, CancellationToken cancellationToken)
     {
        //logic
