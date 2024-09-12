@@ -537,4 +537,27 @@ public class QueryHandler : IQueryHandler<Query, List<Dto>>
 ```
 </div>
 
+3 . در نهایت برای فعال سازی این قابلیت در سرویس خود ، می بایست در لایه `Presentation` سرویس خود از دستور زیر استفاده نمایید .
+
+<div dir="ltr">
+
+```csharp
+WebApplicationBuilder builder = WebApplication.CreateBuilder();
+
+builder.RegisterDistributedCaching();
+```
+
+برای تنظیمات مربوط به رشته اتصال و اطلاعات مربوط به `Cache` می بایست در سرویس مربوطه و در بخش `Properties` و در فایل مربوط به `launchSettings.json` و در قسمت `environmentVariables` کلید های زیر را اضافه نمایید .
+
+```json
+{
+  "environmentVariables": {
+    "E-RedisConnectionString": "", //external connection
+    "I-RedisConnectionString": ""  //internal connection
+  }
+}
+```
+
+</div>
+
 </div>
