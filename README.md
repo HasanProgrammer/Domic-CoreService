@@ -94,6 +94,20 @@ public class ReadAllQueryHandler : IQueryHandler<ReadAllQuery, Dto>
 
 </div>
 
+3 . فعال سازی `Mediator` در سرویس مربوطه
+
+در نهایت برای فعال سازی این ابزار در سرویس خود ، می بایست در لایه `Presentation` و در فایل `Program.cs` مطابق دستورات زیر عمل نمایید .
+
+<div dir="ltr">
+
+```csharp
+WebApplicationBuilder builder = WebApplication.CreateBuilder();
+
+builder.RegisterCommandQueryUseCases();
+```
+
+</div>
+
 ---
  
 ### 🏆 قابلیت های پیشرفته ابزار `Mediator`
@@ -537,7 +551,7 @@ public class QueryHandler : IQueryHandler<Query, List<Dto>>
 ```
 </div>
 
-3 . در نهایت برای فعال سازی این قابلیت در سرویس خود ، می بایست در لایه `Presentation` سرویس خود از دستور زیر استفاده نمایید .
+3 . در نهایت برای فعال سازی این قابلیت در سرویس خود ، می بایست در لایه `Presentation` و در فایل `Program.cs` از دستور زیر استفاده نمایید .
 
 <div dir="ltr">
 
