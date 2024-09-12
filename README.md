@@ -94,7 +94,7 @@ public class ReadAllQueryHandler : IQueryHandler<ReadAllQuery, Dto>
 
 </div>
 
-3 . فعال سازی `Mediator` در سرویس مربوطه
+3 . فعال سازی ابزار `Mediator` در سرویس مربوطه
 
 در نهایت برای فعال سازی این ابزار در سرویس خود ، می بایست در لایه `Presentation` و در فایل `Program.cs` مطابق دستورات زیر عمل نمایید .
 
