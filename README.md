@@ -440,4 +440,63 @@ public class CreateCommandHandler : ICommandHandler<CreateCommand, string>
 
 🔥 **توجه** : **در کد بالا ، حتما می بایست نام متغیر مربوط به کلید قفل گذاری ، `asyncLock_` باشد**
 
+---
+
+### 🏆 ابزار `ExternalDistributedCache` و `InternalDistributedCache` برای مدیریت `Cache`
+
+برای مدیریت پیشرفته تر و خوانا تر `Cache` های نوشته شده در سطح پروژه که بر اساس دیتابیس `Redis` پیاده سازی شده است می توانید ، مطابق دستور العمل های زیر اقدام نمایید .
+
+1 . تعریف کلاس مربوط به منطق دیتای مورد نیاز برای `Cache`
+
+در ابتدا ، شما می بایست کلاس مربوط به منطق `Cache` خود را مطابق دستورات زیر ایجاد نمایید .
+
+<div dir="ltr">
+
+```csharp
+//for distributed cahce of current service
+public class MemoryCache : IInternalDistributedCacheHandler<List<Dto>>
+{
+    public MemoryCache(){}
+
+    [Config(Key = 'Key', Ttl = 60 /*time to live based on minute*/)]
+    public List<Dto> Set()
+    {
+        //query
+        
+        return new();
+    }
+    
+    [Config(Key = 'Key', Ttl = 60 /*time to live based on minute*/)]
+    public Task<List<Dto>> SetAsync(CancellationToken cancellationToken)
+    {
+        //query
+        
+        return Task.FromResult(new());
+    }
+}
+
+//for distributed cahce of all services ( global )
+public class MemoryCache : IExternalDistributedCacheHandler<List<Dto>>
+{
+    public MemoryCache(){}
+
+    [Config(Key = 'Key', Ttl = 60 /*time to live based on minute*/)]
+    public List<Dto> Set()
+    {
+        //query
+        
+        return new();
+    }
+    
+    [Config(Key = 'Key', Ttl = 60 /*time to live based on minute*/)]
+    public Task<List<Dto>> SetAsync(CancellationToken cancellationToken)
+    {
+        //query
+        
+        return Task.FromResult(new());
+    }
+}
+```
+</div>
+
 </div>
