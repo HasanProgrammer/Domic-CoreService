@@ -240,4 +240,66 @@ public class CreateCommandHandler : ICommandHandler<CreateCommand, string>
 ```
 </div>
 
+2 . استفاده از `WithValidationAttribute`
+
+از این `Attribute` برای مواقعی که نیاز به اعتبارسنجی `Command` یا `Query` خود دارید استفاده می شود . برای شروع می بایست کلاس های مربوط به `Validator` را ایجاد نمایید و سپس اقدام به گذاشتن `WithValidation` نمایید
+
+<div dir="ltr">
+
+```csharp
+public class CreateCommandValidator : IValidator<CreateCommand>
+{
+    public CreateCommandValidator(){}
+    
+    public object Validate(CreateCommand input)
+    {
+        //validations
+        
+        return default;
+    }
+
+    public Task<object> ValidateAsync(CreateCommand input, CancellationToken cancellationToken)
+    {
+        //validations
+        
+        return Task.FromResult(default(object));
+    }
+}
+```
+
+</div>
+
+کدهای بالا برای موارد سمت `Query` نیز صدق می کند و برای این بخش هم می توان از دستورات بالا استفاده کرد ، حال می توان از این `Attribute` استفاده کرد
+
+<div dir="ltr">
+
+```csharp
+public class CreateCommand : ICommand<string> //any result type
+{
+    //some properties
+}
+
+public class CreateCommandHandler : ICommandHandler<CreateCommand, string>
+{
+    public CreateCommandHandler(){}
+
+    [WithValidation]
+    public string Handle(CreateCommand command)
+    {
+       //logic
+        
+        return default;
+    }
+
+    [WithValidation]
+    public Task<string> HandleAsync(CreateCommand command, CancellationToken cancellationToken)
+    {
+       //logic
+        
+       return Task.FromResult<string>(default);
+    }
+}
+```
+</div>
+
 </div>
