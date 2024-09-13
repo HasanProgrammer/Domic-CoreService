@@ -794,4 +794,6 @@ builder.RegisterDistributedCaching(); //for [ DistributedLock ] handling
 
 🔥 **توجه** : **در نظر داشته باشید که پردازش `OutBox` رخدادهای تولید شده در سرویس مورد نظر ، به جهت مدیریت `Concurrency` در `Instance` های مختلفی که از سرویس مورد نظر ایجاد می شود ، به ابزار `InternalDistributedCache` نیاز دارد**
 
+🔥 **توجه** : **بازه ی زمانی اجرای مجدد `Job` مورد نیاز برای پردازش `OutBox` رخدادهای ایجاد شده ، `5` ثانیه می باشد**
+
 </div>
