@@ -822,9 +822,9 @@ builder.RegisterDistributedCaching(); //for [ DistributedLock ] handling
 <div dir="ltr">
 
 ```csharp
-public class ConsumerEventBusHandler : IConsumerEventBusHandler<UpdatedEvent> //use target [ Event ] dto
+public class UpdatedConsumerEventBusHandler : IConsumerEventBusHandler<UpdatedEvent>
 {
-    public ConsumerEventBusHandler(){}
+    public UpdatedConsumerEventBusHandler(){}
 
     [TransactionConfig(Type = TransactionType.Command)] //or => Type = TransactionType.Query
     public void Handle(UpdatedEvent @event)
