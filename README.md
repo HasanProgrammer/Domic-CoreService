@@ -611,10 +611,115 @@ builder.RegisterDistributedCaching();
 1 . نحوه ایجاد `Event` در سطح سرویس ها و مدیریت آنها برای ارسال به `Broker`
 
 برای این مهم ابتدا باید به این نکته اشاره کرد که تمامی `Event` ها در لایه `Domain` سرویس ها ایجاد می شوند و از بیرون از این لایه تنها به استفاده و مدیریت این `Event` های ایجاد شده پرداخته می شود .
-این `Event` مربوطه در یکی از سه دسته زیر قرار می گیرد :
 
-    1. CreateDomainEvent
-    2. UpdateDomainEvent
-    3. DeleteDomainEvent
+<div dir="ltr">
+
+```csharp
+//ExchangeType : Exchange.FanOut | Exchange.Direct | Exchange.Headers | Exchange.Topic
+
+/*------------------------------------FanOut------------------------------------*/
+
+//create event
+[MessageBroker(ExchangeType = Exchange.FanOut, Exchange = "exchange")]
+public class Created : CreateDomainEvent<string> //any type of identity key
+{
+    //payload
+}
+
+//update event
+[MessageBroker(ExchangeType = Exchange.FanOut, Exchange = "exchange")]
+public class Updated : UpdateDomainEvent<string> //any type of identity key
+{
+    //payload
+}
+
+//delete event
+[MessageBroker(ExchangeType = Exchange.FanOut, Exchange = "exchange")]
+public class Deleted : DeleteDomainEvent<string> //any type of identity key
+{
+    //payload
+}
+
+/*------------------------------------Direct------------------------------------*/
+
+//create event
+[MessageBroker(ExchangeType = Exchange.Direct, Exchange = "exchange", Route = "route")]
+public class Created : CreateDomainEvent<string> //any type of identity key
+{
+    //payload
+}
+
+//update event
+[MessageBroker(ExchangeType = Exchange.Direct, Exchange = "exchange", Route = "route")]
+public class Updated : UpdateDomainEvent<string> //any type of identity key
+{
+    //payload
+}
+
+//delete event
+[MessageBroker(ExchangeType = Exchange.Direct, Exchange = "exchange", Route = "route")]
+public class Deleted : DeleteDomainEvent<string> //any type of identity key
+{
+    //payload
+}
+
+```
+</div>
+
+🔥 **توجه** : **اگر چنانچه در کدهای بالا، سرویس مذکور علاوه بر تولید این رخداد ها ( `Producer` ) ، مصرف کننده این رخداد نیز باشد ( `Consumer` ) می بایست مطابق دستورات زیر عمل کرد**
+
+<div dir="ltr">
+
+```csharp
+//ExchangeType : Exchange.FanOut | Exchange.Direct | Exchange.Headers | Exchange.Topic
+
+/*------------------------------------FanOut------------------------------------*/
+
+//create event
+[MessageBroker(ExchangeType = Exchange.FanOut, Exchange = "exchange", Queue = "queue")]
+public class Created : CreateDomainEvent<string> //any type of identity key
+{
+    //payload
+}
+
+//update event
+[MessageBroker(ExchangeType = Exchange.FanOut, Exchange = "exchange", Queue = "queue")]
+public class Updated : UpdateDomainEvent<string> //any type of identity key
+{
+    //payload
+}
+
+//delete event
+[MessageBroker(ExchangeType = Exchange.FanOut, Exchange = "exchange", Queue = "queue")]
+public class Deleted : DeleteDomainEvent<string> //any type of identity key
+{
+    //payload
+}
+
+/*------------------------------------Direct------------------------------------*/
+
+//create event
+[MessageBroker(ExchangeType = Exchange.Direct, Exchange = "exchange", Route = "route", Queue = "queue")]
+public class Created : CreateDomainEvent<string> //any type of identity key
+{
+    //payload
+}
+
+//update event
+[MessageBroker(ExchangeType = Exchange.Direct, Exchange = "exchange", Route = "route", Queue = "queue")]
+public class Updated : UpdateDomainEvent<string> //any type of identity key
+{
+    //payload
+}
+
+//delete event
+[MessageBroker(ExchangeType = Exchange.Direct, Exchange = "exchange", Route = "route", Queue = "queue")]
+public class Deleted : DeleteDomainEvent<string> //any type of identity key
+{
+    //payload
+}
+
+```
+</div>
 
 </div>
