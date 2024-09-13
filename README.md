@@ -610,6 +610,11 @@ builder.RegisterDistributedCaching();
 
 1 . نحوه ایجاد `Event` در سطح سرویس ها و مدیریت آنها برای ارسال به `Broker`
 
+برای این مهم ابتدا باید به این نکته اشاره کرد که تمامی `Event` ها در لایه `Domain` سرویس ها ایجاد می شوند و از بیرون از این لایه تنها به استفاده و مدیریت این `Event` های ایجاد شده پرداخته می شود .
+این `Event` مربوطه در یکی از سه دسته زیر قرار می گیرد :
 
+    1. CreateDomainEvent
+    2. UpdateDomainEvent
+    3. DeleteDomainEvent
 
 </div>
