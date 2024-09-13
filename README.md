@@ -617,7 +617,7 @@ builder.RegisterDistributedCaching();
 ```csharp
 //ExchangeType : Exchange.FanOut | Exchange.Direct | Exchange.Headers | Exchange.Topic
 
-/*------------------------------------FanOut------------------------------------*/
+//FanOut-Exchange
 
 //create event
 [MessageBroker(ExchangeType = Exchange.FanOut, Exchange = "exchange")]
@@ -640,7 +640,15 @@ public class Deleted : DeleteDomainEvent<string> //any type of identity key
     //payload
 }
 
-/*------------------------------------Direct------------------------------------*/
+```
+</div>
+
+<div dir="ltr">
+
+```csharp
+//ExchangeType : Exchange.FanOut | Exchange.Direct | Exchange.Headers | Exchange.Topic
+
+//Direct-Exchange
 
 //create event
 [MessageBroker(ExchangeType = Exchange.Direct, Exchange = "exchange", Route = "route")]
@@ -671,9 +679,7 @@ public class Deleted : DeleteDomainEvent<string> //any type of identity key
 <div dir="ltr">
 
 ```csharp
-//ExchangeType : Exchange.FanOut | Exchange.Direct | Exchange.Headers | Exchange.Topic
-
-/*------------------------------------FanOut------------------------------------*/
+//FanOut-Exchange
 
 //create event
 [MessageBroker(ExchangeType = Exchange.FanOut, Exchange = "exchange", Queue = "queue")]
@@ -695,8 +701,13 @@ public class Deleted : DeleteDomainEvent<string> //any type of identity key
 {
     //payload
 }
+```
+</div>
 
-/*------------------------------------Direct------------------------------------*/
+<div dir="ltr">
+
+```csharp
+//Direct-Exchange
 
 //create event
 [MessageBroker(ExchangeType = Exchange.Direct, Exchange = "exchange", Route = "route", Queue = "queue")]
@@ -718,7 +729,6 @@ public class Deleted : DeleteDomainEvent<string> //any type of identity key
 {
     //payload
 }
-
 ```
 </div>
 
