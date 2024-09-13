@@ -254,6 +254,7 @@ public class CreateCommandHandler : ICommandHandler<CreateCommand, string>
     }
 }
 ```
+
 </div>
 
 🔥 **توجه** : **برای کارکرد صحیح `WithTransaction` در سرویس خود ، می بایست این `Attribute` را فعال سازی نمایید**
@@ -330,6 +331,7 @@ public class CreateCommandHandler : ICommandHandler<CreateCommand, string>
     }
 }
 ```
+
 </div>
 
 🔥 **توجه** : **در کد بالا و در بخش مربوط به کلاس `Validator` مربوطه ، شما می توانید نتیجه متد `Validate` و یا `ValidateAsync` را که یک `object` می باشد در داخل `CommandHandler` مربوطه مورد استفاده قرار دهید**
@@ -404,6 +406,7 @@ public class CreateCommandHandler : ICommandHandler<CreateCommand, string>
     }
 }
 ```
+
 </div>
 
 4 . استفاده از `WithPessimisticConcurrencyAttribute`
@@ -437,6 +440,7 @@ public class CreateCommandHandler : ICommandHandler<CreateCommand, string>
     }
 }
 ```
+
 </div>
 
 🔥 **توجه** : **در کد بالا ، حتما می بایست نام متغیر مربوط به کلید قفل گذاری ، `lock_` باشد**
@@ -466,6 +470,7 @@ public class CreateCommandHandler : ICommandHandler<CreateCommand, string>
     }
 }
 ```
+
 </div>
 
 🔥 **توجه** : **در کد بالا ، حتما می بایست نام متغیر مربوط به کلید قفل گذاری ، `asyncLock_` باشد**
@@ -531,6 +536,7 @@ public class MemoryCache : IExternalDistributedCacheHandler<List<Dto>>
     }
 }
 ```
+
 </div>
 
 🔥 **توجه** : **اگر در `ConfigAttribute` کدهای فوق ، مقداری برای `Ttl` تنظیم نکنید و یا این `Property` را 0 مقداردهی نمایید ، `Cache` مربوطه به شکل دائمی و بدون انقضا در `Redis` باقی خواهد ماند**
@@ -567,6 +573,7 @@ public class QueryHandler : IQueryHandler<Query, List<Dto>>
     }
 }
 ```
+
 </div>
 
 🔥 **توجه** : **برای فراخوانی `Cache` مورد نیاز ، همانطور که در کدهای فوق مشخص می باشد ، نیاز به ارسال کلید مربوطه به متد `<>Get` و `<>GetAsync` نمی باشد ، بلکه این متد از نوع ارسالی در قسمت `Generic` و تطابق آن با نوع در نظر گرفته شده در قسمت `Setter` ، داده ها را واکشی می کند**
@@ -583,7 +590,11 @@ WebApplicationBuilder builder = WebApplication.CreateBuilder();
 builder.RegisterDistributedCaching();
 ```
 
+</div>
+
 برای تنظیمات مربوط به رشته اتصال و اطلاعات مربوط به `Cache` می بایست در سرویس مربوطه و در بخش `Properties` و در فایل مربوط به `launchSettings.json` و در قسمت `environmentVariables` کلید های زیر را اضافه نمایید .
+
+<div dir="ltr">
 
 ```json
 {
@@ -702,6 +713,7 @@ public class Deleted : DeleteDomainEvent<string> //any type of identity key
     //payload
 }
 ```
+
 </div>
 
 <div dir="ltr">
@@ -730,6 +742,7 @@ public class Deleted : DeleteDomainEvent<string> //any type of identity key
     //payload
 }
 ```
+
 </div>
 
 2 . استفاده از `Event` های تعریف شده در لایه `Domain`
@@ -770,6 +783,7 @@ public class DomainEntity : Entity<string> //any type of identity key
     }
 }
 ```
+
 </div>
 
 🔥 **توجه** : **تمامی `Entity` های بخش `Command` می بایست از کلاس `<>Entity` ارث بری کنند**
@@ -790,10 +804,44 @@ WebApplicationBuilder builder = WebApplication.CreateBuilder();
 builder.RegisterEventsPublisher();    //for [ MessageBroker ( RabbitMQ ) ]
 builder.RegisterDistributedCaching(); //for [ DistributedLock ] handling
 ```
+
 </div>
 
 🔥 **توجه** : **در نظر داشته باشید که پردازش `OutBox` رخدادهای تولید شده در سرویس مورد نظر ، به جهت مدیریت `Concurrency` در `Instance` های مختلفی که از سرویس مورد نظر ایجاد می شود ، به ابزار `InternalDistributedCache` نیاز دارد**
 
 🔥 **توجه** : **بازه ی زمانی اجرای مجدد `Job` مورد نیاز برای پردازش `OutBox` رخدادهای ایجاد شده ، `5` ثانیه می باشد**
+
+4 . نحوه پردازش و مصرف کردن `Event` های تولید شده
+
+این بخش مهمترین قسمت پیاده سازی شده در پروژه `Domic` می باشد ، زیرا پردازش رخدادهای تولیدی به واسطه سرویس های مختلف ، بسیار موضوع مهم و اصطلاحا `Critical` می باشد که عدم رعایت این موارد و دقت به جزئیات ، باعث بروز `Inconsistancy` های مختلف مابین سرویس ها می گردد .
+
+خوشبختانه در پروژه `Domic` به تمامی این موارد و نکات توجه شده است و کاربر نهایی ، صرفا می بایست مطابق دستورات مطرح شده عمل کرده و به راحتی هر چه تمام تر به پردازش این `Event` ها در بستر `MessageBroker` و یا `EventStreamBroker` بپردازد .
+
+در ابتدا ، برای پردازش `Event` های تولیدی توسط سرویس های `Producer` ، می بایست کلاس های مربوطه ( `Consumer` ) در لایه `UseCase` ایجاد شوند . برای این مهم مطابق دستورات زیر عمل نمایید .
+
+<div dir="ltr">
+
+```csharp
+public class ConsumerEventBusHandler : IConsumerEventBusHandler<UpdatedEvent> //use target [ Event ] dto
+{
+    public ConsumerEventBusHandler(){}
+
+    [TransactionConfig(Type = TransactionType.Command)] //or => Type = TransactionType.Query
+    public void Handle(UpdatedEvent @event)
+    {
+        //logic
+    }
+    
+    [TransactionConfig(Type = TransactionType.Command)] //or => Type = TransactionType.Query
+    public Task HandleAsync(UpdatedEvent @event, CancellationToken cancellationToken)
+    {
+        //logic
+        
+        return Task.CompleteTask;
+    }
+}
+```
+
+</div>
 
 </div>
