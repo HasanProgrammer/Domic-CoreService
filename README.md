@@ -732,4 +732,44 @@ public class Deleted : DeleteDomainEvent<string> //any type of identity key
 ```
 </div>
 
+2 . استفاده از `Event` های تعریف شده در لایه `Domain`
+
+بعد از انکه `Event` های مورد نیاز در لایه `Domain` ایجاد شدند ، می بایست از این رخداد ها در سطح کلاس های `Entity` استفاده شوند . موجودیت های تعریف شده در لایه `Domain` بر پایه الگوی `Rich Domian Model` توسعه پیدا کرده اند و می بایست به ازای هر `Behavior` ای که صدا زده می شود ، در صورت نیاز یه `Event` ایجاد گردد که برای این مهم می بایست مطابق دستورا زیر عمل نمود .
+
+<div dir="ltr">
+
+```csharp
+//update event
+[MessageBroker(ExchangeType = Exchange.FanOut, Exchange = "exchange")]
+public class UpdatedEvent : UpdateDomainEvent<string> //any type of identity key
+{
+    public string Email    { get; init; }
+    public string Username { get; init; }
+}
+
+public class DomainEntity : Entity<string> //any type of identity key
+{
+    public string Id       { get; private set; }
+    public string Email    { get; private set; }
+    public string Username { get; private set; }
+    
+    //Behaviors
+
+    public void Change(string username, string email)
+    {
+        Email    = email;
+        Username = username;
+
+        AddEvent(
+            new UpdatedEvent {
+                Id       = Id       ,
+                Username = username ,
+                Email    = email    ,
+            }
+        );
+    }
+}
+```
+</div>
+
 </div>
