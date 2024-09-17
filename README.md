@@ -268,6 +268,9 @@ public class CreateCommandHandler : ICommandHandler<CreateCommand, string>
 ```csharp
 WebApplicationBuilder builder = WebApplication.CreateBuilder();
 
+//if using the [ EF Core ]
+builder.RegisterEntityFrameworkCoreCommand< TCommandContext , TIdentity >(); //TCommandContext -> SqlContext or ... | TIdentity -> string or ...
+
 builder.RegisterCommandRepositories();
 ```
 
@@ -905,6 +908,23 @@ public class QueryUnitOfWork : IQueryUnitOfWork
         return ValueTask.CompletedTask;
     }
 }
+```
+
+</div>
+
+🔥 **توجه** : **برای فعال سازی منطق مربوط به بخش `Query` ، حتما می بایست این بخش فعال گردد**
+
+برای فعال کردن منطق های بخش مربوط به `Query` باید مطابق دستورات زیر عمل نمایید .
+
+<div dir="ltr">
+
+```csharp
+WebApplicationBuilder builder = WebApplication.CreateBuilder();
+
+//if using the [ EF Core ]
+builder.RegisterEntityFrameworkCoreQuery< TQueryContext >(); //TQueryContext -> SqlContext or ...
+
+builder.RegisterQueryRepositories();
 ```
 
 </div>
