@@ -639,7 +639,7 @@ builder.RegisterDistributedCaching();
 
 حال بیایید به بررسی دقیق ابزار `MessageBroker` در پروژه `Domic` بیندازیم .
 
-# بخش مربوطه به مدیریت `Event`#
+## بخش مربوطه به مدیریت `Event` 
 
 1 . نحوه ایجاد `Event` در سطح سرویس ها و مدیریت آنها برای ارسال به `Broker`
 
