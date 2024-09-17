@@ -1074,7 +1074,7 @@ builder.RegisterMessageBroker();
     "I-RabbitMQ-Host": "",
     "I-RabbitMQ-Port": "",
     "I-RabbitMQ-Username": "",
-    "I-RabbitMQ-Password": "",
+    "I-RabbitMQ-Password": ""
   }
 }
 ```
