@@ -639,6 +639,8 @@ builder.RegisterDistributedCaching();
 
 حال بیایید به بررسی دقیق ابزار `MessageBroker` در پروژه `Domic` بیندازیم .
 
+# بخش مربوطه به مدیریت `Event`
+
 1 . نحوه ایجاد `Event` در سطح سرویس ها و مدیریت آنها برای ارسال به `Broker`
 
 برای این مهم ابتدا باید به این نکته اشاره کرد که تمامی `Event` ها در لایه `Domain` سرویس ها ایجاد می شوند و از بیرون از این لایه تنها به استفاده و مدیریت این `Event` های ایجاد شده پرداخته می شود .
@@ -994,13 +996,13 @@ public class ConsumerMessageBusHandler : IConsumerMessageBusHandler<MessageDto>
 {
     public ConsumerMessageBusHandler(){}
 
-    [TransactionConfig(Type = TransactionType.Query)]
+    [TransactionConfig(Type = TransactionType.Query)] //or -> Type = TransactionType.Command
     public void Handle(MessageDto message)
     {
         //logic
     }
 
-    [TransactionConfig(Type = TransactionType.Query)]
+    [TransactionConfig(Type = TransactionType.Query)] //or -> Type = TransactionType.Command
     public Task HandleAsync(MessageDto message, CancellationToken cancellationToken)
     {
         //logic
