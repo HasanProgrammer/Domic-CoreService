@@ -1043,10 +1043,10 @@ builder.RegisterMessagesSubscriber(); //for message consuming
 {
   "environmentVariables": {
     //for external message broker
-    "E-RabbitMQ-Host": "localhost",
-    "E-RabbitMQ-Port": "5672",
-    "E-RabbitMQ-Username": "domic",
-    "E-RabbitMQ-Password": "Domic123!@#",
+    "E-RabbitMQ-Host": "",
+    "E-RabbitMQ-Port": "",
+    "E-RabbitMQ-Username": "",
+    "E-RabbitMQ-Password": "",
 
     //for internal message broker ( using in [ AsyncCommands ] )
     "I-RabbitMQ-Host": "",
