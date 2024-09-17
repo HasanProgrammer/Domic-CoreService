@@ -1015,9 +1015,49 @@ public class ConsumerMessageBusHandler : IConsumerMessageBusHandler<MessageDto>
 }
 ```
 
+</div>
+
 🔥 **توجه** : **دقت نمایید که در بخش مربوط به `Message` از هیچ الگوی `OutBox` ای برای ارسال پیام ها استفاده نمی شود ( در قسمت `Producer` ) و این ساختار در مواقعی که نیاز است به طور مستقیم یک پیامی به `MessageBroker` ارسال شود ، مورد استفاده قرار می گیرد**
 
+### تنظیمات و فعال سازی نهایی زیرساخت `MessageBroker`
+
+برای فعال سازی `EventConsumer` ها و یا `MessageConsumer` ها در سرویس مربوطه ، شما می بایست در لایه `Presentation` سرویس مربوطه و در فایل `Program.cs` مطابق دستورات زیر عمل نمایید .
+
+<div dir="ltr">
+
+```csharp
+WebApplicationBuilder builder = WebApplication.CreateBuilder();
+
+builder.RegisterMessageBroker();      //core tool
+builder.RegisterEventsSubscriber();   //for event consuming
+builder.RegisterMessagesSubscriber(); //for message consuming
+```
 
 </div>
+
+در نهایت برای تنظیمات مربوط به رشته اتصال `MessageBroker` باید در لایه `Presentation` سرویس مربوطه و در پوشه `Properties` و در فایل `launchSettings.json` مانند دستورات زیر عمل نمایید .
+
+<div dir="ltr">
+
+```json
+{
+  "environmentVariables": {
+    //for external message broker
+    "E-RabbitMQ-Host": "localhost",
+    "E-RabbitMQ-Port": "5672",
+    "E-RabbitMQ-Username": "domic",
+    "E-RabbitMQ-Password": "Domic123!@#",
+
+    //for internal message broker ( using in [ AsyncCommands ] )
+    "I-RabbitMQ-Host": "",
+    "I-RabbitMQ-Port": "",
+    "I-RabbitMQ-Username": "",
+    "I-RabbitMQ-Password": "",
+  }
+}
+```
+
+</div>
+
 
 </div>
