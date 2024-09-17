@@ -1179,7 +1179,7 @@ public class ConsumerMessageBusHandler : IConsumerMessageBusHandler<MessageDto>
         return Task.CompleteTask;
     }
 
-    //for handle retry
+    //for handle max retry
     
     public void AfterMaxRetryHandle(MessageDto message)
     {
@@ -1215,7 +1215,7 @@ public class UpdatedConsumerEventBusHandler : IConsumerEventBusHandler<UpdatedEv
         return Task.CompleteTask;
     }
     
-    //for handle retry
+    //for handle max retry
     
     public void AfterMaxRetryHandle(UpdatedEvent @event)
     {
