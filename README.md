@@ -1089,5 +1089,146 @@ builder.RegisterMessageBroker();
 
 </div>
 
+## قابلیت های پیشرفته ابزار `MessageBroker`
+
+1 . استفاده از `WithMaxRetryAttribute`
+
+این `Attribute` به شما این امکان را می دهد که میزان تلاش `Consumer` مربوطه برای پردازش `Message` و یا `Event` مربوطه را مدیریت نمایید .
+
+برای استفاده از این `Attribute` می توانید مطابق دستورات زیر عمل نمایید .
+
+<div dir="ltr">
+
+```csharp
+//for [ Message ] consuming
+[Consumer(Queue = "Queue")]
+public class ConsumerMessageBusHandler : IConsumerMessageBusHandler<MessageDto>
+{
+    public ConsumerMessageBusHandler(){}
+
+    [WithMaxRetry(Count = 100, HasAfterMaxRetryHandle = true)] //Count = 100 -> this message will be reprocessed a maximum of 100 times in case of an error
+    [TransactionConfig(Type = TransactionType.Query)] //or -> Type = TransactionType.Command
+    public void Handle(MessageDto message)
+    {
+        //logic
+    }
+
+    [WithMaxRetry(Count = 100, HasAfterMaxRetryHandle = true)] //Count = 100 -> this message will be reprocessed a maximum of 100 times in case of an error
+    [TransactionConfig(Type = TransactionType.Query)] //or -> Type = TransactionType.Command
+    public Task HandleAsync(MessageDto message, CancellationToken cancellationToken)
+    {
+        //logic
+        
+        return Task.CompleteTask;
+    }
+}
+
+//for [ Event ] consuming
+public class UpdatedConsumerEventBusHandler : IConsumerEventBusHandler<UpdatedEvent>
+{
+    public UpdatedConsumerEventBusHandler(){}
+
+    [WithMaxRetry(Count = 100, HasAfterMaxRetryHandle = true)] //Count = 100 -> this message will be reprocessed a maximum of 100 times in case of an error
+    [TransactionConfig(Type = TransactionType.Command)] //or => Type = TransactionType.Query
+    public void Handle(UpdatedEvent @event)
+    {
+        //logic
+    }
+    
+    [WithMaxRetry(Count = 100, HasAfterMaxRetryHandle = true)] //Count = 100 -> this message will be reprocessed a maximum of 100 times in case of an error
+    [TransactionConfig(Type = TransactionType.Command)] //or => Type = TransactionType.Query
+    public Task HandleAsync(UpdatedEvent @event, CancellationToken cancellationToken)
+    {
+        //logic
+        
+        return Task.CompleteTask;
+    }
+}
+```
+
+</div>
+
+🔥 **توجه** : **در استفاده از `WithMaxRetryAttribute` ، یک ویژگی تحت عنوان `HasAfterMaxRetryHandle` به چشم می خوذد که مشخصا بیان کننده ان است که آیا نیاز جداگانه مدیریت کردن پیام مربوطه در صورتی که بیش از حد مجاز `Retry` شده است ف وجود دارد یا خیر . اگر این ویژگی برابر با `false` باشد که مقدار پیشفرض این متغییر می باشد ، پیام مربوطه بعد از حداکثر تلاش برای پردازش ، از `Queue` مربوطه پاک خواهد شد**
+
+اگر پیام مورد نظر در `Queue` مربوطه ، به حد مجاز پردازش مجدد برسد ( در صورت بروز خطاهای احتمالی ) ، برای مدیریت جداگانه پردازش پیام مربوطه به شکل جداگانه ، می بایست مطابق دستورا زیر عمل نمایید .
+
+<div dir="ltr">
+
+```csharp
+//for [ Message ] consuming
+[Consumer(Queue = "Queue")]
+public class ConsumerMessageBusHandler : IConsumerMessageBusHandler<MessageDto>
+{
+    public ConsumerMessageBusHandler(){}
+
+    [WithMaxRetry(Count = 100, HasAfterMaxRetryHandle = true)] //Count = 100 -> this message will be reprocessed a maximum of 100 times in case of an error
+    [TransactionConfig(Type = TransactionType.Query)] //or -> Type = TransactionType.Command
+    public void Handle(MessageDto message)
+    {
+        //logic
+    }
+
+    [WithMaxRetry(Count = 100, HasAfterMaxRetryHandle = true)] //Count = 100 -> this message will be reprocessed a maximum of 100 times in case of an error
+    [TransactionConfig(Type = TransactionType.Query)] //or -> Type = TransactionType.Command
+    public Task HandleAsync(MessageDto message, CancellationToken cancellationToken)
+    {
+        //logic
+        
+        return Task.CompleteTask;
+    }
+    
+    /*---------------------------------------------------------------*/
+    
+    public void AfterMaxRetryHandle(MessageDto message)
+    {
+        //logic
+    }
+    
+    public Task AfterMaxRetryHandleAsync(MessageDto message, CancellationToken cancellationToken)
+    {
+        //logic
+        
+        return Task.CompleteTask;
+    }
+}
+
+//for [ Event ] consuming
+public class UpdatedConsumerEventBusHandler : IConsumerEventBusHandler<UpdatedEvent>
+{
+    public UpdatedConsumerEventBusHandler(){}
+
+    [WithMaxRetry(Count = 100, HasAfterMaxRetryHandle = true)] //Count = 100 -> this message will be reprocessed a maximum of 100 times in case of an error
+    [TransactionConfig(Type = TransactionType.Command)] //or => Type = TransactionType.Query
+    public void Handle(UpdatedEvent @event)
+    {
+        //logic
+    }
+    
+    [WithMaxRetry(Count = 100, HasAfterMaxRetryHandle = true)] //Count = 100 -> this message will be reprocessed a maximum of 100 times in case of an error
+    [TransactionConfig(Type = TransactionType.Command)] //or => Type = TransactionType.Query
+    public Task HandleAsync(UpdatedEvent @event, CancellationToken cancellationToken)
+    {
+        //logic
+        
+        return Task.CompleteTask;
+    }
+    
+    /*---------------------------------------------------------------*/
+    
+    public void AfterMaxRetryHandle(UpdatedEvent @event)
+    {
+        //logic
+    }
+    
+    public Task AfterMaxRetryHandleAsync(UpdatedEvent @event, CancellationToken cancellationToken)
+    {
+        //logic
+        
+        return Task.CompleteTask;
+    }
+}
+```
+
+</div>
 
 </div>
