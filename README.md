@@ -985,6 +985,18 @@ builder.RegisterQueryRepositories();
 
 🔥 **توجه** : **توجه کنید که اگر از تابع `HandleAsync` برای مدیریت پیام های `MessageBroker` استفاده می نمایید ، برای مدیریت بار وارد شده بر `Consumer` و به طور دقیق تر ، برای جلوگیری از `Crash` نکردن سرویس مربوطه در `High Loading` ، حتما از قابلیت `Throttle` پروژه `Domic` که جلوتر اشاره خواهد شد ، استفاده نمایید**
 
+در نهایت برای استفاده از `EventConsumer` ها در سرویس مربوطه باید در لایه `Presentation` و در فایل `Program.cs` مطابق دستورات زیر عمل نمایید .
+
+<div dir="ltr">
+
+```csharp
+WebApplicationBuilder builder = WebApplication.CreateBuilder();
+
+builder.RegisterEventsSubscriber();
+```
+
+</div>
+
 ### بخش مربوط به مدیریت `Message` 
 
 تا به اینجای کار ، ما به بررسی نحوه مدیریت `Event` در بستر `MessageBroker` پرداختیم ، حال برای پردازش `Message` نیز تمام مراحل فوق صادق می باشند و تنها در رابط مدیریت کننده `Message` تفاوت وجود دارد .
@@ -1019,18 +1031,28 @@ public class ConsumerMessageBusHandler : IConsumerMessageBusHandler<MessageDto>
 
 🔥 **توجه** : **دقت نمایید که در بخش مربوط به `Message` از هیچ الگوی `OutBox` ای برای ارسال پیام ها استفاده نمی شود ( در قسمت `Producer` ) و این ساختار در مواقعی که نیاز است به طور مستقیم یک پیامی به `MessageBroker` ارسال شود ، مورد استفاده قرار می گیرد**
 
-### تنظیمات و فعال سازی نهایی زیرساخت `MessageBroker`
-
-برای فعال سازی `EventConsumer` ها و یا `MessageConsumer` ها در سرویس مربوطه ، شما می بایست در لایه `Presentation` سرویس مربوطه و در فایل `Program.cs` مطابق دستورات زیر عمل نمایید .
+در نهایت برای استفاده از `MessageConsumer` ها در سرویس مربوطه باید در لایه `Presentation` و در فایل `Program.cs` مطابق دستورات زیر عمل نمایید .
 
 <div dir="ltr">
 
 ```csharp
 WebApplicationBuilder builder = WebApplication.CreateBuilder();
 
-builder.RegisterMessageBroker();      //core tool
-builder.RegisterEventsSubscriber();   //for event consuming
 builder.RegisterMessagesSubscriber(); //for message consuming
+```
+
+</div>
+
+### تنظیمات و فعال سازی نهایی زیرساخت `MessageBroker`
+
+برای فعال سازی `MessageBroker` در سرویس مربوطه ، شما می بایست در لایه `Presentation` سرویس مربوطه و در فایل `Program.cs` مطابق دستورات زیر عمل نمایید .
+
+<div dir="ltr">
+
+```csharp
+WebApplicationBuilder builder = WebApplication.CreateBuilder();
+
+builder.RegisterMessageBroker();
 ```
 
 </div>
