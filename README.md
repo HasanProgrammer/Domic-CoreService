@@ -276,6 +276,21 @@ builder.RegisterCommandRepositories();
 
 </div>
 
+برای تعیین رشته اتصال پایگاه داده `SQL Server` می بایست به لایه `Presentation` پروژه مربوطه رفته و سپس در پوشه `Properties` به فایل `launchSettings.json` مراجعه کرد و تنظیمات زیر را اعمال نمایید .
+
+<div dir="ltr">
+
+```json
+{
+  "environmentVariables": {
+    "C-SqlServerConnectionString": "", //for [ Command ] section -> CommandTransaction - CommandRepositories & ...
+    "Q-SqlServerConnectionString": ""  //for [ Query ] section   -> QueryTransaction   - QueryRepositories   & ...
+  }
+}
+```
+
+</div>
+
 2 . استفاده از `WithValidationAttribute`
 
 از این `Attribute` برای مواقعی که نیاز به اعتبارسنجی `Command` یا `Query` خود دارید استفاده می شود . برای شروع می بایست کلاس مربوط به `Validator` را ایجاد نمایید و سپس اقدام به گذاشتن `WithValidation` نمایید .
@@ -925,6 +940,21 @@ WebApplicationBuilder builder = WebApplication.CreateBuilder();
 builder.RegisterEntityFrameworkCoreQuery< TQueryContext >(); //TQueryContext -> SqlContext or ...
 
 builder.RegisterQueryRepositories();
+```
+
+</div>
+
+برای تعیین رشته اتصال پایگاه داده `SQL Server` می بایست به لایه `Presentation` پروژه مربوطه رفته و سپس در پوشه `Properties` به فایل `launchSettings.json` مراجعه کرد و تنظیمات زیر را اعمال نمایید .
+
+<div dir="ltr">
+
+```json
+{
+  "environmentVariables": {
+    "C-SqlServerConnectionString": "", //for [ Command ] section -> CommandTransaction - CommandRepositories & ...
+    "Q-SqlServerConnectionString": ""  //for [ Query ] section   -> QueryTransaction   - QueryRepositories   & ...
+  }
+}
 ```
 
 </div>
