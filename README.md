@@ -845,6 +845,14 @@ builder.RegisterDistributedCaching(); //for [ DistributedLock ] handling
 <div dir="ltr">
 
 ```csharp
+//define in [ Domain ] layer of consumer service
+[MessageBroker(Queue = "queue")]
+public class UpdatedEvent : UpdateDomainEvent<string> //any type of identity key
+{
+    //payload
+}
+
+//define in [ UseCase ] layer of consumer service
 public class UpdatedConsumerEventBusHandler : IConsumerEventBusHandler<UpdatedEvent>
 {
     public UpdatedConsumerEventBusHandler(){}
