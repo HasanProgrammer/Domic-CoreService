@@ -1006,7 +1006,7 @@ builder.RegisterEventsSubscriber();
 <div dir="ltr">
 
 ```csharp
-[Consumer(Queue = 'Queue')]
+[Consumer(Queue = "Queue")]
 public class ConsumerMessageBusHandler : IConsumerMessageBusHandler<MessageDto>
 {
     public ConsumerMessageBusHandler(){}
