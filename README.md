@@ -187,6 +187,8 @@ public class CommandUnitOfWork : ICommandUnitOfWork
 
 🔥 **توجه** : **در نظر داشته باشید که این موارد به طور پیشفرض در سرویس `Template` پیاده سازی شده اند**
 
+🔥 **توجه** : **دقت نمایید که برای پیاده سازی منطق تراکنش مربوطه ، از ابزار `EF Core` استفاده شده است که شما می توانید از هر ابزار و یا دیتابیس دیگری استفاده نمایید**
+
 در ادامه برای استفاده از `Attribute` مربوطه می توانید مطابق کد زیر عمل نمایید .
 
 <div dir="ltr">
@@ -842,12 +844,92 @@ public class UpdatedConsumerEventBusHandler : IConsumerEventBusHandler<UpdatedEv
 }
 ```
 
+</div>
+
 🔥 **توجه** : **پروژه `Domic` بر پایه الگوی طراحی `CQRS` که یک الگوی `System Design` ایی می باشد ، توسعه پیدا کرده است . لذا در بخش `Consume` کردن `Event` های مربوطه ، حتما باید نوع تراکنش مورد نظر از نظر `Command` و یا `Query` بودن مشخص شود**
 
 🔥 **توجه** : **برای مدیریت تراکنش بخش مربوط به `Query` در مدیریت `Event` و نیز `Message` ، پیش تر در قسمت `Command` های مربوط به الگوی `Mediator` گفته شد که این بخش نیز مشابه آن می باشد منتها با یک تفاوت و آن این است که باید به جای پیاده سازی `ICoreCommandUnitOfWork` ، واسط `ICoreQueryUnitOfWork` پیاده سازی شود**
 
 🔥 **توجه** : **در نظر داشته باشید که در بخش مربوط به مدیریت `Event` ها و یا `Message` ها ، تمام فرآیند به صورت پیشفرض و ثابت ، در یک `Transaction Boundary` صورت می گیرد و صرفا شما به عنوان مدیریت کننده رخداد مربوطه ، باید نوع تراکنش را ( `Command` و یا `Query` ) مشخص نمایید، به این معنی که این رخداد و یا `Message` بر کدام بخش پروژه ( بهتر است بگوییم دیتابیس ) قرار است اثر بگذارد ، دیتابیس `Command` و یا `Query`**
 
+برای مدیریت تراکنش بخش مربوط به `Query` می بایست مطابق دستورات زیر عمل نمایید .
+
+<div dir="ltr">
+
+```csharp
+public class QueryUnitOfWork : IQueryUnitOfWork
+{
+    private readonly SQLContext   _context;
+    private IDbContextTransaction _transaction;
+    
+    public QueryUnitOfWork(SQLContext context) => _context = context; //Resource
+
+    public void Transaction(IsolationLevel isolationLevel) 
+        => _transaction = _context.Database.BeginTransaction(isolationLevel); //Resource
+
+    public async Task TransactionAsync(IsolationLevel isolationLevel = IsolationLevel.ReadCommitted,
+        CancellationToken cancellationToken = new CancellationToken())
+    {
+        _transaction = await _context.Database.BeginTransactionAsync(isolationLevel, cancellationToken); //Resource
+    }
+
+    public void Commit()
+    {
+        _context.SaveChanges();
+        _transaction.Commit();
+    }
+
+    public async Task CommitAsync(CancellationToken cancellationToken)
+    {
+        await _context.SaveChangesAsync(cancellationToken);
+        await _transaction.CommitAsync(cancellationToken);
+    }
+
+    public void Rollback() => _transaction?.Rollback();
+
+    public Task RollbackAsync(CancellationToken cancellationToken)
+    {
+        if (_transaction is not null)
+            return _transaction.RollbackAsync(cancellationToken);
+
+        return Task.CompletedTask;
+    }
+
+    public void Dispose() => _transaction?.Dispose();
+
+    public ValueTask DisposeAsync()
+    {
+        if (_transaction is not null)
+            return _transaction.DisposeAsync();
+
+        return ValueTask.CompletedTask;
+    }
+}
+```
+
 </div>
+
+🔥 **توجه** : **دقت نمایید که برای پیاده سازی منطق تراکنش مربوطه ، از ابزار `EF Core` استفاده شده است که شما می توانید از هر ابزار و یا دیتابیس دیگری استفاده نمایید**
+
+🔥 **توجه** : **در نظر داشته باشید که توابع `Handle` و `HandleAsync` در مدیریت `Event` و یا `Message` ، هر یک دارای معنای مشخصی است و برای استفاده از هر کدام از این توابع باید در بخش تنظیمات سرویس مربوطه ، `Config` خاصی را اعمال نمایید**
+
+برای استفاده از توابع `Handle` و `HandleAsync` بسته به نیاز در مدیریت `Event` و یا `Message` های بخش `MessageBroker` ، می بایست ابتدا به لایه `Presentation` پروژه مربوطه رفته و سپس در `Folder` مربوط به `Configs` ، فایل مربوط به `Config.json` را باز کرده و مطابق دستورات زیر عمل نمایید .
+
+<div dir="ltr">
+
+```json
+{
+  "IsExternalBrokerConsumingAsync": false, //false => using Handle() | true => using HandleAsync()
+  "IsInternalBrokerConsumingAsync": false  //false => using Handle() | true => using HandleAsync()
+}
+```
+
+</div>
+
+🔥 **توجه** : **استفاده از تابع `Handle` برای پردازش تک به تک پیام های داخل `MessageBroker` مورد استفاده قرار می گیرد**
+
+🔥 **توجه** : **استفاده از تابع `HandleAsync` به شما این امکان را می دهد که پیام های داخل `MessageBroker` را به شکل `Concurrent` پردازش نمایید . در واقع در این حالت به میزانی که در `MessageBroker` پیام داشته باشید در پروژه شما `Task` ایجاد می شود و این `Task` ها به شکل `Concurrent` به پردازش پیام های شما می پردازند**
+
+🔥 **توجه** : **توجه کنید که اگر از تابع `HandleAsync` برای مدیریت پیام های `MessageBroker` استفاده می نمایید ، برای مدیریت بار وارد شده بر `Consumer` و به طور دقیق تر ، برای جلوگیری از `Crash` نکردن سرویس مربوطه در `High Loading` ، حتما از قابلیت `Throttle` پروژه `Domic` که جلوتر اشاره خواهد شد ، استفاده نمایید**
 
 </div>
