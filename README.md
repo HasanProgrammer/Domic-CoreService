@@ -1089,6 +1089,8 @@ builder.RegisterMessageBroker();
 
 </div>
 
+---
+
 ## 🏆 قابلیت های پیشرفته ابزار `MessageBroker`
 
 1 . استفاده از `WithMaxRetryAttribute`
