@@ -1038,7 +1038,7 @@ public class ConsumerMessageBusHandler : IConsumerMessageBusHandler<MessageDto>
 ```csharp
 WebApplicationBuilder builder = WebApplication.CreateBuilder();
 
-builder.RegisterMessagesSubscriber(); //for message consuming
+builder.RegisterMessagesSubscriber();
 ```
 
 </div>
