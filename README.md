@@ -1233,4 +1233,41 @@ public class UpdatedConsumerEventBusHandler : IConsumerEventBusHandler<UpdatedEv
 
 </div>
 
+2 . استفاده از `WithCleanCacheAttribute`
+
+مطابق موردی که در `Mediator` توضیح داده شد ، در اینجا هم ما مطابق با ابزار `Mediator` می توانیم از این `Attribute` و طبق دستور العمل پیشتر گفته شده ، استفاده نماییم .
+
+3 . استفاده از `Config` های مربوط به `Throttle` در بخش تنظیمات
+
+برای مدیریت نرخ `Event` و یا `Message` های وارده به سرویس `Consumer` مربوطه و مدیریت بهتر بار وارده به پروژه ، شما می بایست از قابلیت `Throttle` استفاده نمایید .
+
+برای این منظور می بایست به لایه `Presentation` سرویس مربوطه رفته و در پوشه `Configs` و در فایل `Config.json` مطابق دستورات زیر عمل نمایید .
+
+<div dir="ltr">
+
+```json
+{
+  //for external [ MessageBroker ]
+  "ExternalQueueConfig": {
+    "Throttle": [
+      {
+        "Active": false,    //active or inactive
+        "Queue": "Queue",   //name of target [ Queue ]
+        "Size": 0,          //size of payload
+        "Limitation": 1000, //count of async [ Event ] or [ Message ] processing per second . other world -> count of concurrent [ Task ] per second
+        "IsGlobally": false //should be always false
+      }
+    ]
+  },
+  //for internal [ MessageBroker ]
+  "InternalQueueConfig": {
+    "Throttle": []
+  }
+}
+```
+
+</div>
+
+🔥 **توجه** : **در تنظیمات بالا به این نکته توجه داشته باشید که در صورتی که ویژگی `IsExternalBrokerConsumingAsync` و یا `IsInternalBrokerConsumingAsync` فعال باشد ، قابلیت `Throttle` با تنظیمات بالا اعمال می گردد**
+
 </div>
