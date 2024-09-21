@@ -654,21 +654,21 @@ builder.RegisterDistributedCaching();
 //FanOut-Exchange
 
 //create event
-[MessageBroker(ExchangeType = Exchange.FanOut, Exchange = "exchange")]
+[EventConfig(ExchangeType = Exchange.FanOut, Exchange = "exchange")]
 public class Created : CreateDomainEvent<string> //any type of identity key
 {
     //payload
 }
 
 //update event
-[MessageBroker(ExchangeType = Exchange.FanOut, Exchange = "exchange")]
+[EventConfig(ExchangeType = Exchange.FanOut, Exchange = "exchange")]
 public class Updated : UpdateDomainEvent<string> //any type of identity key
 {
     //payload
 }
 
 //delete event
-[MessageBroker(ExchangeType = Exchange.FanOut, Exchange = "exchange")]
+[EventConfig(ExchangeType = Exchange.FanOut, Exchange = "exchange")]
 public class Deleted : DeleteDomainEvent<string> //any type of identity key
 {
     //payload
@@ -685,21 +685,21 @@ public class Deleted : DeleteDomainEvent<string> //any type of identity key
 //Direct-Exchange
 
 //create event
-[MessageBroker(ExchangeType = Exchange.Direct, Exchange = "exchange", Route = "route")]
+[EventConfig(ExchangeType = Exchange.Direct, Exchange = "exchange", Route = "route")]
 public class Created : CreateDomainEvent<string> //any type of identity key
 {
     //payload
 }
 
 //update event
-[MessageBroker(ExchangeType = Exchange.Direct, Exchange = "exchange", Route = "route")]
+[EventConfig(ExchangeType = Exchange.Direct, Exchange = "exchange", Route = "route")]
 public class Updated : UpdateDomainEvent<string> //any type of identity key
 {
     //payload
 }
 
 //delete event
-[MessageBroker(ExchangeType = Exchange.Direct, Exchange = "exchange", Route = "route")]
+[EventConfig(ExchangeType = Exchange.Direct, Exchange = "exchange", Route = "route")]
 public class Deleted : DeleteDomainEvent<string> //any type of identity key
 {
     //payload
@@ -716,21 +716,21 @@ public class Deleted : DeleteDomainEvent<string> //any type of identity key
 //FanOut-Exchange
 
 //create event
-[MessageBroker(ExchangeType = Exchange.FanOut, Exchange = "exchange", Queue = "queue")]
+[EventConfig(ExchangeType = Exchange.FanOut, Exchange = "exchange", Queue = "queue")]
 public class Created : CreateDomainEvent<string> //any type of identity key
 {
     //payload
 }
 
 //update event
-[MessageBroker(ExchangeType = Exchange.FanOut, Exchange = "exchange", Queue = "queue")]
+[EventConfig(ExchangeType = Exchange.FanOut, Exchange = "exchange", Queue = "queue")]
 public class Updated : UpdateDomainEvent<string> //any type of identity key
 {
     //payload
 }
 
 //delete event
-[MessageBroker(ExchangeType = Exchange.FanOut, Exchange = "exchange", Queue = "queue")]
+[EventConfig(ExchangeType = Exchange.FanOut, Exchange = "exchange", Queue = "queue")]
 public class Deleted : DeleteDomainEvent<string> //any type of identity key
 {
     //payload
@@ -745,21 +745,21 @@ public class Deleted : DeleteDomainEvent<string> //any type of identity key
 //Direct-Exchange
 
 //create event
-[MessageBroker(ExchangeType = Exchange.Direct, Exchange = "exchange", Route = "route", Queue = "queue")]
+[EventConfig(ExchangeType = Exchange.Direct, Exchange = "exchange", Route = "route", Queue = "queue")]
 public class Created : CreateDomainEvent<string> //any type of identity key
 {
     //payload
 }
 
 //update event
-[MessageBroker(ExchangeType = Exchange.Direct, Exchange = "exchange", Route = "route", Queue = "queue")]
+[EventConfig(ExchangeType = Exchange.Direct, Exchange = "exchange", Route = "route", Queue = "queue")]
 public class Updated : UpdateDomainEvent<string> //any type of identity key
 {
     //payload
 }
 
 //delete event
-[MessageBroker(ExchangeType = Exchange.Direct, Exchange = "exchange", Route = "route", Queue = "queue")]
+[EventConfig(ExchangeType = Exchange.Direct, Exchange = "exchange", Route = "route", Queue = "queue")]
 public class Deleted : DeleteDomainEvent<string> //any type of identity key
 {
     //payload
@@ -846,7 +846,7 @@ builder.RegisterDistributedCaching(); //for [ DistributedLock ] handling
 
 ```csharp
 //define in [ Domain ] layer of consumer service
-[MessageBroker(Queue = "queue")]
+[EventConfig(Queue = "queue")]
 public class UpdatedEvent : UpdateDomainEvent<string> //any type of identity key
 {
     //payload
@@ -1261,6 +1261,539 @@ public class UpdatedConsumerEventBusHandler : IConsumerEventBusHandler<UpdatedEv
   },
   //for internal [ MessageBroker ]
   "InternalQueueConfig": {
+    "Throttle": []
+  }
+}
+```
+
+</div>
+
+🔥 **توجه** : **در تنظیمات بالا به این نکته توجه داشته باشید که در صورتی که ویژگی `IsExternalBrokerConsumingAsync` و یا `IsInternalBrokerConsumingAsync` فعال باشد ، قابلیت `Throttle` با تنظیمات بالا اعمال می گردد**
+
+## 🏆 ابزار `EventStreamBroker` برای مدیریت الگوی معماری `EDA`
+
+حال بیایید به بررسی دقیق ابزار `EventStreamBroker` در پروژه `Domic` بیندازیم .
+
+در نظر داشته باشید ، چنانچه در پروژه مد نظر خود نیاز به سرعت بالا و `Scalability` سریع و مداوم نیاز دارید ، حتما باید از قابلیت `EventStreamBroker` به جای استفاده از `MessageBroker` استفاده نمایید .
+
+### بخش مربوطه به مدیریت `Event`
+
+1 . نحوه ایجاد `Event` در سطح سرویس ها و مدیریت آنها برای ارسال به `Broker`
+
+برای این مهم ابتدا باید به این نکته اشاره کرد که تمامی `Event` ها در لایه `Domain` سرویس ها ایجاد می شوند و از بیرون از این لایه تنها به استفاده و مدیریت این `Event` های ایجاد شده پرداخته می شود .
+
+<div dir="ltr">
+
+```csharp
+//create event
+[EventConfig(Topic = "Topic")]
+public class Created : CreateDomainEvent<string> //any type of identity key
+{
+    //payload
+}
+
+//update event
+[EventConfig(Topic = "Topic")]
+public class Updated : UpdateDomainEvent<string> //any type of identity key
+{
+    //payload
+}
+
+//delete event
+[EventConfig(Topic = "Topic")]
+public class Deleted : DeleteDomainEvent<string> //any type of identity key
+{
+    //payload
+}
+```
+</div>
+
+2 . استفاده از `Event` های تعریف شده در لایه `Domain`
+
+بعد از آنکه `Event` های مورد نیاز در لایه `Domain` ایجاد شدند ، می بایست از این رخداد ها در سطح کلاس های `Entity` استفاده شود . موجودیت های تعریف شده در لایه `Domain` بر پایه الگوی `Rich Domain Model` توسعه پیدا کرده اند و می بایست به ازای هر `Behavior` ای که صدا زده می شود ، در صورت نیاز یک `Event` مناسب ایجاد گردد که برای این مهم می بایست مطابق دستورات زیر عمل نمود .
+
+<div dir="ltr">
+
+```csharp
+//update event
+[EventConfig(Topic = "Topic")]
+public class UpdatedEvent : UpdateDomainEvent<string> //any type of identity key
+{
+    public string Email    { get; init; }
+    public string Username { get; init; }
+}
+
+public class DomainEntity : Entity<string> //any type of identity key
+{
+    public string Id       { get; private set; }
+    public string Email    { get; private set; }
+    public string Username { get; private set; }
+    
+    //Behaviors
+
+    public void Change(string username, string email)
+    {
+        Email    = email;
+        Username = username;
+
+        AddEvent(
+            new UpdatedEvent {
+                Id       = Id       ,
+                Username = username ,
+                Email    = email    ,
+            }
+        );
+    }
+}
+```
+
+</div>
+
+🔥 **توجه** : **تمامی `Entity` های بخش `Command` می بایست از کلاس `<>Entity` ارث بری کنند**
+
+🔥 **توجه** : **برای قدم اول پردازش `Event` های تولیدی در سطح کلاس های `Entity` می بایست در داخل `Behavior` مربوطه در کلاس `Entity` از متد پایه ای `AddEvent` استفاده نمود**
+
+3 . ارسال `Event` های تولید شده در سطح لایه `Domain` به `EventStreamBroker`
+
+بعد از ایجاد و استفاده از `Event` در سطح لایه `Domain` ، حال می بایست نحوه ارسال این رخداد ها به `EventStreamBroker` مورد بررسی قرار گیرد . پردازش `Event` ها در پروژه `Domic` به شکل `OutBox` بوده ، به این صورت که تمامی رخدادها به شکل `Transactional` در پایگاه داده ذخیره می شوند . البته این نکته را باید در نظر گرفت که برای این موضوع حتما می بایست `WithTransactionAttribute` در قسمت `Command` منطق مربوطه ، مورد استفاده قرار بگیرد .
+
+حال برای فعال کردن پردازش `OutBox` تمامی رخدادهای تولید شده در سرویس مربوطه ، می بایست مطابق دستورات زیر عمل نمود .
+
+<div dir="ltr">
+
+```csharp
+WebApplicationBuilder builder = WebApplication.CreateBuilder();
+
+builder.RegisterEventsStreamPublisher();  //for [ EventStreamBroker ( Apache Kafka ) ]
+builder.RegisterDistributedCaching();     //for [ DistributedLock ] handling
+```
+
+</div>
+
+🔥 **توجه** : **در نظر داشته باشید که پردازش `OutBox` رخدادهای تولید شده در سرویس مورد نظر ، به جهت مدیریت `Concurrency` در `Instance` های مختلفی که از سرویس مورد نظر ایجاد می شود ، به ابزار `InternalDistributedCache` نیاز دارد**
+
+🔥 **توجه** : **بازه ی زمانی اجرای مجدد `Job` مورد نیاز برای پردازش `OutBox` رخدادهای ایجاد شده ، `5` ثانیه می باشد**
+
+4 . پردازش و مصرف کردن `Event` های تولید شده
+
+این بخش مهمترین قسمت پیاده سازی شده در پروژه `Domic` می باشد ، زیرا پردازش رخدادهای تولیدی به واسطه سرویس های مختلف ، بسیار موضوع مهم و اصطلاحا `Critical` می باشد که عدم رعایت نکات ریز فنی و دقت به جزئیات ، باعث بروز `Inconsistancy` های مختلف مابین سرویس ها می گردد .
+
+خوشبختانه در پروژه `Domic` به تمامی این موارد و نکات توجه شده است و کاربر نهایی ، صرفا می بایست مطابق دستورات مطرح شده عمل کرده و به راحتی هر چه تمام تر به پردازش این `Event` ها در بستر `EventStreamBroker` بپردازد .
+
+در ابتدا ، برای پردازش `Event` های تولیدی توسط سرویس های `Producer` ، می بایست کلاس های مربوطه ( `Consumer` ) در لایه `UseCase` ایجاد شوند . برای این مهم مطابق دستورات زیر عمل نمایید .
+
+<div dir="ltr">
+
+```csharp
+//define in [ Domain ] layer of consumer service
+[EventConfig(Topic = "Topic")]
+public class UpdatedEvent : UpdateDomainEvent<string> //any type of identity key
+{
+    //payload
+}
+
+//define in [ UseCase ] layer of consumer service
+public class UpdatedConsumerEventStreamHandle : IConsumerEventStreamHandler<UpdatedEvent>
+{
+    public UpdatedConsumerEventStreamHandle(){}
+
+    [TransactionConfig(Type = TransactionType.Command)] //or => Type = TransactionType.Query
+    public void Handle(UpdatedEvent @event)
+    {
+        //logic
+    }
+    
+    [TransactionConfig(Type = TransactionType.Command)] //or => Type = TransactionType.Query
+    public Task HandleAsync(UpdatedEvent @event, CancellationToken cancellationToken)
+    {
+        //logic
+        
+        return Task.CompleteTask;
+    }
+}
+```
+
+</div>
+
+🔥 **توجه** : **پروژه `Domic` بر پایه الگوی طراحی `CQRS` که یک الگوی `System Design` ایی می باشد ، توسعه پیدا کرده است . لذا در بخش `Consume` کردن `Event` های مربوطه ، حتما باید نوع تراکنش مورد نظر از نظر `Command` و یا `Query` بودن مشخص شود**
+
+🔥 **توجه** : **برای مدیریت تراکنش بخش مربوط به `Query` در مدیریت `Event` و نیز `Message` ، پیش تر در قسمت `Command` های مربوط به الگوی `Mediator` گفته شد که این بخش نیز مشابه آن می باشد منتها با یک تفاوت و آن این است که باید به جای پیاده سازی `ICoreCommandUnitOfWork` ، واسط `ICoreQueryUnitOfWork` پیاده سازی شود**
+
+🔥 **توجه** : **در نظر داشته باشید که در بخش مربوط به مدیریت `Event` ها و یا `Message` ها ، تمام فرآیند به صورت پیشفرض و ثابت ، در یک `Transaction Boundary` صورت می گیرد و صرفا شما به عنوان مدیریت کننده رخداد مربوطه ، باید نوع تراکنش را ( `Command` و یا `Query` ) مشخص نمایید، به این معنی که این رخداد و یا `Message` بر کدام بخش پروژه ( بهتر است بگوییم دیتابیس ) قرار است اثر بگذارد ، دیتابیس `Command` و یا `Query`**
+
+برای مدیریت تراکنش بخش مربوط به `Query` می بایست مطابق دستورات زیر عمل نمایید .
+
+<div dir="ltr">
+
+```csharp
+public class QueryUnitOfWork : IQueryUnitOfWork
+{
+    private readonly SQLContext   _context;
+    private IDbContextTransaction _transaction;
+    
+    public QueryUnitOfWork(SQLContext context) => _context = context; //Resource
+
+    public void Transaction(IsolationLevel isolationLevel) 
+        => _transaction = _context.Database.BeginTransaction(isolationLevel); //Resource
+
+    public async Task TransactionAsync(IsolationLevel isolationLevel = IsolationLevel.ReadCommitted,
+        CancellationToken cancellationToken = new CancellationToken())
+    {
+        _transaction = await _context.Database.BeginTransactionAsync(isolationLevel, cancellationToken); //Resource
+    }
+
+    public void Commit()
+    {
+        _context.SaveChanges();
+        _transaction.Commit();
+    }
+
+    public async Task CommitAsync(CancellationToken cancellationToken)
+    {
+        await _context.SaveChangesAsync(cancellationToken);
+        await _transaction.CommitAsync(cancellationToken);
+    }
+
+    public void Rollback() => _transaction?.Rollback();
+
+    public Task RollbackAsync(CancellationToken cancellationToken)
+    {
+        if (_transaction is not null)
+            return _transaction.RollbackAsync(cancellationToken);
+
+        return Task.CompletedTask;
+    }
+
+    public void Dispose() => _transaction?.Dispose();
+
+    public ValueTask DisposeAsync()
+    {
+        if (_transaction is not null)
+            return _transaction.DisposeAsync();
+
+        return ValueTask.CompletedTask;
+    }
+}
+```
+
+</div>
+
+🔥 **توجه** : **برای فعال سازی منطق مربوط به بخش `Query` ، حتما می بایست این بخش فعال گردد**
+
+برای فعال کردن منطق های بخش مربوط به `Query` باید به لایه `Presentation` پروژه مربوطه رفته و در فایل `Program.cs` مراجعه کرده و مطابق دستورات زیر عمل نمایید .
+
+<div dir="ltr">
+
+```csharp
+WebApplicationBuilder builder = WebApplication.CreateBuilder();
+
+//if using the [ EF Core ]
+builder.RegisterEntityFrameworkCoreQuery< TQueryContext >(); //TQueryContext -> SqlContext or ...
+
+builder.RegisterQueryRepositories();
+```
+
+</div>
+
+برای تعیین رشته اتصال پایگاه داده `SQL Server` می بایست به لایه `Presentation` پروژه مربوطه رفته و سپس در پوشه `Properties` به فایل `launchSettings.json` مراجعه کرده و تنظیمات زیر را اعمال نمایید .
+
+<div dir="ltr">
+
+```json
+{
+  "environmentVariables": {
+    "C-SqlServerConnectionString": "", //for [ Command ] section -> CommandTransaction - CommandRepositories & ...
+    "Q-SqlServerConnectionString": ""  //for [ Query ] section   -> QueryTransaction   - QueryRepositories   & ...
+  }
+}
+```
+
+</div>
+
+🔥 **توجه** : **دقت نمایید که برای پیاده سازی منطق تراکنش مربوطه ، از ابزار `EF Core` استفاده شده است که شما می توانید از هر ابزار و یا دیتابیس دیگری استفاده نمایید**
+
+🔥 **توجه** : **در نظر داشته باشید که توابع `Handle` و `HandleAsync` در مدیریت `Event` و یا `Message` ، هر یک دارای معنای مشخصی است و برای استفاده از هر کدام از این توابع باید در بخش تنظیمات سرویس مربوطه ، `Config` خاصی را اعمال نمایید**
+
+برای استفاده از توابع `Handle` و `HandleAsync` بسته به نیاز در مدیریت `Event` و یا `Message` های بخش `MessageBroker` ، می بایست ابتدا به لایه `Presentation` پروژه مربوطه رفته و سپس در پوشه مربوط به `Configs` ، فایل مربوط به `Config.json` را باز کرده و مطابق دستورات زیر عمل نمایید .
+
+<div dir="ltr">
+
+```json
+{
+  "IsExternalBrokerConsumingAsync": false, //false => using Handle() | true => using HandleAsync()
+  "IsInternalBrokerConsumingAsync": false  //false => using Handle() | true => using HandleAsync()
+}
+```
+
+</div>
+
+🔥 **توجه** : **استفاده از تابع `Handle` برای پردازش تک به تک پیام های داخل `EventStreamBroker` مورد استفاده قرار می گیرد**
+
+🔥 **توجه** : **استفاده از تابع `HandleAsync` به شما این امکان را می دهد که پیام های داخل `EventStreamBroker` را به شکل `Concurrent` پردازش نمایید . در واقع در این حالت به میزانی که در `EventStreamBroker` پیام داشته باشید در پروژه شما `Task` ایجاد می شود و این `Task` ها به شکل `Concurrent` به پردازش پیام های شما می پردازند**
+
+🔥 **توجه** : **توجه کنید که اگر از تابع `HandleAsync` برای مدیریت پیام های `EventStreamBroker` استفاده می نمایید ، برای مدیریت بار وارد شده بر `Consumer` و به طور دقیق تر ، برای جلوگیری از `Crash` نکردن سرویس مربوطه در `High Loading` ، حتما از قابلیت `Throttle` پروژه `Domic` که جلوتر اشاره خواهد شد ، استفاده نمایید**
+
+در نهایت برای استفاده از `EventConsumer` ها در سرویس مربوطه باید در لایه `Presentation` و در فایل `Program.cs` مطابق دستورات زیر عمل نمایید .
+
+<div dir="ltr">
+
+```csharp
+WebApplicationBuilder builder = WebApplication.CreateBuilder();
+
+builder.RegisterEventsStreamSubscriber();
+```
+
+</div>
+
+### بخش مربوط به مدیریت `Message`
+
+تا به اینجای کار ، ما به بررسی نحوه مدیریت `Event` در بستر `EventStreamBroker` پرداختیم ، حال برای پردازش `Message` نیز تمام مراحل فوق صادق می باشند و تنها در رابط مدیریت کننده `Message` تفاوت وجود دارد .
+
+برای مدیریت `Message` های دریافتی از `EventStreamBroker` پروژه `Domic` ، شما می بایست از واسط `IConsumerMessageStreamHandler` استفاده و مطابق دستورات زیر عمل نمایید .
+
+<div dir="ltr">
+
+```csharp
+[StreamConsumer(Topic = "Topic")]
+public class ConsumerMessageStreamHandler : IConsumerMessageStreamHandler<MessageDto>
+{
+    public ConsumerMessageStreamHandler(){}
+
+    [TransactionConfig(Type = TransactionType.Query)] //or -> Type = TransactionType.Command
+    public void Handle(MessageDto message)
+    {
+        //logic
+    }
+
+    [TransactionConfig(Type = TransactionType.Query)] //or -> Type = TransactionType.Command
+    public Task HandleAsync(MessageDto message, CancellationToken cancellationToken)
+    {
+        //logic
+        
+        return Task.CompleteTask;
+    }
+}
+```
+
+</div>
+
+🔥 **توجه** : **دقت نمایید که در بخش مربوط به `Message` از هیچ الگوی `OutBox` ای برای ارسال پیام ها استفاده نمی شود ( در قسمت `Producer` ) و این ساختار در مواقعی که نیاز است به طور مستقیم یک پیامی به `EventStreamBroker` ارسال شود ، مورد استفاده قرار می گیرد**
+
+در نهایت برای استفاده از `MessageConsumer` ها در سرویس مربوطه باید در لایه `Presentation` و در فایل `Program.cs` مطابق دستورات زیر عمل نمایید .
+
+<div dir="ltr">
+
+```csharp
+WebApplicationBuilder builder = WebApplication.CreateBuilder();
+
+builder.RegisterMessagesStreamSubscriber();
+```
+
+</div>
+
+### تنظیمات و فعال سازی نهایی زیرساخت `EventStreamBroker`
+
+برای فعال سازی `EventStreamBroker` در سرویس مربوطه ، شما می بایست در لایه `Presentation` سرویس مربوطه و در فایل `Program.cs` مطابق دستورات زیر عمل نمایید .
+
+<div dir="ltr">
+
+```csharp
+WebApplicationBuilder builder = WebApplication.CreateBuilder();
+
+builder.RegisterEventStreamBroker();
+```
+
+</div>
+
+در نهایت برای تنظیمات مربوط به رشته اتصال `EventStreamBroker` باید در لایه `Presentation` سرویس مربوطه و در پوشه `Properties` و در فایل `launchSettings.json` مانند دستورات زیر عمل نمایید .
+
+<div dir="ltr">
+
+```json
+{
+  "environmentVariables": {
+    //for external event stream broker
+    "E-Kafka-Host": "",
+    "E-Kafka-Username": "",
+    "E-Kafka-Password": ""
+  }
+}
+```
+
+</div>
+
+---
+
+## 🏆 قابلیت های پیشرفته ابزار `EventStreamBroker`
+
+1 . استفاده از `WithMaxRetryAttribute`
+
+این `Attribute` به شما این امکان را می دهد که میزان تلاش `Consumer` مربوطه برای پردازش `Message` و یا `Event` مربوطه را مدیریت نمایید .
+
+برای استفاده از این `Attribute` می توانید مطابق دستورات زیر عمل نمایید .
+
+<div dir="ltr">
+
+```csharp
+//for [ Message ] consuming
+[StreamConsumer(Topic = "Topic")]
+public class ConsumerMessageStreamHandler : IConsumerMessageStreamHandler<MessageDto>
+{
+    public ConsumerMessageStreamHandler(){}
+
+    [TransactionConfig(Type = TransactionType.Query)] //or -> Type = TransactionType.Command
+    public void Handle(MessageDto message)
+    {
+        //logic
+    }
+
+    [TransactionConfig(Type = TransactionType.Query)] //or -> Type = TransactionType.Command
+    public Task HandleAsync(MessageDto message, CancellationToken cancellationToken)
+    {
+        //logic
+        
+        return Task.CompleteTask;
+    }
+}
+
+//for [ Event ] consuming
+public class UpdatedConsumerEventStreamHandle : IConsumerEventStreamHandler<UpdatedEvent>
+{
+    public UpdatedConsumerEventStreamHandle(){}
+
+    [TransactionConfig(Type = TransactionType.Command)] //or => Type = TransactionType.Query
+    public void Handle(UpdatedEvent @event)
+    {
+        //logic
+    }
+    
+    [TransactionConfig(Type = TransactionType.Command)] //or => Type = TransactionType.Query
+    public Task HandleAsync(UpdatedEvent @event, CancellationToken cancellationToken)
+    {
+        //logic
+        
+        return Task.CompleteTask;
+    }
+}
+```
+
+</div>
+
+🔥 **توجه** : **در استفاده از `WithMaxRetryAttribute` ، یک ویژگی تحت عنوان `HasAfterMaxRetryHandle` به چشم می خورد که بیان کننده آن است که آیا نیاز به جداگانه مدیریت کردن پیام مربوطه در صورتی که بیش از حد مجاز `Retry` شده است وجود دارد یا خیر . اگر این ویژگی برابر با `false` باشد که مقدار پیشفرض این متغییر می باشد ، پیام مربوطه بعد از حداکثر تلاش برای پردازش ، از `Queue` مربوطه پاک خواهد شد**
+
+اگر پیام مورد نظر در `Queue` مربوطه ، به حد مجاز پردازش مجدد برسد ( در صورت بروز خطاهای احتمالی ) ، برای مدیریت جداگانه پردازش پیام مربوطه ، می بایست مطابق دستورات زیر عمل نمایید .
+
+<div dir="ltr">
+
+```csharp
+//for [ Message ] consuming
+[StreamConsumer(Topic = "Topic")]
+public class ConsumerMessageStreamHandler : IConsumerMessageStreamHandler<MessageDto>
+{
+    public ConsumerMessageStreamHandler(){}
+
+    [WithMaxRetry(Count = 100, HasAfterMaxRetryHandle = true)] //Count = 100 -> this message will be reprocessed a maximum of 100 times in case of an error
+    [TransactionConfig(Type = TransactionType.Query)] //or -> Type = TransactionType.Command
+    public void Handle(MessageDto message)
+    {
+        //logic
+    }
+
+    [WithMaxRetry(Count = 100, HasAfterMaxRetryHandle = true)] //Count = 100 -> this message will be reprocessed a maximum of 100 times in case of an error
+    [TransactionConfig(Type = TransactionType.Query)] //or -> Type = TransactionType.Command
+    public Task HandleAsync(MessageDto message, CancellationToken cancellationToken)
+    {
+        //logic
+        
+        return Task.CompleteTask;
+    }
+
+    //for handle max retry
+    
+    public void AfterMaxRetryHandle(MessageDto message)
+    {
+        //logic
+    }
+    
+    public Task AfterMaxRetryHandleAsync(MessageDto message, CancellationToken cancellationToken)
+    {
+        //logic
+        
+        return Task.CompleteTask;
+    }
+}
+
+//for [ Event ] consuming
+public class UpdatedConsumerEventStreamHandler : IConsumerEventStreamHandler<UpdatedEvent>
+{
+    public UpdatedConsumerEventStreamHandler(){}
+
+    [WithMaxRetry(Count = 100, HasAfterMaxRetryHandle = true)] //Count = 100 -> this message will be reprocessed a maximum of 100 times in case of an error
+    [TransactionConfig(Type = TransactionType.Command)] //or => Type = TransactionType.Query
+    public void Handle(UpdatedEvent @event)
+    {
+        //logic
+    }
+    
+    [WithMaxRetry(Count = 100, HasAfterMaxRetryHandle = true)] //Count = 100 -> this message will be reprocessed a maximum of 100 times in case of an error
+    [TransactionConfig(Type = TransactionType.Command)] //or => Type = TransactionType.Query
+    public Task HandleAsync(UpdatedEvent @event, CancellationToken cancellationToken)
+    {
+        //logic
+        
+        return Task.CompleteTask;
+    }
+    
+    //for handle max retry
+    
+    public void AfterMaxRetryHandle(UpdatedEvent @event)
+    {
+        //logic
+    }
+    
+    public Task AfterMaxRetryHandleAsync(UpdatedEvent @event, CancellationToken cancellationToken)
+    {
+        //logic
+        
+        return Task.CompleteTask;
+    }
+}
+```
+
+</div>
+
+2 . استفاده از `WithCleanCacheAttribute`
+
+مطابق موردی که در `Mediator` توضیح داده شد ، در اینجا هم ما مطابق با ابزار `Mediator` می توانیم از این `Attribute` و طبق دستور العمل پیشتر گفته شده ، استفاده نماییم .
+
+3 . استفاده از `Config` های مربوط به `Throttle` در بخش تنظیمات
+
+برای مدیریت نرخ `Event` و یا `Message` های وارده به سرویس `Consumer` مربوطه و مدیریت بهتر بار وارده به پروژه ، شما می بایست از قابلیت `Throttle` استفاده نمایید .
+
+برای این منظور می بایست به لایه `Presentation` سرویس مربوطه رفته و در پوشه `Configs` و در فایل `Config.json` مطابق دستورات زیر عمل نمایید .
+
+<div dir="ltr">
+
+```json
+{
+  //for external [ EventStreamBroker ]
+  "ExternalTopicConfig": {
+    "Throttle": [
+      {
+        "Active": false,    //active or inactive
+        "Topic": "Topic",   //name of target [ Topic ]
+        "Limitation": 1000, //count of async [ Event ] or [ Message ] processing per second . other world -> count of concurrent [ Task ] per second
+      },
+      //for retriable topic | main topic name -> topic . retry topic name -> serviceName-Retry-topicName
+      //by default this throttle for retry topic is active
+      {
+        "Topic": "Topic",   //name of target [ Topic ]
+        "Limitation": 1000  //count of async [ Event ] or [ Message ] processing per second . other world -> count of concurrent [ Task ] per second
+      }
+    ]
+  },
+  //for internal [ EventStreamBroker ]
+  "InternalTopicConfig": {
     "Throttle": []
   }
 }

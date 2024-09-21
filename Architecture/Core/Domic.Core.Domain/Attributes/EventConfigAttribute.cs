@@ -3,7 +3,7 @@
 namespace Domic.Core.Domain.Attributes;
 
 [AttributeUsage(AttributeTargets.Class)]
-public class MessageBrokerAttribute : Attribute
+public class EventConfigAttribute : Attribute
 {
     public string Topic          { get; set; }
     public string Queue          { get; set; }

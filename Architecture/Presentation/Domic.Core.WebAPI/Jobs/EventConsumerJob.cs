@@ -29,7 +29,7 @@ public class EventConsumerJob : IHostedService
             domainTypes.Where(type => type.BaseType?.GetInterfaces().Any(i => i == typeof(IDomainEvent)) ?? false);
 
         var allQueues = eventTypes.Select(type =>
-            (type.GetCustomAttribute(typeof(MessageBrokerAttribute)) as MessageBrokerAttribute)?.Queue
+            (type.GetCustomAttribute(typeof(EventConfigAttribute)) as EventConfigAttribute)?.Queue
         );
 
         var allValidQueues = allQueues.Where(queue => !string.IsNullOrEmpty(queue)).Distinct();

@@ -1,7 +1,7 @@
 ﻿#pragma warning disable CS8604
 
 using System.Reflection;
-using Domic.Core.UseCase.Commons.Attributes;
+using Domic.Core.Domain.Attributes;
 using Domic.Core.UseCase.Contracts.Interfaces;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
@@ -33,7 +33,7 @@ public class EventRetriableStreamConsumerJob : IHostedService
         );
 
         var topics = eventStreamHandlerTypes.Select(type => 
-            ( type.GetCustomAttribute(typeof(StreamConsumerAttribute)) as StreamConsumerAttribute )?.Topic
+            ( type.GetCustomAttribute(typeof(EventConfigAttribute)) as EventConfigAttribute )?.Topic
         );
 
         foreach (var topic in topics)

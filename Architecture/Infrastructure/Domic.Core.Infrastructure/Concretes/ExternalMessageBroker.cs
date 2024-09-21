@@ -954,7 +954,7 @@ public class ExternalMessageBroker : IExternalMessageBroker
 
         var typeOfEvent = typeOfEvents.FirstOrDefault(type => type.Name.Equals(nameOfEvent));
 
-        var messageBroker = typeOfEvent.GetCustomAttribute(typeof(MessageBrokerAttribute)) as MessageBrokerAttribute;
+        var messageBroker = typeOfEvent.GetCustomAttribute(typeof(EventConfigAttribute)) as EventConfigAttribute;
 
         switch (messageBroker.ExchangeType)
         {

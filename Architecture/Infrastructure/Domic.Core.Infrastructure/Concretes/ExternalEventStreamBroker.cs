@@ -1183,7 +1183,7 @@ public class ExternalEventStreamBroker(
 
         var typeOfEvent = typeOfEvents.FirstOrDefault(type => type.Name.Equals(nameOfEvent));
 
-        var broker = typeOfEvent.GetCustomAttribute(typeof(MessageBrokerAttribute)) as MessageBrokerAttribute;
+        var broker = typeOfEvent.GetCustomAttribute(typeof(EventConfigAttribute)) as EventConfigAttribute;
         
         var config = new ProducerConfig {
             BootstrapServers = Environment.GetEnvironmentVariable("E-Kafka-Host"),
@@ -1213,7 +1213,7 @@ public class ExternalEventStreamBroker(
 
         var typeOfEvent = typeOfEvents.FirstOrDefault(type => type.Name.Equals(nameOfEvent));
 
-        var broker = typeOfEvent.GetCustomAttribute(typeof(MessageBrokerAttribute)) as MessageBrokerAttribute;
+        var broker = typeOfEvent.GetCustomAttribute(typeof(EventConfigAttribute)) as EventConfigAttribute;
         
         var config = new ProducerConfig {
             BootstrapServers = Environment.GetEnvironmentVariable("E-Kafka-Host"),
