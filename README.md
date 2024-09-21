@@ -1270,6 +1270,8 @@ public class UpdatedConsumerEventBusHandler : IConsumerEventBusHandler<UpdatedEv
 
 🔥 **توجه** : **در تنظیمات بالا به این نکته توجه داشته باشید که در صورتی که ویژگی `IsExternalBrokerConsumingAsync` و یا `IsInternalBrokerConsumingAsync` فعال باشد ، قابلیت `Throttle` با تنظیمات بالا اعمال می گردد**
 
+---
+
 ## 🏆 ابزار `EventStreamBroker` برای مدیریت الگوی معماری `EDA`
 
 حال بیایید به بررسی دقیق ابزار `EventStreamBroker` در پروژه `Domic` بیندازیم .
