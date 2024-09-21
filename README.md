@@ -1395,9 +1395,9 @@ public class UpdatedEvent : UpdateDomainEvent<string> //any type of identity key
 }
 
 //define in [ UseCase ] layer of consumer service
-public class UpdatedConsumerEventStreamHandle : IConsumerEventStreamHandler<UpdatedEvent>
+public class UpdatedConsumerEventStreamHandler : IConsumerEventStreamHandler<UpdatedEvent>
 {
-    public UpdatedConsumerEventStreamHandle(){}
+    public UpdatedConsumerEventStreamHandler(){}
 
     [TransactionConfig(Type = TransactionType.Command)] //or => Type = TransactionType.Query
     public void Handle(UpdatedEvent @event)
@@ -1659,9 +1659,9 @@ public class ConsumerMessageStreamHandler : IConsumerMessageStreamHandler<Messag
 }
 
 //for [ Event ] consuming
-public class UpdatedConsumerEventStreamHandle : IConsumerEventStreamHandler<UpdatedEvent>
+public class UpdatedConsumerEventStreamHandler : IConsumerEventStreamHandler<UpdatedEvent>
 {
-    public UpdatedConsumerEventStreamHandle(){}
+    public UpdatedConsumerEventStreamHandler(){}
 
     [TransactionConfig(Type = TransactionType.Command)] //or => Type = TransactionType.Query
     public void Handle(UpdatedEvent @event)
