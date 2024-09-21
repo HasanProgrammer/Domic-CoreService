@@ -1643,12 +1643,14 @@ public class ConsumerMessageStreamHandler : IConsumerMessageStreamHandler<Messag
 {
     public ConsumerMessageStreamHandler(){}
 
+    [WithMaxRetry(Count = 100, HasAfterMaxRetryHandle = true)] //Count = 100 -> this message will be reprocessed a maximum of 100 times in case of an error
     [TransactionConfig(Type = TransactionType.Query)] //or -> Type = TransactionType.Command
     public void Handle(MessageDto message)
     {
         //logic
     }
 
+    [WithMaxRetry(Count = 100, HasAfterMaxRetryHandle = true)] //Count = 100 -> this message will be reprocessed a maximum of 100 times in case of an error
     [TransactionConfig(Type = TransactionType.Query)] //or -> Type = TransactionType.Command
     public Task HandleAsync(MessageDto message, CancellationToken cancellationToken)
     {
@@ -1663,12 +1665,14 @@ public class UpdatedConsumerEventStreamHandler : IConsumerEventStreamHandler<Upd
 {
     public UpdatedConsumerEventStreamHandler(){}
 
+    [WithMaxRetry(Count = 100, HasAfterMaxRetryHandle = true)] //Count = 100 -> this message will be reprocessed a maximum of 100 times in case of an error
     [TransactionConfig(Type = TransactionType.Command)] //or => Type = TransactionType.Query
     public void Handle(UpdatedEvent @event)
     {
         //logic
     }
     
+    [WithMaxRetry(Count = 100, HasAfterMaxRetryHandle = true)] //Count = 100 -> this message will be reprocessed a maximum of 100 times in case of an error
     [TransactionConfig(Type = TransactionType.Command)] //or => Type = TransactionType.Query
     public Task HandleAsync(UpdatedEvent @event, CancellationToken cancellationToken)
     {
