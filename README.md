@@ -776,7 +776,7 @@ public class Deleted : DeleteDomainEvent<string> //any type of identity key
 
 ```csharp
 //update event
-[MessageBroker(ExchangeType = Exchange.FanOut, Exchange = "exchange")]
+[EventConfig(ExchangeType = Exchange.FanOut, Exchange = "exchange")]
 public class UpdatedEvent : UpdateDomainEvent<string> //any type of identity key
 {
     public string Email    { get; init; }
