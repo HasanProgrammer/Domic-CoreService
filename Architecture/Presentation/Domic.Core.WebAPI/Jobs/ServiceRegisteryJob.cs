@@ -29,7 +29,7 @@ public class ServiceRegisteryJob : IHostedService
         IExternalEventStreamBroker externalEventStreamBroker
     )
     {
-        _loggerType                = _configuration.GetValue<LoggerType>("LoggerType");
+        _loggerType                = configuration.GetValue<LoggerType>("LoggerType");
         _configuration             = configuration;
         _hostEnvironment           = hostEnvironment;
         _serviceScopeFactory       = serviceScopeFactory;

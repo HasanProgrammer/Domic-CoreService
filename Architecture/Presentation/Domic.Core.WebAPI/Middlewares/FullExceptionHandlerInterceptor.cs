@@ -47,7 +47,7 @@ public class FullExceptionHandlerInterceptor : Interceptor
         _configuration          = configuration;
         _hostEnvironment        = hostEnvironment;
         _iCommandUnitOfWorkType = iCommandUnitOfWorkType;
-        _loggerType             = _configuration.GetValue<LoggerType>("LoggerType");
+        _loggerType             = configuration.GetValue<LoggerType>("LoggerType");
     }
     
     /// <summary>
