@@ -38,7 +38,7 @@ public class ExceptionHandler
     {
         _next          = next;
         _configuration = configuration;
-        _loggerType    = _configuration.GetValue<LoggerType>("LoggerType");
+        _loggerType    = _configuration.GetSection("LoggerType").Get<LoggerType>();
     }
 
     public async Task Invoke(HttpContext context)

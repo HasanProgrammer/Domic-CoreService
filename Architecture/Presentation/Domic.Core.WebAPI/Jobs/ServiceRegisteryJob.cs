@@ -17,7 +17,6 @@ namespace Domic.Core.WebAPI.Jobs;
 
 public class ServiceRegisteryJob : IHostedService
 {
-    private readonly LoggerType                 _loggerType;
     private readonly IConfiguration             _configuration;
     private readonly IHostEnvironment           _hostEnvironment;
     private readonly IServiceScopeFactory       _serviceScopeFactory;
@@ -29,7 +28,6 @@ public class ServiceRegisteryJob : IHostedService
         IExternalEventStreamBroker externalEventStreamBroker
     )
     {
-        _loggerType                = configuration.GetValue<LoggerType>("LoggerType");
         _configuration             = configuration;
         _hostEnvironment           = hostEnvironment;
         _serviceScopeFactory       = serviceScopeFactory;
@@ -40,6 +38,7 @@ public class ServiceRegisteryJob : IHostedService
     public async Task StartAsync(CancellationToken cancellationToken)
     {
         var serviceName = _configuration.GetValue<string>("NameOfService");
+        var loggerType  = _configuration.GetSection("LoggerType").Get<LoggerType>();
         var serviceHost = Environment.GetEnvironmentVariable("Host");
         var servicePort = Environment.GetEnvironmentVariable("Port");
 
@@ -51,7 +50,7 @@ public class ServiceRegisteryJob : IHostedService
 
         try
         {
-            if (_loggerType.Messaging)
+            if (loggerType.Messaging)
                 await _externalMessageBroker.PublishAsync(new MessageBrokerDto<ServiceStatus> {
                     Message = new ServiceStatus {
                         Id = globalUniqueIdGenerator.GetRandom(6),
