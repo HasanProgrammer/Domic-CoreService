@@ -17,19 +17,24 @@ namespace Domic.Core.WebAPI.Jobs;
 
 public class ServiceRegisteryJob : IHostedService
 {
-    private readonly IExternalMessageBroker       _externalMessageBroker;
-    private readonly IConfiguration       _configuration;
-    private readonly IHostEnvironment     _hostEnvironment;
-    private readonly IServiceScopeFactory _serviceScopeFactory;
+    private readonly LoggerType                 _loggerType;
+    private readonly IConfiguration             _configuration;
+    private readonly IHostEnvironment           _hostEnvironment;
+    private readonly IServiceScopeFactory       _serviceScopeFactory;
+    private readonly IExternalMessageBroker     _externalMessageBroker;
+    private readonly IExternalEventStreamBroker _externalEventStreamBroker;
 
     public ServiceRegisteryJob(IConfiguration configuration, IHostEnvironment hostEnvironment, 
-        IExternalMessageBroker externalMessageBroker, IServiceScopeFactory serviceScopeFactory
+        IServiceScopeFactory serviceScopeFactory, IExternalMessageBroker externalMessageBroker,
+        IExternalEventStreamBroker externalEventStreamBroker
     )
     {
-        _configuration       = configuration;
-        _externalMessageBroker       = externalMessageBroker;
-        _hostEnvironment     = hostEnvironment;
-        _serviceScopeFactory = serviceScopeFactory;
+        _loggerType                = _configuration.GetSection("LoggerType").Get<LoggerType>();
+        _configuration             = configuration;
+        _hostEnvironment           = hostEnvironment;
+        _serviceScopeFactory       = serviceScopeFactory;
+        _externalMessageBroker     = externalMessageBroker;
+        _externalEventStreamBroker = externalEventStreamBroker;
     }
 
     public async Task StartAsync(CancellationToken cancellationToken)
@@ -46,20 +51,30 @@ public class ServiceRegisteryJob : IHostedService
 
         try
         {
-            await _externalMessageBroker.PublishAsync(new MessageBrokerDto<ServiceStatus> {
-                Message = new ServiceStatus {
-                    Id        = globalUniqueIdGenerator.GetRandom(6),
-                    Name      = serviceName         ,
-                    Host      = serviceHost         ,
-                    IPAddress = Host.GetIPAddress() ,
-                    Port      = servicePort         ,
-                    Status    = true 
-                },
-                ExchangeType = Exchange.Direct                 ,
-                Exchange     = Broker.ServiceRegistry_Exchange ,
-                Route        = Broker.ServiceRegistry_Route    ,
-                Queue        = Broker.ServiceRegistry_Queue 
-            }, cancellationToken);
+            if (_loggerType.Messaging)
+                await _externalMessageBroker.PublishAsync(new MessageBrokerDto<ServiceStatus> {
+                    Message = new ServiceStatus {
+                        Id = globalUniqueIdGenerator.GetRandom(6),
+                        Name = serviceName,
+                        Host = serviceHost,
+                        IPAddress = Host.GetIPAddress(),
+                        Port = servicePort,
+                        Status = true
+                    },
+                    ExchangeType = Exchange.Direct,
+                    Exchange = Broker.ServiceRegistry_Exchange,
+                    Route = Broker.ServiceRegistry_Route,
+                    Queue = Broker.ServiceRegistry_Queue
+                }, cancellationToken);
+            else
+                await _externalEventStreamBroker.PublishAsync<ServiceStatus>("ServiceRegistry", new ServiceStatus {
+                    Id = globalUniqueIdGenerator.GetRandom(6),
+                    Name = serviceName,
+                    Host = serviceHost,
+                    IPAddress = Host.GetIPAddress(),
+                    Port = servicePort,
+                    Status = true
+                }, cancellationToken: cancellationToken);
         }
         catch (Exception e)
         {
