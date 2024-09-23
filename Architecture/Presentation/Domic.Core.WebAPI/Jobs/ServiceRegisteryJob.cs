@@ -17,19 +17,24 @@ namespace Domic.Core.WebAPI.Jobs;
 
 public class ServiceRegisteryJob : IHostedService
 {
-    private readonly LoggerType           _loggerType;
-    private readonly IConfiguration       _configuration;
-    private readonly IHostEnvironment     _hostEnvironment;
-    private readonly IServiceScopeFactory _serviceScopeFactory;
+    private readonly LoggerType                 _loggerType;
+    private readonly IConfiguration             _configuration;
+    private readonly IHostEnvironment           _hostEnvironment;
+    private readonly IServiceScopeFactory       _serviceScopeFactory;
+    private readonly IExternalMessageBroker     _externalMessageBroker;
+    private readonly IExternalEventStreamBroker _externalEventStreamBroker;
 
     public ServiceRegisteryJob(IConfiguration configuration, IHostEnvironment hostEnvironment, 
-        IServiceScopeFactory serviceScopeFactory
+        IServiceScopeFactory serviceScopeFactory, IExternalMessageBroker externalMessageBroker,
+        IExternalEventStreamBroker externalEventStreamBroker
     )
     {
-        _loggerType          = configuration.GetValue<LoggerType>("LoggerType");
-        _configuration       = configuration;
-        _hostEnvironment     = hostEnvironment;
-        _serviceScopeFactory = serviceScopeFactory;
+        _loggerType                = configuration.GetValue<LoggerType>("LoggerType");
+        _configuration             = configuration;
+        _hostEnvironment           = hostEnvironment;
+        _serviceScopeFactory       = serviceScopeFactory;
+        _externalMessageBroker     = externalMessageBroker;
+        _externalEventStreamBroker = externalEventStreamBroker;
     }
 
     public async Task StartAsync(CancellationToken cancellationToken)
@@ -47,11 +52,7 @@ public class ServiceRegisteryJob : IHostedService
         try
         {
             if (_loggerType.Messaging)
-            {
-                var externalMessageBroker =
-                    scope.ServiceProvider.GetRequiredService<IExternalMessageBroker>();
-                
-                await externalMessageBroker.PublishAsync(new MessageBrokerDto<ServiceStatus> {
+                await _externalMessageBroker.PublishAsync(new MessageBrokerDto<ServiceStatus> {
                     Message = new ServiceStatus {
                         Id = globalUniqueIdGenerator.GetRandom(6),
                         Name = serviceName,
@@ -65,13 +66,8 @@ public class ServiceRegisteryJob : IHostedService
                     Route = Broker.ServiceRegistry_Route,
                     Queue = Broker.ServiceRegistry_Queue
                 }, cancellationToken);
-            }
             else
-            {
-                var externalEventStreamBroker =
-                    scope.ServiceProvider.GetRequiredService<IExternalEventStreamBroker>();
-                
-                await externalEventStreamBroker.PublishAsync<ServiceStatus>("ServiceRegistry", new ServiceStatus {
+                await _externalEventStreamBroker.PublishAsync<ServiceStatus>("ServiceRegistry", new ServiceStatus {
                     Id = globalUniqueIdGenerator.GetRandom(6),
                     Name = serviceName,
                     Host = serviceHost,
@@ -79,7 +75,6 @@ public class ServiceRegisteryJob : IHostedService
                     Port = servicePort,
                     Status = true
                 }, cancellationToken: cancellationToken);
-            }
         }
         catch (Exception e)
         {
