@@ -36,9 +36,9 @@ public class ExceptionHandler
     /// <param name="next"></param>
     public ExceptionHandler(RequestDelegate next, IConfiguration configuration)
     {
-        _next = next;
+        _next          = next;
         _configuration = configuration;
-        _loggerType  = _configuration.GetSection("LoggerType").Get<LoggerType>();
+        _loggerType    = _configuration.GetValue<LoggerType>("LoggerType");
     }
 
     public async Task Invoke(HttpContext context)

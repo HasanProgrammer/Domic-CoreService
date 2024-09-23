@@ -40,7 +40,7 @@ public class ExceptionHandlerInterceptor : Interceptor
     /// <param name="icommandUnitOfWorkType"></param>
     public ExceptionHandlerInterceptor(IConfiguration configuration, IHostEnvironment hostEnvironment)
     {
-        _loggerType      = _configuration.GetSection("LoggerType").Get<LoggerType>();
+        _loggerType      = _configuration.GetValue<LoggerType>("LoggerType");
         _configuration   = configuration;
         _hostEnvironment = hostEnvironment;
     }
