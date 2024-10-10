@@ -43,6 +43,8 @@ public static class IServiceCollectionExtension
                 Description = "Domic Web-API-Gateway"
             });
             
+            options.TagActionsBy(description => new[] { description.GroupName ?? "" });
+            
         });
 
         return services;
