@@ -45,6 +45,8 @@ public static class IServiceCollectionExtension
             
             options.TagActionsBy(description => new[] { description.GroupName ?? "" });
             
+            options.DocInclusionPredicate((docName, apiDesc) => true);
+            
         });
 
         return services;
