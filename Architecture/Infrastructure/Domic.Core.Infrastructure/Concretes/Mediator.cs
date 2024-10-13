@@ -98,9 +98,11 @@ public class Mediator : IMediator
 
                 try
                 {
-                    await _ValidationAsync(commandHandler, commandHandlerType, commandHandlerMethod, command, cancellationToken);
-                
-                    var result = await _InvokeHandleMethodAsync(commandHandler, commandHandlerMethod, command, cancellationToken);
+                    await _ValidationAsync(commandHandler, commandHandlerType, commandHandlerMethod, command,
+                        cancellationToken);
+
+                    var result = await _InvokeHandleMethodAsync(commandHandler, commandHandlerMethod, command,
+                        cancellationToken);
 
                     return result;
                 }
@@ -108,6 +110,10 @@ public class Mediator : IMediator
                 {
                     asyncLockValue.Release();
                     throw;
+                }
+                finally
+                {
+                    asyncLockValue.Release();
                 }
             }
         }
@@ -122,17 +128,10 @@ public class Mediator : IMediator
 
     public Task DispatchAsFireAndForgetAsync(IAsyncCommand command, CancellationToken cancellationToken)
     {
-        Task.Run(() => {
+        var asyncCommandBroker =
+            _serviceProvider.GetRequiredService(typeof(IInternalMessageBroker)) as IInternalMessageBroker;
             
-            var asyncCommandBroker =
-                _serviceProvider.GetRequiredService(typeof(IInternalMessageBroker)) as IInternalMessageBroker;
-            
-            //ToDo : ( Tech Debt ) => Should be used retry pattern with tools like [Polly]
-            asyncCommandBroker.Publish(command);
-            
-        }, cancellationToken);
-
-        return Task.CompletedTask;
+        return asyncCommandBroker.PublishAsync(command, cancellationToken);
     }
     
     public TResult Dispatch<TResult>(IQuery<TResult> query)
