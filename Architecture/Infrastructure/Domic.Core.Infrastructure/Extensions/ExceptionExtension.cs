@@ -64,7 +64,6 @@ public static class ExceptionExtension
                 $"\n Date: {dateTime.ToPersianShortDate(DateTime.Now)} | Message: {exception.Message} | Source: {exception.ToString()} \n"
             );
         }
-        catch (Exception e) {}
         finally
         {
             _asyncLock.Release();

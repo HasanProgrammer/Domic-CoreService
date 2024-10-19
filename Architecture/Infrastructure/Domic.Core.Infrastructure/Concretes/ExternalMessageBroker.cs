@@ -723,7 +723,7 @@ public class ExternalMessageBroker : IExternalMessageBroker
                 
                     await unitOfWork.CommitAsync(cancellationToken);
 
-                    _CleanCache(messageBusHandlerMethod, serviceProvider);
+                    await _CleanCacheAsync(messageBusHandlerMethod, serviceProvider, cancellationToken);
                 }
             }
             
@@ -920,7 +920,7 @@ public class ExternalMessageBroker : IExternalMessageBroker
                 
                     await unitOfWork.CommitAsync(cancellationToken);
 
-                    _CleanCache(messageBusHandlerMethod, serviceProvider);
+                    await _CleanCacheAsync(messageBusHandlerMethod, serviceProvider, cancellationToken);
                 }
             }
             
@@ -1224,7 +1224,7 @@ public class ExternalMessageBroker : IExternalMessageBroker
 
                             await unitOfWork.CommitAsync(cancellationToken);
         
-                            _CleanCache(eventBusHandlerMethod, serviceProvider);
+                            await _CleanCacheAsync(eventBusHandlerMethod, serviceProvider, cancellationToken);
                         }
                     }
                     //for command side event processing
@@ -1263,14 +1263,14 @@ public class ExternalMessageBroker : IExternalMessageBroker
 
                             await unitOfWork.CommitAsync(cancellationToken);
 
-                            _CleanCache(eventBusHandlerMethod, serviceProvider);
+                            await _CleanCacheAsync(eventBusHandlerMethod, serviceProvider, cancellationToken);
                         }
                     }
                     else throw new Exception("Must be defined transaction type!");
                 }
             }
             
-            _TrySendAckMessage(channel, args);
+            await _TrySendAckMessageAsync(channel, args, cancellationToken);
         }
         catch (Exception e)
         {
@@ -1308,22 +1308,20 @@ public class ExternalMessageBroker : IExternalMessageBroker
         }
     }
     
-    private Task _TryRollbackAsync(IUnitOfWork unitOfWork, CancellationToken cancellationToken)
+    private async Task _TryRollbackAsync(IUnitOfWork unitOfWork, CancellationToken cancellationToken)
     {
         try
         {
             if (unitOfWork is not null)
-                return Policy.Handle<Exception>()
-                             .WaitAndRetryAsync(5, _ => TimeSpan.FromSeconds(3), (exception, timeSpan, context) => {})
-                             .ExecuteAsync(() => unitOfWork.RollbackAsync(cancellationToken));
+                await Policy.Handle<Exception>()
+                            .WaitAndRetryAsync(5, _ => TimeSpan.FromSeconds(3), (exception, timeSpan, context) => {})
+                            .ExecuteAsync(() => unitOfWork.RollbackAsync(cancellationToken));
         }
         catch (Exception e)
         {
             //fire&forget
             e.FileLoggerAsync(_hostEnvironment, _dateTime, cancellationToken: cancellationToken);
         }
-
-        return Task.CompletedTask;
     }
     
     private void _TryRequeueMessageAsDeadLetter(IModel channel, BasicDeliverEventArgs args)
@@ -1346,17 +1344,17 @@ public class ExternalMessageBroker : IExternalMessageBroker
         }
     }
     
-    private Task _TryRequeueMessageAsDeadLetterAsync(IModel channel, BasicDeliverEventArgs args, 
+    private async Task _TryRequeueMessageAsDeadLetterAsync(IModel channel, BasicDeliverEventArgs args, 
         CancellationToken cancellationToken
     )
     {
         try
         {
-            return Policy.Handle<Exception>()
-                         .WaitAndRetryAsync(5, _ => TimeSpan.FromSeconds(3), (exception, timeSpan, context) => {})
-                         .ExecuteAsync(() =>
-                             Task.Run(() => channel.BasicNack(args.DeliveryTag, false, false), cancellationToken)
-                         );
+            await Policy.Handle<Exception>()
+                        .WaitAndRetryAsync(5, _ => TimeSpan.FromSeconds(3), (exception, timeSpan, context) => {})
+                        .ExecuteAsync(() =>
+                            Task.Run(() => channel.BasicNack(args.DeliveryTag, false, false), cancellationToken)
+                        );
         }
         catch (Exception e)
         {
@@ -1367,8 +1365,6 @@ public class ExternalMessageBroker : IExternalMessageBroker
                 NameOfService, NameOfAction
             );
         }
-
-        return Task.CompletedTask;
     }
     
     private void _TrySendAckMessage(IModel channel, BasicDeliverEventArgs args)
@@ -1391,17 +1387,17 @@ public class ExternalMessageBroker : IExternalMessageBroker
         }
     }
     
-    private Task _TrySendAckMessageAsync(IModel channel, BasicDeliverEventArgs args, 
+    private async Task _TrySendAckMessageAsync(IModel channel, BasicDeliverEventArgs args, 
         CancellationToken cancellationToken
     )
     {
         try
         {
-            return Policy.Handle<Exception>()
-                         .WaitAndRetryAsync(5, _ => TimeSpan.FromSeconds(3), (exception, timeSpan, context) => {})
-                         .ExecuteAsync(() =>
-                             Task.Run(() => channel.BasicAck(args.DeliveryTag, false), cancellationToken)
-                         );
+            await Policy.Handle<Exception>()
+                        .WaitAndRetryAsync(5, _ => TimeSpan.FromSeconds(3), (exception, timeSpan, context) => {})
+                        .ExecuteAsync(() =>
+                            Task.Run(() => channel.BasicAck(args.DeliveryTag, false), cancellationToken)
+                        );
         }
         catch (Exception e)
         {
@@ -1412,8 +1408,6 @@ public class ExternalMessageBroker : IExternalMessageBroker
                 NameOfService, NameOfAction
             );
         }
-
-        return Task.CompletedTask;
     }
     
     private (bool result, int countOfRetry) _IsMaxRetryMessage(BasicDeliverEventArgs args, WithMaxRetryAttribute maxRetryAttribute)
@@ -1466,6 +1460,31 @@ public class ExternalMessageBroker : IExternalMessageBroker
         catch (Exception e)
         {
             e.FileLogger(_hostEnvironment, _dateTime);
+            
+            e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, 
+                NameOfService, NameOfAction
+            );
+        }
+    }
+    
+    private async Task _CleanCacheAsync(MethodInfo eventBusHandlerMethod, IServiceProvider serviceProvider, 
+        CancellationToken cancellationToken
+    )
+    {
+        try
+        {
+            if (eventBusHandlerMethod.GetCustomAttribute(typeof(WithCleanCacheAttribute)) is WithCleanCacheAttribute withCleanCacheAttribute)
+            {
+                var redisCache = serviceProvider.GetRequiredService<IInternalDistributedCache>();
+
+                foreach (var key in withCleanCacheAttribute.Keies.Split("|"))
+                    await redisCache.DeleteKeyAsync(key, cancellationToken);
+            }
+        }
+        catch (Exception e)
+        {
+            //fire&forget
+            e.FileLoggerAsync(_hostEnvironment, _dateTime, cancellationToken);
             
             e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, 
                 NameOfService, NameOfAction

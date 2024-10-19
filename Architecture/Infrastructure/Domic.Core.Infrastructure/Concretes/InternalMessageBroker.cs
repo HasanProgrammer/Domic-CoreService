@@ -691,22 +691,20 @@ public class InternalMessageBroker : IInternalMessageBroker
         }
     }
     
-    private Task _TryRollbackAsync(IUnitOfWork unitOfWork, CancellationToken cancellationToken)
+    private async Task _TryRollbackAsync(IUnitOfWork unitOfWork, CancellationToken cancellationToken)
     {
         try
         {
             if (unitOfWork is not null)
-                return Policy.Handle<Exception>()
-                             .WaitAndRetryAsync(5, _ => TimeSpan.FromSeconds(3), (exception, timeSpan, context) => {})
-                             .ExecuteAsync(() => unitOfWork.RollbackAsync(cancellationToken));
+                await Policy.Handle<Exception>()
+                            .WaitAndRetryAsync(5, _ => TimeSpan.FromSeconds(3), (exception, timeSpan, context) => {})
+                            .ExecuteAsync(() => unitOfWork.RollbackAsync(cancellationToken));
         }
         catch (Exception e)
         {
             //fire&forget
             e.FileLoggerAsync(_hostEnvironment, _dateTime, cancellationToken: cancellationToken);
         }
-
-        return Task.CompletedTask;
     }
     
     private void _TryRequeueMessageAsDeadLetter(IModel channel, BasicDeliverEventArgs args, string service, 
@@ -735,17 +733,17 @@ public class InternalMessageBroker : IInternalMessageBroker
         }
     }
     
-    private Task _TryRequeueMessageAsDeadLetterAsync(IModel channel, BasicDeliverEventArgs args, string service,
+    private async Task _TryRequeueMessageAsDeadLetterAsync(IModel channel, BasicDeliverEventArgs args, string service,
         string action, CancellationToken cancellationToken
     )
     {
         try
         {
-            return Policy.Handle<Exception>()
-                         .WaitAndRetryAsync(5, _ => TimeSpan.FromSeconds(3), (exception, timeSpan, context) => {})
-                         .ExecuteAsync(() =>
-                             Task.Run(() => channel.BasicNack(args.DeliveryTag, false, false), cancellationToken)
-                         );
+            await Policy.Handle<Exception>()
+                        .WaitAndRetryAsync(5, _ => TimeSpan.FromSeconds(3), (exception, timeSpan, context) => {})
+                        .ExecuteAsync(() =>
+                            Task.Run(() => channel.BasicNack(args.DeliveryTag, false, false), cancellationToken)
+                        );
         }
         catch (Exception e)
         {
@@ -761,8 +759,6 @@ public class InternalMessageBroker : IInternalMessageBroker
                 service, action, cancellationToken
             );
         }
-
-        return Task.CompletedTask;
     }
     
     private void _TrySendAckMessage(IModel channel, BasicDeliverEventArgs args, string service, string action)
@@ -789,17 +785,17 @@ public class InternalMessageBroker : IInternalMessageBroker
         }
     }
     
-    private Task _TrySendAckMessageAsync(IModel channel, BasicDeliverEventArgs args, string service, string action,
+    private async Task _TrySendAckMessageAsync(IModel channel, BasicDeliverEventArgs args, string service, string action,
         CancellationToken cancellationToken
     )
     {
         try
         {
-            return Policy.Handle<Exception>()
-                         .WaitAndRetryAsync(5, _ => TimeSpan.FromSeconds(3), (exception, timeSpan, context) => {})
-                         .ExecuteAsync(() =>
-                             Task.Run(() => channel.BasicAck(args.DeliveryTag, false), cancellationToken)
-                         );
+            await Policy.Handle<Exception>()
+                        .WaitAndRetryAsync(5, _ => TimeSpan.FromSeconds(3), (exception, timeSpan, context) => {})
+                        .ExecuteAsync(() =>
+                            Task.Run(() => channel.BasicAck(args.DeliveryTag, false), cancellationToken)
+                        );
         }
         catch (Exception e)
         {
@@ -815,8 +811,6 @@ public class InternalMessageBroker : IInternalMessageBroker
                 service, action, cancellationToken
             );
         }
-
-        return Task.CompletedTask;
     }
     
     private (bool result, int countOfRetry) _IsMaxRetryMessage(BasicDeliverEventArgs args, WithMaxRetryAttribute maxRetryAttribute)
