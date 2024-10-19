@@ -345,6 +345,10 @@ public class InternalMessageBroker : IInternalMessageBroker
 
                     if (consumerEventCommand is null)
                     {
+                        unitOfWork = serviceProvider.GetRequiredService(_GetTypeOfCommandUnitOfWork()) as IUnitOfWork;
+                        
+                        unitOfWork.Transaction(transactionConfig.IsolationLevel);
+                        
                         #region IdempotentConsumerPattern
                     
                         var nowDateTime = DateTime.Now;
@@ -361,10 +365,6 @@ public class InternalMessageBroker : IInternalMessageBroker
 
                         #endregion
 
-                        unitOfWork = serviceProvider.GetRequiredService(_GetTypeOfCommandUnitOfWork()) as IUnitOfWork;
-                        
-                        unitOfWork.Transaction(transactionConfig.IsolationLevel);
-
                         var resultInvokeCommand =
                             commandBusHandlerTypeMethod.Invoke(commandBusHandler, new object[] { command });
 
@@ -374,7 +374,7 @@ public class InternalMessageBroker : IInternalMessageBroker
                             commandBusHandlerType is not null ? commandBusHandlerType.Name : NameOfAction
                         );
                     
-                        _PushSuccessNotification(connectionId?.ToString(), commandType.BaseType?.Name, 
+                        _PushSuccessNotification(serviceProvider, connectionId?.ToString(), commandType.BaseType?.Name, 
                             resultInvokeCommand, service, 
                             commandBusHandlerType is not null ? commandBusHandlerType.Name : NameOfAction
                         );
@@ -396,8 +396,8 @@ public class InternalMessageBroker : IInternalMessageBroker
                 Body    = new { }
             };
             
-            _PushValidationNotification(channel, args, unitOfWork, connectionId?.ToString(), payload, service, 
-                commandBusHandlerType is not null ? commandBusHandlerType.Name : NameOfAction
+            _PushValidationNotification(channel, args, serviceProvider, unitOfWork, connectionId?.ToString(), payload, 
+                service, commandBusHandlerType is not null ? commandBusHandlerType.Name : NameOfAction
             );
         }
         catch (UseCaseException e)
@@ -408,8 +408,8 @@ public class InternalMessageBroker : IInternalMessageBroker
                 Body    = new { }
             };
             
-            _PushValidationNotification(channel, args, unitOfWork, connectionId?.ToString(), payload, service, 
-                commandBusHandlerType is not null ? commandBusHandlerType.Name : NameOfAction
+            _PushValidationNotification(channel, args, serviceProvider, unitOfWork, connectionId?.ToString(), payload, 
+                service, commandBusHandlerType is not null ? commandBusHandlerType.Name : NameOfAction
             );
         }
         catch (Exception e)
@@ -576,6 +576,10 @@ public class InternalMessageBroker : IInternalMessageBroker
 
                     if (consumerEventCommand is null)
                     {
+                        unitOfWork = serviceProvider.GetRequiredService(_GetTypeOfCommandUnitOfWork()) as IUnitOfWork;
+                        
+                        await unitOfWork.TransactionAsync(transactionConfig.IsolationLevel, cancellationToken);
+                        
                         #region IdempotentConsumerPattern
                     
                         var nowDateTime = DateTime.Now;
@@ -592,22 +596,20 @@ public class InternalMessageBroker : IInternalMessageBroker
 
                         #endregion
 
-                        unitOfWork = serviceProvider.GetRequiredService(_GetTypeOfCommandUnitOfWork()) as IUnitOfWork;
-                        
-                        await unitOfWork.TransactionAsync(transactionConfig.IsolationLevel, cancellationToken);
-
                         var resultInvokeCommand =
                             (Task)commandBusHandlerTypeMethod.Invoke(commandBusHandler, new[] { command, cancellationToken});
 
                         await unitOfWork.CommitAsync(cancellationToken);
                     
-                        _CleanCache(commandBusHandlerTypeMethod, serviceProvider, service,
-                            commandBusHandlerType is not null ? commandBusHandlerType.Name : NameOfAction
+                        await _CleanCacheAsync(commandBusHandlerTypeMethod, serviceProvider, service,
+                            commandBusHandlerType is not null ? commandBusHandlerType.Name : NameOfAction,
+                            cancellationToken
                         );
                     
-                        _PushSuccessNotification(connectionId?.ToString(), commandType.BaseType?.Name,
+                        await _PushSuccessNotificationAsync(serviceProvider, connectionId?.ToString(), commandType.BaseType?.Name,
                             resultInvokeCommand, service, 
-                            commandBusHandlerType is not null ? commandBusHandlerType.Name : NameOfAction
+                            commandBusHandlerType is not null ? commandBusHandlerType.Name : NameOfAction,
+                            cancellationToken
                         );
                     }
                     
@@ -628,8 +630,8 @@ public class InternalMessageBroker : IInternalMessageBroker
                 Body    = new { }
             };
             
-            await _PushValidationNotificationAsync(channel, args, unitOfWork, connectionId?.ToString(), payload,
-                service, commandBusHandlerType is not null ? commandBusHandlerType.Name : NameOfAction,
+            await _PushValidationNotificationAsync(channel, args, serviceProvider, unitOfWork, connectionId?.ToString(), 
+                payload, service, commandBusHandlerType is not null ? commandBusHandlerType.Name : NameOfAction,
                 cancellationToken
             );
         }
@@ -641,8 +643,8 @@ public class InternalMessageBroker : IInternalMessageBroker
                 Body    = new { }
             };
             
-            await _PushValidationNotificationAsync(channel, args, unitOfWork, connectionId?.ToString(), payload,
-                service, commandBusHandlerType is not null ? commandBusHandlerType.Name : NameOfAction,
+            await _PushValidationNotificationAsync(channel, args, serviceProvider, unitOfWork, connectionId?.ToString(),
+                payload, service, commandBusHandlerType is not null ? commandBusHandlerType.Name : NameOfAction,
                 cancellationToken
             );
         }
@@ -879,14 +881,16 @@ public class InternalMessageBroker : IInternalMessageBroker
         }
     }
 
-    private void _PushSuccessNotification(string connectionId, string typeOfCommand, object result, string service, 
-        string action
+    private void _PushSuccessNotification(IServiceProvider serviceProvider, string connectionId, string typeOfCommand,
+        object result, string service, string action
     )
     {
-        var hubConnection =
-            new HubConnectionBuilder().WithUrl(
-                $"{_configuration.GetNotificationServiceHubUrl(_hostEnvironment)}/notification"
-            ).Build();
+        var notificationUrl = serviceProvider.GetRequiredService<IServiceDiscovery>()
+                                             .LoadAddressInMemoryAsync("NotificationService", default)
+                                             .GetAwaiter()
+                                             .GetResult();
+        
+        var hubConnection = new HubConnectionBuilder().WithUrl($"{notificationUrl}/notification").Build();
 
         try
         {
@@ -932,14 +936,74 @@ public class InternalMessageBroker : IInternalMessageBroker
         }
     }
     
-    private void _PushValidationNotification(IModel channel, BasicDeliverEventArgs args, IUnitOfWork unitOfWork, 
-        string connectionId, Payload payload, string service, string action
+    private async Task _PushSuccessNotificationAsync(IServiceProvider serviceProvider, string connectionId, string typeOfCommand,
+        object result, string service, string action, CancellationToken cancellationToken
+    )
+    {
+        var notificationUrl = await serviceProvider.GetRequiredService<IServiceDiscovery>()
+                                                   .LoadAddressInMemoryAsync("NotificationService", cancellationToken);
+        
+        var hubConnection = new HubConnectionBuilder().WithUrl($"{notificationUrl}/notification").Build();
+
+        try
+        {
+            var payload = new Payload { Body = result?.Serialize() };
+
+            payload.Code = typeOfCommand switch 
+            {
+                nameof(CreateAsyncCommand) => _configuration.GetSuccessCreateStatusCode(),
+                nameof(UpdateAsyncCommand) => _configuration.GetSuccessStatusCode()      ,
+                nameof(DeleteAsyncCommand) => _configuration.GetSuccessStatusCode()      ,
+                _ => throw new Exception("Type of command not found !")
+            };
+
+            payload.Message = typeOfCommand switch
+            {
+                nameof(CreateAsyncCommand) => _configuration.GetSuccessCreateMessage(),
+                nameof(UpdateAsyncCommand) => _configuration.GetSuccessUpdateMessage(),
+                nameof(DeleteAsyncCommand) => _configuration.GetSuccessDeleteMessage(),
+                _ => throw new Exception("Type of command not found !")
+            };
+
+            var notification = new NotificationMessage { ConnectionId = connectionId, Payload = payload };
+
+            await hubConnection.StartAsync();
+
+            await hubConnection.InvokeAsync("PushAsync", notification);
+        }
+        catch (Exception e)
+        {
+            //fire&forget
+            e.FileLoggerAsync(_hostEnvironment, _dateTime, cancellationToken);
+            
+            e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, 
+                NameOfService, NameOfAction
+            );
+            
+            //fire&forget
+            e.CentralExceptionLoggerAsync(_hostEnvironment, _globalUniqueIdGenerator, _externalMessageBroker, 
+                _dateTime, service, action, cancellationToken
+            );
+        }
+        finally
+        {
+            await hubConnection.DisposeAsync();
+        }
+    }
+    
+    private void _PushValidationNotification(IModel channel, BasicDeliverEventArgs args, 
+        IServiceProvider serviceProvider, IUnitOfWork unitOfWork, string connectionId, Payload payload, string service,
+        string action
     )
     {
         _TryRollback(unitOfWork);
-
-        var hubConnection =
-            new HubConnectionBuilder().WithUrl(_configuration.GetNotificationServiceHubUrl(_hostEnvironment)).Build();
+        
+        var notificationUrl = serviceProvider.GetRequiredService<IServiceDiscovery>()
+                                             .LoadAddressInMemoryAsync("NotificationService", default)
+                                             .GetAwaiter()
+                                             .GetResult();
+        
+        var hubConnection = new HubConnectionBuilder().WithUrl($"{notificationUrl}/notification").Build();
 
         try
         {
@@ -970,14 +1034,16 @@ public class InternalMessageBroker : IInternalMessageBroker
     }
     
     private async Task _PushValidationNotificationAsync(IModel channel, BasicDeliverEventArgs args,
-        IUnitOfWork unitOfWork, string connectionId, Payload payload, string service, string action, 
-        CancellationToken cancellationToken
+        IServiceProvider serviceProvider, IUnitOfWork unitOfWork, string connectionId, Payload payload, string service, 
+        string action, CancellationToken cancellationToken
     )
     {
         await _TryRollbackAsync(unitOfWork, cancellationToken);
 
-        var hubConnection =
-            new HubConnectionBuilder().WithUrl(_configuration.GetNotificationServiceHubUrl(_hostEnvironment)).Build();
+        var notificationUrl = await serviceProvider.GetRequiredService<IServiceDiscovery>()
+                                                   .LoadAddressInMemoryAsync("NotificationService", cancellationToken);
+        
+        var hubConnection = new HubConnectionBuilder().WithUrl($"{notificationUrl}/notification").Build();
 
         try
         {
@@ -1033,6 +1099,36 @@ public class InternalMessageBroker : IInternalMessageBroker
             
             e.CentralExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _externalMessageBroker, _dateTime, service, 
                 action
+            );
+        }
+    }
+    
+    private async Task _CleanCacheAsync(MethodInfo eventBusHandlerMethod, IServiceProvider serviceProvider, string service, 
+        string action, CancellationToken cancellationToken
+    )
+    {
+        try
+        {
+            if (eventBusHandlerMethod.GetCustomAttribute(typeof(WithCleanCacheAttribute)) is WithCleanCacheAttribute withCleanCacheAttribute)
+            {
+                var redisCache = serviceProvider.GetRequiredService<IInternalDistributedCache>();
+
+                foreach (var key in withCleanCacheAttribute.Keies.Split("|"))
+                    await redisCache.DeleteKeyAsync(key, cancellationToken);
+            }
+        }
+        catch (Exception e)
+        {
+            //fire&forget
+            e.FileLoggerAsync(_hostEnvironment, _dateTime, cancellationToken);
+            
+            e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, 
+                NameOfService, NameOfAction
+            );
+            
+            //fire&forget
+            e.CentralExceptionLoggerAsync(_hostEnvironment, _globalUniqueIdGenerator, _externalMessageBroker, _dateTime, service, 
+                action, cancellationToken
             );
         }
     }

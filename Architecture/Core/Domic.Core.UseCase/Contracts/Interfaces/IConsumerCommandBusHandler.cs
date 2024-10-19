@@ -31,6 +31,6 @@ public interface IConsumerCommandBusHandler<in TCommand, TResult> where TCommand
     /// <param name="message"></param>
     /// <param name="cancellationToken"></param>
     /// <exception cref="NotImplementedException"></exception>
-    public void AfterMaxRetryHandleAsync(TCommand message, CancellationToken cancellationToken) 
+    public Task AfterMaxRetryHandleAsync(TCommand message, CancellationToken cancellationToken) 
         => throw new NotImplementedException();
 }

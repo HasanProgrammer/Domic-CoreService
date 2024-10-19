@@ -31,6 +31,6 @@ public interface IConsumerMessageBusHandler<in TMessage> where TMessage : class
     /// <param name="message"></param>
     /// <param name="cancellationToken"></param>
     /// <exception cref="NotImplementedException"></exception>
-    public void AfterMaxRetryHandleAsync(TMessage message, CancellationToken cancellationToken) 
+    public Task AfterMaxRetryHandleAsync(TMessage message, CancellationToken cancellationToken) 
         => throw new NotImplementedException();
 }

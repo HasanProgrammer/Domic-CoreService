@@ -31,6 +31,6 @@ public interface IConsumerEventBusHandler<in TEvent> where TEvent : IDomainEvent
     /// <param name="event"></param>
     /// <param name="cancellationToken"></param>
     /// <exception cref="NotImplementedException"></exception>
-    public void AfterMaxRetryHandleAsync(TEvent @event, CancellationToken cancellationToken) 
+    public Task AfterMaxRetryHandleAsync(TEvent @event, CancellationToken cancellationToken) 
         => throw new NotImplementedException();
 }

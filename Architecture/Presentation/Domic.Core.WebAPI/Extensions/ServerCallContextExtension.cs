@@ -1,4 +1,6 @@
-﻿using Domic.Core.Common.ClassExtensions;
+﻿#pragma warning disable CS4014 // Because this call is not awaited, execution of the current method continues before the call is completed
+
+using Domic.Core.Common.ClassExtensions;
 using Domic.Core.Domain.Constants;
 using Domic.Core.Domain.Contracts.Interfaces;
 using Domic.Core.Domain.Entities;
@@ -108,19 +110,21 @@ public static class ServerCallContextExtension
                 Exchange     = Broker.Request_Exchange,
                 Route        = Broker.StateTracker_Request_Route
             };
-            
-            await Task.Run(() => externalMessageBroker.Publish<SystemRequest>(dto), cancellationToken);
+
+            await externalMessageBroker.PublishAsync<SystemRequest>(dto, cancellationToken);
         }
         catch (Exception e)
         {
-            e.FileLogger(hostEnvironment, dateTime);
+            //fire&forget
+            e.FileLoggerAsync(hostEnvironment, dateTime, cancellationToken);
             
             e.ElasticStackExceptionLogger(hostEnvironment, globalUniqueIdGenerator, dateTime, serviceName, 
                 context.Method
             );
             
-            e.CentralExceptionLogger(hostEnvironment, globalUniqueIdGenerator, externalMessageBroker, dateTime, serviceName, 
-                context.Method
+            //fire&forget
+            e.CentralExceptionLoggerAsync(hostEnvironment, globalUniqueIdGenerator, externalMessageBroker, dateTime, serviceName, 
+                context.Method, cancellationToken
             );
         }
     }
@@ -192,19 +196,23 @@ public static class ServerCallContextExtension
                 CreatedAt_EnglishDate = nowDateTime                 ,
                 CreatedAt_PersianDate = nowPersianDateTime
             };
-            
-            await Task.Run(() => externalEventStreamBroker.Publish<SystemRequest>("StateTracker", systemRequest), cancellationToken);
+
+            await externalEventStreamBroker.PublishAsync<SystemRequest>("StateTracker", systemRequest, 
+                cancellationToken: cancellationToken
+            );
         }
         catch (Exception e)
         {
-            e.FileLogger(hostEnvironment, dateTime);
+            //fire&forget
+            e.FileLoggerAsync(hostEnvironment, dateTime, cancellationToken);
             
             e.ElasticStackExceptionLogger(hostEnvironment, globalUniqueIdGenerator, dateTime, serviceName, 
                 context.Method
             );
             
-            e.CentralExceptionLoggerAsStream(hostEnvironment, globalUniqueIdGenerator, externalEventStreamBroker, dateTime,
-                serviceName, context.Method
+            //fire&forget
+            e.CentralExceptionLoggerAsStreamAsync(hostEnvironment, globalUniqueIdGenerator, externalEventStreamBroker, dateTime,
+                serviceName, context.Method, cancellationToken
             );
         }
     }

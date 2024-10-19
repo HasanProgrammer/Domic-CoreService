@@ -42,5 +42,5 @@ public class ExternalDistributedCache : IExternalDistributedCache
     public bool DeleteKey(string key) => GetCacheValue(key) is not null && _redisContext.KeyDelete(key);
 
     public async Task<bool> DeleteKeyAsync(string key, CancellationToken cancellationToken) 
-        => await GetCacheValueAsync(key, cancellationToken) is not null && _redisContext.KeyDelete(key);
+        => await GetCacheValueAsync(key, cancellationToken) is not null && await _redisContext.KeyDeleteAsync(key);
 }
