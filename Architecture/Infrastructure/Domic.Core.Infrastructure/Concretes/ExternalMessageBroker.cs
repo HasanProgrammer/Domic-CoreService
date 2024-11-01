@@ -294,50 +294,45 @@ public class ExternalMessageBroker : IExternalMessageBroker
             var commandUnitOfWork =
                 serviceScope.ServiceProvider.GetRequiredService(_GetTypeOfCommandUnitOfWork()) as ICoreCommandUnitOfWork;
 
-            var redisCache = serviceScope.ServiceProvider.GetRequiredService<IInternalDistributedCache>();
+            var distributedCache = serviceScope.ServiceProvider.GetRequiredService<IInternalDistributedCache>();
             var eventCommandRepository = serviceScope.ServiceProvider.GetRequiredService<IEventCommandRepository>();
             
+            var eventLocks = new List<string>();
+
             try
             {
                 using var channel = _connection.CreateModel();
-                
-                var eventLocks = new List<string>();
-                
+
                 commandUnitOfWork.Transaction();
-                
+
                 var events =
                     eventCommandRepository.FindAllWithOrderingAsync(Order.Date, cancellationToken: cancellationToken)
                                           .GetAwaiter()
                                           .GetResult();
-                
+
                 foreach (Event targetEvent in events)
                 {
                     #region DistributedLock
 
                     var lockEventKey = $"LockEventId-{targetEvent.Id}";
-                    
-                    //ReleaseDistributedLock
-                    redisCache.DeleteKey(lockEventKey);
-                    
-                    //AcquireDistributedLock
-                    var lockEventSuccessfully = redisCache.SetCacheValue(
-                        new KeyValuePair<string, string>(lockEventKey, targetEvent.Id), CacheSetType.NotExists
-                    );
+
+                    var lockEventSuccessfully =
+                        _TryAcquireDistributedLock(distributedCache, lockEventKey, targetEvent.Id);
 
                     #endregion
 
                     if (lockEventSuccessfully)
                     {
                         eventLocks.Add(lockEventKey);
-                        
+
                         if (targetEvent.IsActive == IsActive.Active)
                         {
                             _EventPublishHandler(channel, targetEvent);
 
-                            var nowDateTime        = DateTime.Now;
+                            var nowDateTime = DateTime.Now;
                             var nowPersianDateTime = _dateTime.ToPersianShortDate(nowDateTime);
 
-                            targetEvent.IsActive              = IsActive.InActive;
+                            targetEvent.IsActive = IsActive.InActive;
                             targetEvent.UpdatedAt_EnglishDate = nowDateTime;
                             targetEvent.UpdatedAt_PersianDate = nowPersianDateTime;
 
@@ -349,23 +344,24 @@ public class ExternalMessageBroker : IExternalMessageBroker
                 }
 
                 commandUnitOfWork.Commit();
-                
-                //ReleaseDistributedLocks
-                eventLocks.ForEach(@event => redisCache.DeleteKey(@event));
             }
             catch (Exception e)
             {
                 e.FileLogger(_hostEnvironment, _dateTime);
-                
-                e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, 
+
+                e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime,
                     NameOfService, NameOfAction
                 );
-                
-                e.CentralExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, this, _dateTime, NameOfService, 
+
+                e.CentralExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, this, _dateTime, NameOfService,
                     NameOfAction
                 );
 
                 _TryRollback(commandUnitOfWork);
+            }
+            finally
+            {
+                _TryReleaseDistributedLocks(distributedCache, eventLocks);
             }
         }
     }
@@ -381,14 +377,14 @@ public class ExternalMessageBroker : IExternalMessageBroker
         var commandUnitOfWork =
             serviceScope.ServiceProvider.GetRequiredService(_GetTypeOfCommandUnitOfWork()) as ICoreCommandUnitOfWork;
 
-        var redisCache = serviceScope.ServiceProvider.GetRequiredService<IInternalDistributedCache>();
+        var distributedCache = serviceScope.ServiceProvider.GetRequiredService<IInternalDistributedCache>();
         var eventCommandRepository = serviceScope.ServiceProvider.GetRequiredService<IEventCommandRepository>();
+        
+        var eventLocks = new List<string>();
         
         try
         {
             using var channel = _connection.CreateModel();
-            
-            var eventLocks = new List<string>();
             
             await commandUnitOfWork.TransactionAsync(cancellationToken: cancellationToken);
 
@@ -401,14 +397,10 @@ public class ExternalMessageBroker : IExternalMessageBroker
 
                 var lockEventKey = $"LockEventId-{targetEvent.Id}";
                 
-                //ReleaseDistributedLock
-                await redisCache.DeleteKeyAsync(lockEventKey, cancellationToken);
-                
-                //AcquireDistributedLock
-                var lockEventSuccessfully = await redisCache.SetCacheValueAsync(
-                    new KeyValuePair<string, string>(lockEventKey, targetEvent.Id), CacheSetType.NotExists, 
-                    cancellationToken: cancellationToken
-                );
+                var lockEventSuccessfully =
+                    await _TryAcquireDistributedLockAsync(distributedCache, lockEventKey, targetEvent.Id,
+                        cancellationToken
+                    );
 
                 #endregion
 
@@ -435,10 +427,6 @@ public class ExternalMessageBroker : IExternalMessageBroker
             }
 
             await commandUnitOfWork.CommitAsync(cancellationToken);
-            
-            //ReleaseDistributedLocks
-            foreach (var eventlock in eventLocks)
-                await redisCache.DeleteKeyAsync(eventlock, cancellationToken);
         }
         catch (Exception e)
         {
@@ -458,6 +446,8 @@ public class ExternalMessageBroker : IExternalMessageBroker
         }
         finally
         {
+            await _TryReleaseDistributedLocksAsync(distributedCache, eventLocks, cancellationToken);
+            
             _asyncLock.Release();
         }
     }
@@ -1406,6 +1396,136 @@ public class ExternalMessageBroker : IExternalMessageBroker
             
             e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, 
                 NameOfService, NameOfAction
+            );
+        }
+    }
+
+    private bool _TryAcquireDistributedLock(IInternalDistributedCache distributedCache, string lockEventKey, 
+        string lockEventValue
+    )
+    {
+        bool result = false;
+
+        try
+        {
+            Policy.Handle<Exception>()
+                  .WaitAndRetry(5, _ => TimeSpan.FromSeconds(3), (exception, timeSpan, context) => { })
+                  .Execute(() => {
+                      
+                      result = distributedCache.SetCacheValue(
+                          new KeyValuePair<string, string>(lockEventKey, lockEventValue),
+                          TimeSpan.FromMinutes(3),
+                          CacheSetType.NotExists
+                      );
+                      
+                  });
+        }
+        catch (Exception e)
+        {
+            e.FileLogger(_hostEnvironment, _dateTime);
+
+            e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime,
+                NameOfService, NameOfAction
+            );
+
+            e.CentralExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, this, _dateTime, NameOfService,
+                NameOfAction
+            );
+        }
+
+        return result;
+    }
+
+    private void _TryReleaseDistributedLocks(IInternalDistributedCache distributedCache, List<string> locks)
+    {
+        try
+        {
+            Policy.Handle<Exception>()
+                  .WaitAndRetry(5, _ => TimeSpan.FromSeconds(3), (exception, timeSpan, context) => {})
+                  .Execute(() =>
+                      locks.ForEach(@lock => distributedCache.DeleteKey(@lock))
+                  );
+        }
+        catch (Exception e)
+        {
+            e.FileLogger(_hostEnvironment, _dateTime);
+
+            e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime,
+                NameOfService, NameOfAction
+            );
+
+            e.CentralExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, this, _dateTime, NameOfService,
+                NameOfAction
+            );
+        }
+    }
+    
+    private async Task<bool> _TryAcquireDistributedLockAsync(IInternalDistributedCache distributedCache, string lockEventKey, 
+        string lockEventValue, CancellationToken cancellationToken
+    )
+    {
+        bool result = false;
+
+        try
+        {
+            await Policy.Handle<Exception>()
+                        .WaitAndRetryAsync(5, _ => TimeSpan.FromSeconds(3), (exception, timeSpan, context) => { })
+                        .ExecuteAsync(async () => {
+                            
+                            result = await distributedCache.SetCacheValueAsync(
+                                new KeyValuePair<string, string>(lockEventKey, lockEventValue),
+                                TimeSpan.FromMinutes(3),
+                                CacheSetType.NotExists,
+                                cancellationToken
+                            );
+                            
+                        });
+        }
+        catch (Exception e)
+        {
+            //fire&forget
+            e.FileLoggerAsync(_hostEnvironment, _dateTime, cancellationToken);
+
+            e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime,
+                NameOfService, NameOfAction
+            );
+
+            //fire&forget
+            e.CentralExceptionLoggerAsync(_hostEnvironment, _globalUniqueIdGenerator, this, _dateTime, NameOfService,
+                NameOfAction, cancellationToken
+            );
+        }
+
+        return result;
+    }
+
+    private async Task _TryReleaseDistributedLocksAsync(IInternalDistributedCache distributedCache, List<string> locks,
+        CancellationToken cancellationToken
+    )
+    {
+        try
+        {
+            await Policy.Handle<Exception>()
+                        .WaitAndRetryAsync(5, _ => TimeSpan.FromSeconds(3), (exception, timeSpan, context) => {})
+                        .ExecuteAsync(async () => {
+                            
+                            foreach (var @lock in locks)
+                                await distributedCache.DeleteKeyAsync(@lock, cancellationToken);
+                            
+                        });
+        }
+        catch (Exception e)
+        {
+            //fire&forget
+            e.FileLoggerAsync(_hostEnvironment, _dateTime, cancellationToken);
+
+            e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime,
+                NameOfService, NameOfAction
+            );
+
+            //fire&forget
+            e.CentralExceptionLoggerAsync(_hostEnvironment, _globalUniqueIdGenerator, this, _dateTime, NameOfService,
+                NameOfAction, cancellationToken
             );
         }
     }
