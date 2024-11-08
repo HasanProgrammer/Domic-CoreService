@@ -47,6 +47,8 @@ public static class WebApplicationBuilderExtension
         
         builder.Services.AddSingleton(typeof(IGlobalUniqueIdGenerator), typeof(GlobalUniqueIdGenerator));
         
+        builder.Services.AddScoped(typeof(IIdentityUser), typeof(IdentityUser));
+        
         builder.Services.AddScoped(typeof(ILogger), typeof(Logger));
         
         builder.Services.AddScoped(typeof(IStreamLogger), typeof(StreamLogger));

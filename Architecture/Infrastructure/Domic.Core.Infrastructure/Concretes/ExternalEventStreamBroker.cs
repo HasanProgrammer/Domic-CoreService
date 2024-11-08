@@ -210,13 +210,15 @@ public class ExternalEventStreamBroker(
 
             if (topicThrottle.Active)
             {
-                if (consumerTasks.Count == topicThrottle.Limitation && !consumerTasks.All(task => task.IsCompleted))
+                var limitationCondition = consumerTasks.Count == topicThrottle.Limitation;
+                
+                if (limitationCondition && !consumerTasks.All(task => task.IsCompleted))
                 {
                     Thread.Sleep(50); //busy waiting
                     continue;
                 }
             
-                if(consumerTasks.All(task => task.IsCompleted))
+                if(limitationCondition && consumerTasks.All(task => task.IsCompleted))
                     consumerTasks.RemoveAll(task => task.IsCompleted);
             }
 
@@ -273,15 +275,17 @@ public class ExternalEventStreamBroker(
         while (!cancellationToken.IsCancellationRequested)
         {
             #region ThrottleConditions
+            
+            var limitationCondition = consumerTasks.Count == topicThrottle.Limitation;
 
-            if (consumerTasks.Count == topicThrottle.Limitation && !consumerTasks.All(task => task.IsCompleted))
+            if (limitationCondition && !consumerTasks.All(task => task.IsCompleted))
             {
                 Thread.Sleep(50); //busy waiting
                 continue;
             }
 
             //reset
-            if (consumerTasks.All(task => task.IsCompleted))
+            if (limitationCondition && consumerTasks.All(task => task.IsCompleted))
             {
                 consumerTasks.RemoveAll(task => task.IsCompleted);
                 Thread.Sleep(5000); //5s
@@ -585,13 +589,15 @@ public class ExternalEventStreamBroker(
 
             if (topicThrottle.Active)
             {
-                if (consumerTasks.Count == topicThrottle.Limitation && !consumerTasks.All(task => task.IsCompleted))
+                var limitationCondition = consumerTasks.Count == topicThrottle.Limitation;
+                
+                if (limitationCondition && !consumerTasks.All(task => task.IsCompleted))
                 {
                     Thread.Sleep(50); //busy waiting
                     continue;
                 }
             
-                if(consumerTasks.All(task => task.IsCompleted))
+                if(limitationCondition && consumerTasks.All(task => task.IsCompleted))
                     consumerTasks.RemoveAll(task => task.IsCompleted);
             }
 
@@ -649,14 +655,16 @@ public class ExternalEventStreamBroker(
         {
             #region ThrottleConditions
 
-            if (consumerTasks.Count == topicThrottle.Limitation && !consumerTasks.All(task => task.IsCompleted))
+            var limitationCondition = consumerTasks.Count == topicThrottle.Limitation;
+            
+            if (limitationCondition && !consumerTasks.All(task => task.IsCompleted))
             {
                 Thread.Sleep(50); //busy waiting
                 continue;
             }
 
             //reset
-            if (consumerTasks.All(task => task.IsCompleted))
+            if (limitationCondition && consumerTasks.All(task => task.IsCompleted))
             {
                 consumerTasks.RemoveAll(task => task.IsCompleted);
                 Thread.Sleep(5000); //5s
