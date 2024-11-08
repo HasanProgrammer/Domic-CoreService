@@ -6,6 +6,7 @@ using Grpc.Core;
 using Grpc.Core.Interceptors;
 using Domic.Core.Common.ClassExtensions;
 using Domic.Core.Common.ClassModels;
+using Domic.Core.Infrastructure.Concretes;
 using Domic.Core.Infrastructure.Extensions;
 using Domic.Core.UseCase.Contracts.Interfaces;
 using Domic.Core.UseCase.Exceptions;
@@ -68,6 +69,11 @@ public class FullExceptionHandlerInterceptor : Interceptor
         
         try
         {
+            var identityUser =
+                context.GetHttpContext().RequestServices.GetRequiredKeyedService<IIdentityUser>("Http2") as Http2IdentityUser;
+            
+            identityUser.SetAuthToken(context.GetHttpContext().GetTokenOfGrpcHeader());
+            
             if(_iCommandUnitOfWorkType is not null)
                 _coreCommandUnitOfWork =
                     context.GetHttpContext()

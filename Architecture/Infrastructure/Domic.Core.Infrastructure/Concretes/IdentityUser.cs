@@ -3,7 +3,7 @@ using Domic.Core.Infrastructure.Extensions;
 using Domic.Core.UseCase.Contracts.Interfaces;
 using Microsoft.AspNetCore.Http;
 
-namespace Domic.Core.Infrastructure;
+namespace Domic.Core.Infrastructure.Concretes;
 
 public class IdentityUser : IIdentityUser
 {
