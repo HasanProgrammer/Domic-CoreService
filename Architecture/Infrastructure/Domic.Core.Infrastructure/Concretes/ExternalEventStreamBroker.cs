@@ -748,11 +748,11 @@ public class ExternalEventStreamBroker(
                     ).GetValue(payload);
     
                 //todo: should be used [CancelationToken] from this method ( _MessageOfQueueHandle )
-                var consumerEventQuery = consumerEventQueryRepository.FindByIdAsync(messageId, default).GetAwaiter().GetResult();
+                var consumerEvent = consumerEventQueryRepository.FindByIdAsync(messageId, default).GetAwaiter().GetResult();
 
-                if (consumerEventQuery is null)
+                if (consumerEvent is null)
                 {
-                    unitOfWork = serviceProvider.GetRequiredService(_GetTypeOfUnitOfWork(transactionConfig.Type)) as IUnitOfWork;
+                    unitOfWork = serviceProvider.GetRequiredService(_GetTypeOfUnitOfWork(TransactionType.Query)) as IUnitOfWork;
 
                     unitOfWork.Transaction(transactionConfig.IsolationLevel);
                      
@@ -760,7 +760,7 @@ public class ExternalEventStreamBroker(
     
                     var nowDateTime = DateTime.Now;
 
-                    consumerEventQuery = new ConsumerEventQuery {
+                    consumerEvent = new ConsumerEventQuery {
                         Id = messageId.ToString(),
                         Type = consumeResult.Message.Key,
                         CountOfRetry = 0,
@@ -768,7 +768,7 @@ public class ExternalEventStreamBroker(
                         CreatedAt_PersianDate = dateTime.ToPersianShortDate(nowDateTime)
                     };
 
-                    consumerEventQueryRepository.Add(consumerEventQuery);
+                    consumerEventQueryRepository.Add(consumerEvent);
 
                     #endregion
 
@@ -873,12 +873,12 @@ public class ExternalEventStreamBroker(
                         ).GetValue(payload);
         
                     //todo: should be used [CancelationToken] from this method ( _MessageOfQueueHandle )
-                    var consumerEventQuery =
+                    var consumerEvent =
                         consumerEventQueryRepository.FindByIdAsync(messageId, default).GetAwaiter().GetResult();
 
-                    if (consumerEventQuery is null)
+                    if (consumerEvent is null)
                     {
-                        unitOfWork = serviceProvider.GetRequiredService(_GetTypeOfUnitOfWork(transactionConfig.Type)) as IUnitOfWork;
+                        unitOfWork = serviceProvider.GetRequiredService(_GetTypeOfUnitOfWork(TransactionType.Query)) as IUnitOfWork;
 
                         unitOfWork.Transaction(transactionConfig.IsolationLevel);
                          
@@ -886,7 +886,7 @@ public class ExternalEventStreamBroker(
         
                         var nowDateTime = DateTime.Now;
 
-                        consumerEventQuery = new ConsumerEventQuery {
+                        consumerEvent = new ConsumerEventQuery {
                             Id = messageId.ToString(),
                             Type = consumeResult.Message.Key,
                             CountOfRetry = countOfRetryValue,
@@ -894,7 +894,7 @@ public class ExternalEventStreamBroker(
                             CreatedAt_PersianDate = dateTime.ToPersianShortDate(nowDateTime)
                         };
 
-                        consumerEventQueryRepository.Add(consumerEventQuery);
+                        consumerEventQueryRepository.Add(consumerEvent);
 
                         #endregion
 
@@ -980,11 +980,11 @@ public class ExternalEventStreamBroker(
                         BindingFlags.Instance | BindingFlags.Public | BindingFlags.DeclaredOnly
                     ).GetValue(payload);
     
-                var consumerEventQuery = await consumerEventQueryRepository.FindByIdAsync(messageId, cancellationToken);
+                var consumerEvent = await consumerEventQueryRepository.FindByIdAsync(messageId, cancellationToken);
 
-                if (consumerEventQuery is null)
+                if (consumerEvent is null)
                 {
-                    unitOfWork = serviceProvider.GetRequiredService(_GetTypeOfUnitOfWork(transactionConfig.Type)) as IUnitOfWork;
+                    unitOfWork = serviceProvider.GetRequiredService(_GetTypeOfUnitOfWork(TransactionType.Query)) as IUnitOfWork;
 
                     await unitOfWork.TransactionAsync(transactionConfig.IsolationLevel, cancellationToken);
                      
@@ -992,7 +992,7 @@ public class ExternalEventStreamBroker(
     
                     var nowDateTime = DateTime.Now;
 
-                    consumerEventQuery = new ConsumerEventQuery {
+                    consumerEvent = new ConsumerEventQuery {
                         Id = messageId.ToString(),
                         Type = consumeResult.Message.Key,
                         CountOfRetry = 0,
@@ -1000,7 +1000,7 @@ public class ExternalEventStreamBroker(
                         CreatedAt_PersianDate = dateTime.ToPersianShortDate(nowDateTime)
                     };
 
-                    consumerEventQueryRepository.Add(consumerEventQuery);
+                    consumerEventQueryRepository.Add(consumerEvent);
 
                     #endregion
 
@@ -1108,11 +1108,11 @@ public class ExternalEventStreamBroker(
                             BindingFlags.Instance | BindingFlags.Public | BindingFlags.DeclaredOnly
                         ).GetValue(payload);
         
-                    var consumerEventQuery = await consumerEventQueryRepository.FindByIdAsync(messageId, cancellationToken);
+                    var consumerEvent = await consumerEventQueryRepository.FindByIdAsync(messageId, cancellationToken);
 
-                    if (consumerEventQuery is null)
+                    if (consumerEvent is null)
                     {
-                        unitOfWork = serviceProvider.GetRequiredService(_GetTypeOfUnitOfWork(transactionConfig.Type)) as IUnitOfWork;
+                        unitOfWork = serviceProvider.GetRequiredService(_GetTypeOfUnitOfWork(TransactionType.Query)) as IUnitOfWork;
 
                         await unitOfWork.TransactionAsync(transactionConfig.IsolationLevel, cancellationToken);
                          
@@ -1120,7 +1120,7 @@ public class ExternalEventStreamBroker(
         
                         var nowDateTime = DateTime.Now;
 
-                        consumerEventQuery = new ConsumerEventQuery {
+                        consumerEvent = new ConsumerEventQuery {
                             Id = messageId.ToString(),
                             Type = consumeResult.Message.Key,
                             CountOfRetry = countOfRetryValue,
@@ -1128,7 +1128,7 @@ public class ExternalEventStreamBroker(
                             CreatedAt_PersianDate = dateTime.ToPersianShortDate(nowDateTime)
                         };
 
-                        consumerEventQueryRepository.Add(consumerEventQuery);
+                        consumerEventQueryRepository.Add(consumerEvent);
 
                         #endregion
 
@@ -1276,36 +1276,73 @@ public class ExternalEventStreamBroker(
                 if(transactionConfig is null)
                     throw new Exception("Must be used transaction config attribute!");
 
-                var consumerEventQueryRepository = serviceProvider.GetRequiredService<IConsumerEventQueryRepository>();
-    
-                //todo: should be used [CancelationToken] from this method ( _MessageOfQueueHandle )
-                var consumerEventQuery = consumerEventQueryRepository.FindByIdAsync(@event.Id, default).GetAwaiter().GetResult();
-
-                if (consumerEventQuery is null)
+                if (transactionConfig.Type == TransactionType.Query)
                 {
-                    unitOfWork = serviceProvider.GetRequiredService(_GetTypeOfUnitOfWork(transactionConfig.Type)) as IUnitOfWork;
-
-                    unitOfWork.Transaction(transactionConfig.IsolationLevel);
-                     
-                    #region IdempotentConsumerPattern
+                    var consumerEventQueryRepository = serviceProvider.GetRequiredService<IConsumerEventQueryRepository>();
     
-                    var nowDateTime = DateTime.Now;
+                    //todo: should be used [CancelationToken] from this method ( _MessageOfQueueHandle )
+                    var consumerEvent = consumerEventQueryRepository.FindByIdAsync(@event.Id, default).GetAwaiter().GetResult();
 
-                    consumerEventQuery = new ConsumerEventQuery {
-                        Id = @event.Id,
-                        Type = consumeResult.Message.Key,
-                        CountOfRetry = 0,
-                        CreatedAt_EnglishDate = nowDateTime,
-                        CreatedAt_PersianDate = dateTime.ToPersianShortDate(nowDateTime)
-                    };
+                    if (consumerEvent is null)
+                    {
+                        unitOfWork = serviceProvider.GetRequiredService(_GetTypeOfUnitOfWork(TransactionType.Query)) as IUnitOfWork;
 
-                    consumerEventQueryRepository.Add(consumerEventQuery);
+                        unitOfWork.Transaction(transactionConfig.IsolationLevel);
+                     
+                        #region IdempotentConsumerPattern
+    
+                        var nowDateTime = DateTime.Now;
 
-                    #endregion
+                        consumerEvent = new ConsumerEventQuery {
+                            Id = @event.Id,
+                            Type = consumeResult.Message.Key,
+                            CountOfRetry = 0,
+                            CreatedAt_EnglishDate = nowDateTime,
+                            CreatedAt_PersianDate = dateTime.ToPersianShortDate(nowDateTime)
+                        };
 
-                    eventStreamHandlerMethod.Invoke(eventStreamHandler, new[] { payload });
+                        consumerEventQueryRepository.Add(consumerEvent);
 
-                    unitOfWork.Commit();
+                        #endregion
+
+                        eventStreamHandlerMethod.Invoke(eventStreamHandler, new[] { payload });
+
+                        unitOfWork.Commit();
+                    }
+                }
+                else if (transactionConfig.Type == TransactionType.Command)
+                {
+                    var consumerEventCommandRepository = serviceProvider.GetRequiredService<IConsumerEventCommandRepository>();
+    
+                    //todo: should be used [CancelationToken] from this method ( _MessageOfQueueHandle )
+                    var consumerEvent = consumerEventCommandRepository.FindByIdAsync(@event.Id, default).GetAwaiter().GetResult();
+
+                    if (consumerEvent is null)
+                    {
+                        unitOfWork = serviceProvider.GetRequiredService(_GetTypeOfUnitOfWork(TransactionType.Command)) as IUnitOfWork;
+
+                        unitOfWork.Transaction(transactionConfig.IsolationLevel);
+                     
+                        #region IdempotentConsumerPattern
+    
+                        var nowDateTime = DateTime.Now;
+
+                        consumerEvent = new ConsumerEvent {
+                            Id = @event.Id,
+                            Type = consumeResult.Message.Key,
+                            CountOfRetry = 0,
+                            CreatedAt_EnglishDate = nowDateTime,
+                            CreatedAt_PersianDate = dateTime.ToPersianShortDate(nowDateTime)
+                        };
+
+                        consumerEventCommandRepository.Add(consumerEvent);
+
+                        #endregion
+
+                        eventStreamHandlerMethod.Invoke(eventStreamHandler, new[] { payload });
+
+                        unitOfWork.Commit();
+                    }
                 }
             }
             
@@ -1398,36 +1435,73 @@ public class ExternalEventStreamBroker(
                     if(transactionConfig is null)
                         throw new Exception("Must be used transaction config attribute!");
 
-                    var consumerEventQueryRepository = serviceProvider.GetRequiredService<IConsumerEventQueryRepository>();
-    
-                    //todo: should be used [CancelationToken] from this method ( _MessageOfQueueHandle )
-                    var consumerEventQuery = consumerEventQueryRepository.FindByIdAsync(@event.Id, default).GetAwaiter().GetResult();
-
-                    if (consumerEventQuery is null)
+                    if (transactionConfig.Type == TransactionType.Query)
                     {
-                        unitOfWork = serviceProvider.GetRequiredService(_GetTypeOfUnitOfWork(transactionConfig.Type)) as IUnitOfWork;
-
-                        unitOfWork.Transaction(transactionConfig.IsolationLevel);
-                     
-                        #region IdempotentConsumerPattern
+                        var consumerEventQueryRepository = serviceProvider.GetRequiredService<IConsumerEventQueryRepository>();
     
-                        var nowDateTime = DateTime.Now;
+                        //todo: should be used [CancelationToken] from this method ( _MessageOfQueueHandle )
+                        var consumerEvent = consumerEventQueryRepository.FindByIdAsync(@event.Id, default).GetAwaiter().GetResult();
 
-                        consumerEventQuery = new ConsumerEventQuery {
-                            Id = @event.Id,
-                            Type = consumeResult.Message.Key,
-                            CountOfRetry = 0,
-                            CreatedAt_EnglishDate = nowDateTime,
-                            CreatedAt_PersianDate = dateTime.ToPersianShortDate(nowDateTime)
-                        };
+                        if (consumerEvent is null)
+                        {
+                            unitOfWork = serviceProvider.GetRequiredService(_GetTypeOfUnitOfWork(TransactionType.Query)) as IUnitOfWork;
 
-                        consumerEventQueryRepository.Add(consumerEventQuery);
+                            unitOfWork.Transaction(transactionConfig.IsolationLevel);
+                     
+                            #region IdempotentConsumerPattern
+    
+                            var nowDateTime = DateTime.Now;
 
-                        #endregion
+                            consumerEvent = new ConsumerEventQuery {
+                                Id = @event.Id,
+                                Type = consumeResult.Message.Key,
+                                CountOfRetry = 0,
+                                CreatedAt_EnglishDate = nowDateTime,
+                                CreatedAt_PersianDate = dateTime.ToPersianShortDate(nowDateTime)
+                            };
 
-                        eventStreamHandlerMethod.Invoke(eventStreamHandler, new[] { payload });
+                            consumerEventQueryRepository.Add(consumerEvent);
 
-                        unitOfWork.Commit();
+                            #endregion
+
+                            eventStreamHandlerMethod.Invoke(eventStreamHandler, new[] { payload });
+
+                            unitOfWork.Commit();
+                        }
+                    }
+                    else if (transactionConfig.Type == TransactionType.Command)
+                    {
+                        var consumerEventCommandRepository = serviceProvider.GetRequiredService<IConsumerEventCommandRepository>();
+    
+                        //todo: should be used [CancelationToken] from this method ( _MessageOfQueueHandle )
+                        var consumerEvent = consumerEventCommandRepository.FindByIdAsync(@event.Id, default).GetAwaiter().GetResult();
+
+                        if (consumerEvent is null)
+                        {
+                            unitOfWork = serviceProvider.GetRequiredService(_GetTypeOfUnitOfWork(TransactionType.Command)) as IUnitOfWork;
+
+                            unitOfWork.Transaction(transactionConfig.IsolationLevel);
+                     
+                            #region IdempotentConsumerPattern
+    
+                            var nowDateTime = DateTime.Now;
+
+                            consumerEvent = new ConsumerEvent {
+                                Id = @event.Id,
+                                Type = consumeResult.Message.Key,
+                                CountOfRetry = 0,
+                                CreatedAt_EnglishDate = nowDateTime,
+                                CreatedAt_PersianDate = dateTime.ToPersianShortDate(nowDateTime)
+                            };
+
+                            consumerEventCommandRepository.Add(consumerEvent);
+
+                            #endregion
+
+                            eventStreamHandlerMethod.Invoke(eventStreamHandler, new[] { payload });
+
+                            unitOfWork.Commit();
+                        }
                     }
                 }
             }
@@ -1502,35 +1576,71 @@ public class ExternalEventStreamBroker(
                 if(transactionConfig is null)
                     throw new Exception("Must be used transaction config attribute!");
 
-                var consumerEventQueryRepository = serviceProvider.GetRequiredService<IConsumerEventQueryRepository>();
-    
-                var consumerEventQuery = await consumerEventQueryRepository.FindByIdAsync(@event.Id, cancellationToken);
-
-                if (consumerEventQuery is null)
+                if (transactionConfig.Type == TransactionType.Query)
                 {
-                    unitOfWork = serviceProvider.GetRequiredService(_GetTypeOfUnitOfWork(transactionConfig.Type)) as IUnitOfWork;
-
-                    await unitOfWork.TransactionAsync(transactionConfig.IsolationLevel, cancellationToken);
-                     
-                    #region IdempotentConsumerPattern
+                    var consumerEventQueryRepository = serviceProvider.GetRequiredService<IConsumerEventQueryRepository>();
     
-                    var nowDateTime = DateTime.Now;
+                    var consumerEvent = await consumerEventQueryRepository.FindByIdAsync(@event.Id, cancellationToken);
 
-                    consumerEventQuery = new ConsumerEventQuery {
-                        Id = @event.Id,
-                        Type = consumeResult.Message.Key,
-                        CountOfRetry = 0,
-                        CreatedAt_EnglishDate = nowDateTime,
-                        CreatedAt_PersianDate = dateTime.ToPersianShortDate(nowDateTime)
-                    };
+                    if (consumerEvent is null)
+                    {
+                        unitOfWork = serviceProvider.GetRequiredService(_GetTypeOfUnitOfWork(TransactionType.Query)) as IUnitOfWork;
 
-                    consumerEventQueryRepository.Add(consumerEventQuery);
+                        await unitOfWork.TransactionAsync(transactionConfig.IsolationLevel, cancellationToken);
+                     
+                        #region IdempotentConsumerPattern
+    
+                        var nowDateTime = DateTime.Now;
 
-                    #endregion
+                        consumerEvent = new ConsumerEventQuery {
+                            Id = @event.Id,
+                            Type = consumeResult.Message.Key,
+                            CountOfRetry = 0,
+                            CreatedAt_EnglishDate = nowDateTime,
+                            CreatedAt_PersianDate = dateTime.ToPersianShortDate(nowDateTime)
+                        };
 
-                    await (Task)eventStreamHandlerMethod.Invoke(eventStreamHandler, new[] { payload, cancellationToken });
+                        consumerEventQueryRepository.Add(consumerEvent);
 
-                    await unitOfWork.CommitAsync(cancellationToken);
+                        #endregion
+
+                        await (Task)eventStreamHandlerMethod.Invoke(eventStreamHandler, new[] { payload, cancellationToken });
+
+                        await unitOfWork.CommitAsync(cancellationToken);
+                    }
+                }
+                else if(transactionConfig.Type == TransactionType.Command)
+                {
+                    var consumerEventCommandRepository = serviceProvider.GetRequiredService<IConsumerEventCommandRepository>();
+    
+                    var consumerEvent = await consumerEventCommandRepository.FindByIdAsync(@event.Id, cancellationToken);
+
+                    if (consumerEvent is null)
+                    {
+                        unitOfWork = serviceProvider.GetRequiredService(_GetTypeOfUnitOfWork(TransactionType.Command)) as IUnitOfWork;
+
+                        await unitOfWork.TransactionAsync(transactionConfig.IsolationLevel, cancellationToken);
+                     
+                        #region IdempotentConsumerPattern
+    
+                        var nowDateTime = DateTime.Now;
+
+                        consumerEvent = new ConsumerEvent {
+                            Id = @event.Id,
+                            Type = consumeResult.Message.Key,
+                            CountOfRetry = 0,
+                            CreatedAt_EnglishDate = nowDateTime,
+                            CreatedAt_PersianDate = dateTime.ToPersianShortDate(nowDateTime)
+                        };
+
+                        consumerEventCommandRepository.Add(consumerEvent);
+
+                        #endregion
+
+                        await (Task)eventStreamHandlerMethod.Invoke(eventStreamHandler, new[] { payload, cancellationToken });
+
+                        await unitOfWork.CommitAsync(cancellationToken);
+                    }
                 }
             }
             
@@ -1627,35 +1737,71 @@ public class ExternalEventStreamBroker(
                     if(transactionConfig is null)
                         throw new Exception("Must be used transaction config attribute!");
 
-                    var consumerEventQueryRepository = serviceProvider.GetRequiredService<IConsumerEventQueryRepository>();
-    
-                    var consumerEventQuery = await consumerEventQueryRepository.FindByIdAsync(@event.Id, cancellationToken);
-
-                    if (consumerEventQuery is null)
+                    if (transactionConfig.Type == TransactionType.Query)
                     {
-                        unitOfWork = serviceProvider.GetRequiredService(_GetTypeOfUnitOfWork(transactionConfig.Type)) as IUnitOfWork;
-
-                        await unitOfWork.TransactionAsync(transactionConfig.IsolationLevel, cancellationToken);
-                     
-                        #region IdempotentConsumerPattern
+                        var consumerEventQueryRepository = serviceProvider.GetRequiredService<IConsumerEventQueryRepository>();
     
-                        var nowDateTime = DateTime.Now;
+                        var consumerEvent = await consumerEventQueryRepository.FindByIdAsync(@event.Id, cancellationToken);
 
-                        consumerEventQuery = new ConsumerEventQuery {
-                            Id = @event.Id,
-                            Type = consumeResult.Message.Key,
-                            CountOfRetry = 0,
-                            CreatedAt_EnglishDate = nowDateTime,
-                            CreatedAt_PersianDate = dateTime.ToPersianShortDate(nowDateTime)
-                        };
+                        if (consumerEvent is null)
+                        {
+                            unitOfWork = serviceProvider.GetRequiredService(_GetTypeOfUnitOfWork(TransactionType.Query)) as IUnitOfWork;
 
-                        consumerEventQueryRepository.Add(consumerEventQuery);
+                            await unitOfWork.TransactionAsync(transactionConfig.IsolationLevel, cancellationToken);
+                     
+                            #region IdempotentConsumerPattern
+    
+                            var nowDateTime = DateTime.Now;
 
-                        #endregion
+                            consumerEvent = new ConsumerEventQuery {
+                                Id = @event.Id,
+                                Type = consumeResult.Message.Key,
+                                CountOfRetry = 0,
+                                CreatedAt_EnglishDate = nowDateTime,
+                                CreatedAt_PersianDate = dateTime.ToPersianShortDate(nowDateTime)
+                            };
 
-                        await (Task)eventStreamHandlerMethod.Invoke(eventStreamHandler, new[] { payload, cancellationToken });
+                            consumerEventQueryRepository.Add(consumerEvent);
 
-                        await unitOfWork.CommitAsync(cancellationToken);
+                            #endregion
+
+                            await (Task)eventStreamHandlerMethod.Invoke(eventStreamHandler, new[] { payload, cancellationToken });
+
+                            await unitOfWork.CommitAsync(cancellationToken);
+                        }
+                    }
+                    else if (transactionConfig.Type == TransactionType.Command)
+                    {
+                        var consumerEventCommandRepository = serviceProvider.GetRequiredService<IConsumerEventCommandRepository>();
+    
+                        var consumerEvent = await consumerEventCommandRepository.FindByIdAsync(@event.Id, cancellationToken);
+
+                        if (consumerEvent is null)
+                        {
+                            unitOfWork = serviceProvider.GetRequiredService(_GetTypeOfUnitOfWork(TransactionType.Command)) as IUnitOfWork;
+
+                            await unitOfWork.TransactionAsync(transactionConfig.IsolationLevel, cancellationToken);
+                     
+                            #region IdempotentConsumerPattern
+    
+                            var nowDateTime = DateTime.Now;
+
+                            consumerEvent = new ConsumerEvent {
+                                Id = @event.Id,
+                                Type = consumeResult.Message.Key,
+                                CountOfRetry = 0,
+                                CreatedAt_EnglishDate = nowDateTime,
+                                CreatedAt_PersianDate = dateTime.ToPersianShortDate(nowDateTime)
+                            };
+
+                            consumerEventCommandRepository.Add(consumerEvent);
+
+                            #endregion
+
+                            await (Task)eventStreamHandlerMethod.Invoke(eventStreamHandler, new[] { payload, cancellationToken });
+
+                            await unitOfWork.CommitAsync(cancellationToken);
+                        }
                     }
                 }
             }
