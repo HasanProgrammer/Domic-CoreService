@@ -1,10 +1,15 @@
+#pragma warning disable CS4014 // Because this call is not awaited, execution of the current method continues before the call is completed
+
 using System.Reflection;
 using System.Text;
+using Domic.Core.Common.ClassModels;
 using Domic.Core.Domain.Contracts.Interfaces;
 using Domic.Core.Infrastructure.Extensions;
 using Domic.Core.UseCase.Attributes;
 using Domic.Core.UseCase.Contracts.Interfaces;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 
 namespace Domic.Core.Infrastructure.Concretes;
 
@@ -22,9 +27,14 @@ public class Mediator : IMediator
         
         object commandHandler           = _serviceProvider.GetRequiredService(handlerType);
         Type commandHandlerType         = commandHandler.GetType();
+        
         MethodInfo commandHandlerMethod = commandHandlerType.GetMethod("Handle") 
                                           ??
                                           throw new Exception("Handle function not found !");
+        
+        MethodInfo commandAfterTransactionHandlerMethod = commandHandlerType.GetMethod("AfterTransactionHandle") 
+                                                          ??
+                                                          throw new Exception("AfterTransactionHandle function not found !");
 
         if (commandHandlerMethod.GetCustomAttribute(typeof(WithPessimisticConcurrencyAttribute)) is not null)
         {
@@ -46,14 +56,18 @@ public class Mediator : IMediator
                 {
                     _Validation(commandHandler, commandHandlerType, commandHandlerMethod, command);
                 
-                    return _InvokeHandleMethod(commandHandler, commandHandlerMethod, command);
+                    return _InvokeHandleMethod(commandHandler, commandHandlerMethod, 
+                        commandAfterTransactionHandlerMethod, command
+                    );
                 }
             }
         }
         
         _Validation(commandHandler, commandHandlerType, commandHandlerMethod, command);
         
-        return _InvokeHandleMethod(commandHandler, commandHandlerMethod, command);
+        return _InvokeHandleMethod(commandHandler, commandHandlerMethod, 
+            commandAfterTransactionHandlerMethod, command
+        );
     }
 
     public void DispatchAsFireAndForget(IAsyncCommand command)
@@ -72,9 +86,14 @@ public class Mediator : IMediator
         
         object commandHandler           = _serviceProvider.GetRequiredService(handlerType);
         Type commandHandlerType         = commandHandler.GetType();
+        
         MethodInfo commandHandlerMethod = commandHandlerType.GetMethod("HandleAsync")
                                           ??
                                           throw new Exception("HandleAsync function not found !");
+        
+        MethodInfo commandAfterTransactionHandlerMethod = commandHandlerType.GetMethod("AfterTransactionHandleAsync") 
+                                                          ??
+                                                          throw new Exception("AfterTransactionHandleAsync function not found !");
 
         if (commandHandlerMethod.GetCustomAttribute(typeof(WithPessimisticConcurrencyAttribute)) is not null)
         {
@@ -101,8 +120,9 @@ public class Mediator : IMediator
                     await _ValidationAsync(commandHandler, commandHandlerType, commandHandlerMethod, command,
                         cancellationToken);
 
-                    var result = await _InvokeHandleMethodAsync(commandHandler, commandHandlerMethod, command,
-                        cancellationToken);
+                    var result = await _InvokeHandleMethodAsync(commandHandler, commandHandlerMethod, 
+                        commandAfterTransactionHandlerMethod, command, cancellationToken
+                    );
 
                     return result;
                 }
@@ -121,7 +141,9 @@ public class Mediator : IMediator
         await _ValidationAsync(commandHandler, commandHandlerType, commandHandlerMethod, command, cancellationToken);
         
         var resultWithoutTransaction =
-            await _InvokeHandleMethodAsync(commandHandler, commandHandlerMethod, command, cancellationToken);
+            await _InvokeHandleMethodAsync(commandHandler, commandHandlerMethod, commandAfterTransactionHandlerMethod,
+                command, cancellationToken
+            );
         
         return resultWithoutTransaction;
     }
@@ -296,7 +318,7 @@ public class Mediator : IMediator
     }
     
     private TResult _InvokeHandleMethod<TResult>(object commandHandler, MethodInfo commandHandlerMethod,
-        ICommand<TResult> command
+        MethodInfo commandAfterTransactionHandlerMethod, ICommand<TResult> command
     )
     {
         #region Transaction
@@ -310,8 +332,12 @@ public class Mediator : IMediator
             var result = (TResult)commandHandlerMethod.Invoke(commandHandler, new object[]{ command });
             
             unitOfWork.Commit();
+
+            _AfterTransactionHandle<TResult>(commandHandler, commandAfterTransactionHandlerMethod, command,
+                _serviceProvider
+            );
                     
-            _CleanCache(commandHandlerMethod);
+            _CleanCache(commandHandlerMethod, _serviceProvider);
 
             return result;
         }
@@ -321,7 +347,7 @@ public class Mediator : IMediator
         var resultWithoutTransaction =
             (TResult)commandHandlerMethod.Invoke(commandHandler, new object[]{ command });
             
-        _CleanCache(commandHandlerMethod);
+        _CleanCache(commandHandlerMethod, _serviceProvider);
         
         return resultWithoutTransaction;
     }
@@ -357,7 +383,7 @@ public class Mediator : IMediator
     }
     
     private async Task<TResult> _InvokeHandleMethodAsync<TResult>(object commandHandler, MethodInfo commandHandlerMethod,
-        ICommand<TResult> command, CancellationToken cancellationToken
+        MethodInfo commandAfterTransactionHandlerMethod, ICommand<TResult> command, CancellationToken cancellationToken
     )
     {
         #region Transaction
@@ -371,8 +397,12 @@ public class Mediator : IMediator
             var result = await (Task<TResult>)commandHandlerMethod.Invoke(commandHandler, new object[]{ command , cancellationToken });
             
             await unitOfWork.CommitAsync(cancellationToken);
+            
+            await _AfterTransactionHandleAsync<TResult>(commandHandler, commandAfterTransactionHandlerMethod, command,
+                _serviceProvider, cancellationToken
+            );
 
-            _CleanCache(commandHandlerMethod);
+            await _CleanCacheAsync(commandHandlerMethod, _serviceProvider, cancellationToken);
 
             return result;
         }
@@ -382,7 +412,7 @@ public class Mediator : IMediator
         var resultWithoutTransaction =
             await (Task<TResult>)commandHandlerMethod.Invoke(commandHandler, new object[]{ command , cancellationToken });
         
-        _CleanCache(commandHandlerMethod);
+        await _CleanCacheAsync(commandHandlerMethod, _serviceProvider, cancellationToken);
         
         return resultWithoutTransaction;
     }
@@ -417,14 +447,184 @@ public class Mediator : IMediator
         }
     }
 
-    private void _CleanCache(MethodInfo commandHandlerMethod)
+    private void _CleanCache(MethodInfo commandHandlerMethod, IServiceProvider serviceProvider)
     {
         if (commandHandlerMethod.GetCustomAttribute(typeof(WithCleanCacheAttribute)) is WithCleanCacheAttribute cacheAttribute)
         {
-            var redisCache = _serviceProvider.GetRequiredService<IInternalDistributedCache>();
+            try
+            {
+                var redisCache = _serviceProvider.GetRequiredService<IInternalDistributedCache>();
 
-            foreach (var key in cacheAttribute.Keies.Split("|")) 
-                redisCache.DeleteKey(key);
+                foreach (var key in cacheAttribute.Keies.Split("|"))
+                    redisCache.DeleteKey(key);
+            }
+            catch (Exception e)
+            {
+                var hostEnvironment = serviceProvider.GetRequiredService<IHostEnvironment>();
+                var dateTime = serviceProvider.GetRequiredService<IDateTime>();
+                var globalUniqueIdGenerator = serviceProvider.GetRequiredService<IGlobalUniqueIdGenerator>();
+                var configuration = serviceProvider.GetRequiredService<IConfiguration>();
+                
+                e.FileLogger(hostEnvironment, dateTime);
+            
+                e.ElasticStackExceptionLogger(hostEnvironment, globalUniqueIdGenerator, dateTime, 
+                    configuration.GetValue<string>("NameOfService"), "CleanCacheCommand"
+                );
+
+                if (configuration.GetSection("LoggerType").Get<LoggerType>().Messaging)
+                {
+                    var externalMessageBroker = serviceProvider.GetRequiredService<IExternalMessageBroker>();
+                    
+                    e.CentralExceptionLogger(hostEnvironment, globalUniqueIdGenerator, externalMessageBroker, dateTime, 
+                        configuration.GetValue<string>("NameOfService"), "CleanCacheCommand"
+                    );
+                }
+                else
+                {
+                    var externalEventStreamBroker = serviceProvider.GetRequiredService<IExternalEventStreamBroker>();
+                    
+                    e.CentralExceptionLoggerAsStream(hostEnvironment, globalUniqueIdGenerator, 
+                        externalEventStreamBroker, dateTime, configuration.GetValue<string>("NameOfService"), 
+                        "CleanCacheCommand"
+                    );
+                }
+            }
+        }
+    }
+    
+    private async Task _CleanCacheAsync(MethodInfo commandHandlerMethod, IServiceProvider serviceProvider, 
+        CancellationToken cancellationToken
+    )
+    {
+        if (commandHandlerMethod.GetCustomAttribute(typeof(WithCleanCacheAttribute)) is WithCleanCacheAttribute cacheAttribute)
+        {
+            try
+            {
+                var redisCache = _serviceProvider.GetRequiredService<IInternalDistributedCache>();
+
+                foreach (var key in cacheAttribute.Keies.Split("|"))
+                    await redisCache.DeleteKeyAsync(key, cancellationToken);
+            }
+            catch (Exception e)
+            {
+                var hostEnvironment = serviceProvider.GetRequiredService<IHostEnvironment>();
+                var dateTime = serviceProvider.GetRequiredService<IDateTime>();
+                var globalUniqueIdGenerator = serviceProvider.GetRequiredService<IGlobalUniqueIdGenerator>();
+                var configuration = serviceProvider.GetRequiredService<IConfiguration>();
+                
+                //fire&forget
+                e.FileLoggerAsync(hostEnvironment, dateTime, cancellationToken);
+            
+                e.ElasticStackExceptionLogger(hostEnvironment, globalUniqueIdGenerator, dateTime, 
+                    configuration.GetValue<string>("NameOfService"), "CleanCacheCommand"
+                );
+
+                if (configuration.GetSection("LoggerType").Get<LoggerType>().Messaging)
+                {
+                    var externalMessageBroker = serviceProvider.GetRequiredService<IExternalMessageBroker>();
+                    
+                    //fire&forget
+                    e.CentralExceptionLoggerAsync(hostEnvironment, globalUniqueIdGenerator, externalMessageBroker, dateTime, 
+                        configuration.GetValue<string>("NameOfService"), "CleanCacheCommand", cancellationToken
+                    );
+                }
+                else
+                {
+                    var externalEventStreamBroker = serviceProvider.GetRequiredService<IExternalEventStreamBroker>();
+                    
+                    //fire&forget
+                    e.CentralExceptionLoggerAsStreamAsync(hostEnvironment, globalUniqueIdGenerator, 
+                        externalEventStreamBroker, dateTime, configuration.GetValue<string>("NameOfService"), 
+                        "CleanCacheCommand", cancellationToken
+                    );
+                }
+            }
+        }
+    }
+    
+    private void _AfterTransactionHandle<TResult>(object commandHandler, MethodInfo commandAfterTransactionHandlerMethod,
+        ICommand<TResult> command, IServiceProvider serviceProvider
+    )
+    {
+        try
+        {
+            commandAfterTransactionHandlerMethod.Invoke(commandHandler, new object[] { command });
+        }
+        catch (Exception e)
+        {
+            var hostEnvironment = serviceProvider.GetRequiredService<IHostEnvironment>();
+            var dateTime = serviceProvider.GetRequiredService<IDateTime>();
+            var globalUniqueIdGenerator = serviceProvider.GetRequiredService<IGlobalUniqueIdGenerator>();
+            var configuration = serviceProvider.GetRequiredService<IConfiguration>();
+                
+            e.FileLogger(hostEnvironment, dateTime);
+            
+            e.ElasticStackExceptionLogger(hostEnvironment, globalUniqueIdGenerator, dateTime, 
+                configuration.GetValue<string>("NameOfService"), "CleanCacheCommand"
+            );
+
+            if (configuration.GetSection("LoggerType").Get<LoggerType>().Messaging)
+            {
+                var externalMessageBroker = serviceProvider.GetRequiredService<IExternalMessageBroker>();
+                    
+                e.CentralExceptionLogger(hostEnvironment, globalUniqueIdGenerator, externalMessageBroker, dateTime, 
+                    configuration.GetValue<string>("NameOfService"), "CleanCacheCommand"
+                );
+            }
+            else
+            {
+                var externalEventStreamBroker = serviceProvider.GetRequiredService<IExternalEventStreamBroker>();
+                    
+                e.CentralExceptionLoggerAsStream(hostEnvironment, globalUniqueIdGenerator, 
+                    externalEventStreamBroker, dateTime, configuration.GetValue<string>("NameOfService"), 
+                    "CleanCacheCommand"
+                );
+            }
+        }
+    }
+    
+    private async Task _AfterTransactionHandleAsync<TResult>(object commandHandler,
+        MethodInfo commandAfterTransactionHandlerMethod, ICommand<TResult> command, IServiceProvider serviceProvider, 
+        CancellationToken cancellationToken
+    )
+    {
+        try
+        {
+            await (Task)commandAfterTransactionHandlerMethod.Invoke(commandHandler, new object[] { command, cancellationToken });
+        }
+        catch (Exception e)
+        {
+            var hostEnvironment = serviceProvider.GetRequiredService<IHostEnvironment>();
+            var dateTime = serviceProvider.GetRequiredService<IDateTime>();
+            var globalUniqueIdGenerator = serviceProvider.GetRequiredService<IGlobalUniqueIdGenerator>();
+            var configuration = serviceProvider.GetRequiredService<IConfiguration>();
+                
+            //fire&forget
+            e.FileLoggerAsync(hostEnvironment, dateTime, cancellationToken);
+            
+            e.ElasticStackExceptionLogger(hostEnvironment, globalUniqueIdGenerator, dateTime, 
+                configuration.GetValue<string>("NameOfService"), "CleanCacheCommand"
+            );
+
+            if (configuration.GetSection("LoggerType").Get<LoggerType>().Messaging)
+            {
+                var externalMessageBroker = serviceProvider.GetRequiredService<IExternalMessageBroker>();
+                    
+                //fire&forget
+                e.CentralExceptionLoggerAsync(hostEnvironment, globalUniqueIdGenerator, externalMessageBroker, dateTime, 
+                    configuration.GetValue<string>("NameOfService"), "CleanCacheCommand", cancellationToken
+                );
+            }
+            else
+            {
+                var externalEventStreamBroker = serviceProvider.GetRequiredService<IExternalEventStreamBroker>();
+                    
+                //fire&forget
+                e.CentralExceptionLoggerAsStreamAsync(hostEnvironment, globalUniqueIdGenerator, 
+                    externalEventStreamBroker, dateTime, configuration.GetValue<string>("NameOfService"), 
+                    "CleanCacheCommand", cancellationToken
+                );
+            }
         }
     }
 }

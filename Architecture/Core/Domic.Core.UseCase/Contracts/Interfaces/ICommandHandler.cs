@@ -19,4 +19,22 @@ public interface ICommandHandler<in TCommand, TResult> where TCommand : ICommand
     /// <exception cref="NotImplementedException"></exception>
     public Task<TResult> HandleAsync(TCommand command, CancellationToken cancellationToken) 
         => throw new NotImplementedException();
+    
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="message"></param>
+    /// <exception cref="NotImplementedException"></exception>
+    public void AfterTransactionHandle(TCommand message)
+        => throw new NotImplementedException();
+    
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="message"></param>
+    /// <param name="cancellationToken"></param>
+    /// <returns></returns>
+    /// <exception cref="NotImplementedException"></exception>
+    public Task AfterTransactionHandleAsync(TCommand message, CancellationToken cancellationToken)
+        => throw new NotImplementedException();
 }

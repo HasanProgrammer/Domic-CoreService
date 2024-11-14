@@ -261,6 +261,9 @@ public class InternalMessageBroker : IInternalMessageBroker
                 var commandBusHandlerTypeMethod =
                     commandBusHandlerType.GetMethod("Handle") ?? throw new Exception("Handle function not found !");
                 
+                var commandBusAfterTransactionHandleTypeMethod =
+                    commandBusHandlerType.GetMethod("AfterTransactionHandle") ?? throw new Exception("AfterTransactionHandle function not found !");
+                
                 var retryAttr =
                     commandBusHandlerTypeMethod.GetCustomAttribute(typeof(WithMaxRetryAttribute)) as WithMaxRetryAttribute;
 
@@ -369,6 +372,11 @@ public class InternalMessageBroker : IInternalMessageBroker
                             commandBusHandlerTypeMethod.Invoke(commandBusHandler, new object[] { command });
 
                         unitOfWork.Commit();
+                        
+                        _AfterTransactionHandle(commandBusAfterTransactionHandleTypeMethod, commandBusHandler,
+                            command, service,
+                            commandBusHandlerType is not null ? commandBusHandlerType.Name : NameOfAction
+                        );
                     
                         _CleanCache(commandBusHandlerTypeMethod, serviceProvider, service, 
                             commandBusHandlerType is not null ? commandBusHandlerType.Name : NameOfAction
@@ -490,6 +498,9 @@ public class InternalMessageBroker : IInternalMessageBroker
                 var commandBusHandlerTypeMethod =
                     commandBusHandlerType.GetMethod("HandleAsync") ?? throw new Exception("HandleAsync function not found !");
                 
+                var commandBusAfterTransactionHandleTypeMethod =
+                    commandBusHandlerType.GetMethod("AfterTransactionHandleAsync") ?? throw new Exception("AfterTransactionHandleAsync function not found !");
+                
                 var retryAttr =
                     commandBusHandlerTypeMethod.GetCustomAttribute(typeof(WithMaxRetryAttribute)) as WithMaxRetryAttribute;
 
@@ -600,6 +611,12 @@ public class InternalMessageBroker : IInternalMessageBroker
                             (Task)commandBusHandlerTypeMethod.Invoke(commandBusHandler, new[] { command, cancellationToken});
 
                         await unitOfWork.CommitAsync(cancellationToken);
+                        
+                        await _AfterTransactionHandleAsync(commandBusAfterTransactionHandleTypeMethod, 
+                            commandBusHandler, command, service, 
+                            commandBusHandlerType is not null ? commandBusHandlerType.Name : NameOfAction,
+                            cancellationToken
+                        );
                     
                         await _CleanCacheAsync(commandBusHandlerTypeMethod, serviceProvider, service,
                             commandBusHandlerType is not null ? commandBusHandlerType.Name : NameOfAction,
@@ -1123,6 +1140,50 @@ public class InternalMessageBroker : IInternalMessageBroker
             //fire&forget
             e.CentralExceptionLoggerAsync(_hostEnvironment, _globalUniqueIdGenerator, _externalMessageBroker, _dateTime, service, 
                 action, cancellationToken
+            );
+        }
+    }
+
+    private void _AfterTransactionHandle(MethodInfo commandBusAfterTransactionHandlerMethod, object commandBusHandler, 
+        object command, string service, string action
+    )
+    {
+        try
+        {
+            commandBusAfterTransactionHandlerMethod.Invoke(commandBusHandler, new[] { command });
+        }
+        catch (Exception e)
+        {
+            e.FileLogger(_hostEnvironment, _dateTime);
+            
+            e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, 
+                NameOfService, NameOfAction
+            );
+            
+            e.CentralExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _externalMessageBroker, _dateTime, service, 
+                action
+            );
+        }
+    }
+    
+    private async Task _AfterTransactionHandleAsync(MethodInfo commandBusAfterTransactionHandlerMethod, object commandBusHandler, 
+        object command, string service, string action, CancellationToken cancellationToken
+    )
+    {
+        try
+        {
+            await (Task)commandBusAfterTransactionHandlerMethod.Invoke(commandBusHandler, new[] { command, cancellationToken});
+        }
+        catch (Exception e)
+        {
+            e.FileLogger(_hostEnvironment, _dateTime);
+            
+            e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, 
+                NameOfService, NameOfAction
+            );
+            
+            e.CentralExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _externalMessageBroker, _dateTime, service, 
+                action
             );
         }
     }

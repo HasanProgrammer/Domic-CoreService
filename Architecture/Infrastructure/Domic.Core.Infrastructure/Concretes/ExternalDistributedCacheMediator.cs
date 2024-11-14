@@ -94,4 +94,90 @@ public class ExternalDistributedCacheMediator : IExternalDistributedCacheMediato
         
         return Encoding.UTF8.GetString(Convert.FromBase64String(cachedData)).DeSerialize<TResult>();
     }
+
+    public TResult Get<TResult>(string dynamicKey)
+    {
+        object cacheHandler = _serviceProvider.GetRequiredService<IExternalDistributedCacheHandler<TResult>>();
+
+        var cacheHandlerType   = cacheHandler.GetType();
+        var cacheHandlerMethod = cacheHandlerType.GetMethod("Set") ?? throw new Exception("Set function not found !");
+
+        var cacheHandlerMethodAttr = cacheHandlerMethod.GetCustomAttribute(typeof(ConfigAttribute)) as ConfigAttribute
+                                     ?? 
+                                     throw new Exception("CachingAttribute's attribute for set function not found !");
+        
+        var externalDistributedCache = _serviceProvider.GetRequiredService<IExternalDistributedCache>();
+
+        var cacheKey = $"{dynamicKey}-{cacheHandlerMethodAttr.Key}";
+        
+        var cachedData = externalDistributedCache.GetCacheValue(cacheKey);
+        
+        if (cachedData is null)
+        {
+            var result = (TResult)cacheHandlerMethod.Invoke(cacheHandler, null);
+            var bytes  = Encoding.UTF8.GetBytes(result.Serialize());
+            var base64 = Convert.ToBase64String(bytes);
+
+            if (cacheHandlerMethodAttr.Ttl is not 0)
+                externalDistributedCache.SetCacheValue(
+                    new KeyValuePair<string, string>(cacheKey, base64) ,
+                    TimeSpan.FromMinutes( cacheHandlerMethodAttr.Ttl )
+                );
+            else
+                externalDistributedCache.SetCacheValue(
+                    new KeyValuePair<string, string>(cacheKey, base64) 
+                );
+
+            return result;
+        }
+
+        return Encoding.UTF8.GetString(Convert.FromBase64String(cachedData)).DeSerialize<TResult>();
+    }
+
+    public async Task<TResult> GetAsync<TResult>(string dynamicKey, CancellationToken cancellationToken)
+    {
+        object cacheHandler = _serviceProvider.GetRequiredService<IExternalDistributedCacheHandler<TResult>>();
+
+        var cacheHandlerType = cacheHandler.GetType();
+        
+        var cacheHandlerMethod =
+            cacheHandlerType.GetMethod("SetAsync") ?? throw new Exception("SetAsync function not found !");
+
+        var cacheHandlerMethodAttr = cacheHandlerMethod.GetCustomAttribute(typeof(ConfigAttribute)) as ConfigAttribute
+                                     ?? 
+                                     throw new Exception("CachingAttribute's attribute for set function not found !");
+        
+        
+        var externalDistributedCache = _serviceProvider.GetRequiredService<IExternalDistributedCache>();
+        
+        var cacheKey = $"{dynamicKey}-{cacheHandlerMethodAttr.Key}";
+        
+        var cachedData =
+            await externalDistributedCache.GetCacheValueAsync(cacheKey, cancellationToken);
+        
+        if (cachedData is null)
+        {
+            var result =
+                await ( cacheHandlerMethod.Invoke(cacheHandler, new object[] { cancellationToken }) as Task<TResult> );
+
+            var bytes  = Encoding.UTF8.GetBytes(result.Serialize());
+            var base64 = Convert.ToBase64String(bytes);
+            
+            if(cacheHandlerMethodAttr.Ttl is not 0)
+                await externalDistributedCache.SetCacheValueAsync(
+                    new KeyValuePair<string, string>(cacheKey, base64) ,
+                    TimeSpan.FromMinutes( cacheHandlerMethodAttr.Ttl ) ,
+                    cancellationToken: cancellationToken
+                );
+            else
+                await externalDistributedCache.SetCacheValueAsync(
+                    new KeyValuePair<string, string>(cacheKey, base64), 
+                    cancellationToken: cancellationToken
+                );
+
+            return result;
+        }
+        
+        return Encoding.UTF8.GetString(Convert.FromBase64String(cachedData)).DeSerialize<TResult>();
+    }
 }
