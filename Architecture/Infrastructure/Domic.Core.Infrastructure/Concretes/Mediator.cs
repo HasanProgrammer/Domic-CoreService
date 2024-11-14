@@ -560,7 +560,7 @@ public class Mediator : IMediator
             e.FileLogger(hostEnvironment, dateTime);
             
             e.ElasticStackExceptionLogger(hostEnvironment, globalUniqueIdGenerator, dateTime, 
-                configuration.GetValue<string>("NameOfService"), "CleanCacheCommand"
+                configuration.GetValue<string>("NameOfService"), "AfterTransactionHandle"
             );
 
             if (configuration.GetSection("LoggerType").Get<LoggerType>().Messaging)
@@ -568,7 +568,7 @@ public class Mediator : IMediator
                 var externalMessageBroker = serviceProvider.GetRequiredService<IExternalMessageBroker>();
                     
                 e.CentralExceptionLogger(hostEnvironment, globalUniqueIdGenerator, externalMessageBroker, dateTime, 
-                    configuration.GetValue<string>("NameOfService"), "CleanCacheCommand"
+                    configuration.GetValue<string>("NameOfService"), "AfterTransactionHandle"
                 );
             }
             else
@@ -577,7 +577,7 @@ public class Mediator : IMediator
                     
                 e.CentralExceptionLoggerAsStream(hostEnvironment, globalUniqueIdGenerator, 
                     externalEventStreamBroker, dateTime, configuration.GetValue<string>("NameOfService"), 
-                    "CleanCacheCommand"
+                    "AfterTransactionHandle"
                 );
             }
         }
@@ -603,7 +603,7 @@ public class Mediator : IMediator
             e.FileLoggerAsync(hostEnvironment, dateTime, cancellationToken);
             
             e.ElasticStackExceptionLogger(hostEnvironment, globalUniqueIdGenerator, dateTime, 
-                configuration.GetValue<string>("NameOfService"), "CleanCacheCommand"
+                configuration.GetValue<string>("NameOfService"), "AfterTransactionHandleAsync"
             );
 
             if (configuration.GetSection("LoggerType").Get<LoggerType>().Messaging)
@@ -612,7 +612,7 @@ public class Mediator : IMediator
                     
                 //fire&forget
                 e.CentralExceptionLoggerAsync(hostEnvironment, globalUniqueIdGenerator, externalMessageBroker, dateTime, 
-                    configuration.GetValue<string>("NameOfService"), "CleanCacheCommand", cancellationToken
+                    configuration.GetValue<string>("NameOfService"), "AfterTransactionHandleAsync", cancellationToken
                 );
             }
             else
@@ -622,7 +622,7 @@ public class Mediator : IMediator
                 //fire&forget
                 e.CentralExceptionLoggerAsStreamAsync(hostEnvironment, globalUniqueIdGenerator, 
                     externalEventStreamBroker, dateTime, configuration.GetValue<string>("NameOfService"), 
-                    "CleanCacheCommand", cancellationToken
+                    "AfterTransactionHandleAsync", cancellationToken
                 );
             }
         }
