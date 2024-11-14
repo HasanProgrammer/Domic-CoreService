@@ -64,8 +64,8 @@ public class EfOutBoxPublishEventInterceptor<TIdentity> : SaveChangesInterceptor
         return base.SavingChanges(eventData, result);
     }
 
-    public override ValueTask<int> SavedChangesAsync(SaveChangesCompletedEventData eventData, int result,
-        CancellationToken cancellationToken = new CancellationToken()
+    public override ValueTask<InterceptionResult<int>> SavingChangesAsync(DbContextEventData eventData,
+        InterceptionResult<int> result, CancellationToken cancellationToken = new CancellationToken()
     )
     {
         if (eventData.Context is not null && !cancellationToken.IsCancellationRequested)
@@ -103,6 +103,6 @@ public class EfOutBoxPublishEventInterceptor<TIdentity> : SaveChangesInterceptor
             eventData.Context.Set<Event>().AddRange(outBoxEvents);
         }
         
-        return base.SavedChangesAsync(eventData, result, cancellationToken);
+        return base.SavingChangesAsync(eventData, result, cancellationToken);
     }
 }

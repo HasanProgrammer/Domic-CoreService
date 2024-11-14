@@ -22,6 +22,21 @@ public interface IConsumerEventStreamHandler<in TEvent> where TEvent : IDomainEv
     /// 
     /// </summary>
     /// <param name="event"></param>
+    public void AfterTransactionHandle(TEvent @event);
+
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="event"></param>
+    /// <param name="cancellationToken"></param>
+    /// <returns></returns>
+    public Task AfterTransactionHandleAsync(TEvent @event, CancellationToken cancellationToken) 
+        => throw new NotImplementedException();
+    
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="event"></param>
     /// <exception cref="NotImplementedException"></exception>
     public void AfterMaxRetryHandle(TEvent @event) => throw new NotImplementedException();
     

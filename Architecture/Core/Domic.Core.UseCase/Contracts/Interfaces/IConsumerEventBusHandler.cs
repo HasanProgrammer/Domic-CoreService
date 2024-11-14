@@ -17,6 +17,21 @@ public interface IConsumerEventBusHandler<in TEvent> where TEvent : IDomainEvent
     /// <param name="cancellationToken"></param>
     /// <returns></returns>
     public Task HandleAsync(TEvent @event, CancellationToken cancellationToken) => throw new NotImplementedException();
+    
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="event"></param>
+    public void AfterTransactionHandle(TEvent @event);
+
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="event"></param>
+    /// <param name="cancellationToken"></param>
+    /// <returns></returns>
+    public Task AfterTransactionHandleAsync(TEvent @event, CancellationToken cancellationToken) 
+        => throw new NotImplementedException();
 
     /// <summary>
     /// 

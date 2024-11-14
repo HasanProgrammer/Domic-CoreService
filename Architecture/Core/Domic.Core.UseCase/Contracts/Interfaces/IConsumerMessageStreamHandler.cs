@@ -14,7 +14,23 @@ public interface IConsumerMessageStreamHandler<in TMessage> where TMessage : cla
     /// <param name="event"></param>
     /// <param name="cancellationToken"></param>
     /// <returns></returns>
-    public Task HandleAsync(TMessage @event, CancellationToken cancellationToken) => throw new NotImplementedException();
+    public Task HandleAsync(TMessage message, CancellationToken cancellationToken) => throw new NotImplementedException();
+    
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="message"></param>
+    public void AfterTransactionHandle(TMessage message);
+    
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="message"></param>
+    /// <param name="cancellationToken"></param>
+    /// <returns></returns>
+    /// <exception cref="NotImplementedException"></exception>
+    public Task AfterTransactionHandleAsync(TMessage message, CancellationToken cancellationToken) 
+        => throw new NotImplementedException();
     
     /// <summary>
     /// 

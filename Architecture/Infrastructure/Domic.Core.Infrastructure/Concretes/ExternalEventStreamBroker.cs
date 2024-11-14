@@ -19,12 +19,12 @@ using Microsoft.Extensions.Hosting;
 using Newtonsoft.Json;
 using NSubstitute.Exceptions;
 using Polly;
+
 using Environment = System.Environment;
 
 namespace Domic.Core.Infrastructure.Concretes;
 
-public class ExternalEventStreamBroker(
-    ISerializer serializer, IServiceProvider serviceProvider, IHostEnvironment hostEnvironment, IDateTime dateTime,
+public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTime dateTime, 
     IGlobalUniqueIdGenerator globalUniqueIdGenerator, IServiceScopeFactory serviceScopeFactory,
     IConfiguration configuration
 ) : IExternalEventStreamBroker
@@ -56,10 +56,14 @@ public class ExternalEventStreamBroker(
 
         foreach (var header in headers)
             kafkaHeaders.Add(header.Key, Encoding.UTF8.GetBytes(header.Value));
-
+        
         Policy.Handle<Exception>()
               .WaitAndRetry(5, _ => TimeSpan.FromSeconds(3), (exception, timeSpan, context) => {})
               .Execute(() => {
+                  
+                  using var scope = serviceScopeFactory.CreateScope();
+                  
+                  var serializer = scope.ServiceProvider.GetRequiredService<ISerializer>();
                   
                   using var producer = new ProducerBuilder<string, string>(config).Build();
                   
@@ -91,6 +95,10 @@ public class ExternalEventStreamBroker(
         return Policy.Handle<Exception>()
                      .WaitAndRetryAsync(5, _ => TimeSpan.FromSeconds(3), (exception, timeSpan, context) => {})
                      .ExecuteAsync(async () => {
+                         
+                         using var scope = serviceScopeFactory.CreateScope();
+                  
+                         var serializer = scope.ServiceProvider.GetRequiredService<ISerializer>();
                          
                          using var producer = new ProducerBuilder<string, string>(config).Build();
 
@@ -126,9 +134,11 @@ public class ExternalEventStreamBroker(
         {
             try
             {
+                using var scope = serviceScopeFactory.CreateScope();
+                
                 var consumeResult = consumer.Consume(cancellationToken);
                 
-                _ConsumeNextMessage(useCaseTypes, topic, consumer, consumeResult);
+                _ConsumeNextMessage(useCaseTypes, topic, consumer, consumeResult, scope.ServiceProvider);
             }
             catch (Exception e)
             {
@@ -162,9 +172,12 @@ public class ExternalEventStreamBroker(
         {
             try
             {
+                //ScopeServices Trigger
+                using IServiceScope serviceScope = serviceScopeFactory.CreateAsyncScope();
+                
                 var consumeResult = consumer.Consume(cancellationToken);
 
-                _ConsumeNextRetriableMessage(useCaseTypes, topic, consumer, consumeResult);
+                _ConsumeNextRetriableMessage(useCaseTypes, topic, consumer, consumeResult, serviceScope.ServiceProvider);
             }
             catch (Exception e)
             {
@@ -226,10 +239,15 @@ public class ExternalEventStreamBroker(
 
             try
             {
+                //ScopeServices Trigger
+                using IServiceScope serviceScope = serviceScopeFactory.CreateAsyncScope();
+                
                 var consumeResult = consumer.Consume(cancellationToken);
 
                 var consumerTask =
-                    _ConsumeNextMessageAsync(useCaseTypes, topic, consumer, consumeResult, cancellationToken);
+                    _ConsumeNextMessageAsync(useCaseTypes, topic, consumer, consumeResult, serviceScope.ServiceProvider,
+                        cancellationToken
+                    );
                 
                 consumerTasks.Add(consumerTask);
             }
@@ -295,10 +313,15 @@ public class ExternalEventStreamBroker(
             
             try
             {
+                //ScopeServices Trigger
+                using IServiceScope serviceScope = serviceScopeFactory.CreateAsyncScope();
+                
                 var consumeResult = consumer.Consume(cancellationToken);
 
                 var consumerTask =
-                    _ConsumeNextRetriableMessageAsync(useCaseTypes, topic, consumer, consumeResult, cancellationToken);
+                    _ConsumeNextRetriableMessageAsync(useCaseTypes, topic, consumer, consumeResult, 
+                        serviceScope.ServiceProvider, cancellationToken
+                    );
                 
                 consumerTasks.Add(consumerTask);
             }
@@ -505,9 +528,12 @@ public class ExternalEventStreamBroker(
         {
             try
             {
+                //ScopeServices Trigger
+                using IServiceScope serviceScope = serviceScopeFactory.CreateAsyncScope();
+                
                 var consumeResult = consumer.Consume(cancellationToken);
                 
-                _ConsumeNextEvent(useCaseTypes, topic, consumer, consumeResult);
+                _ConsumeNextEvent(useCaseTypes, topic, consumer, consumeResult, serviceScope.ServiceProvider);
             }
             catch (Exception e)
             {
@@ -541,9 +567,12 @@ public class ExternalEventStreamBroker(
         {
             try
             {
+                //ScopeServices Trigger
+                using IServiceScope serviceScope = serviceScopeFactory.CreateAsyncScope();
+                
                 var consumeResult = consumer.Consume(cancellationToken);
                 
-                _ConsumeNextRetriableEvent(useCaseTypes, topic, consumer, consumeResult);
+                _ConsumeNextRetriableEvent(useCaseTypes, topic, consumer, consumeResult, serviceScope.ServiceProvider);
             }
             catch (Exception e)
             {
@@ -605,10 +634,15 @@ public class ExternalEventStreamBroker(
 
             try
             {
+                //ScopeServices Trigger
+                using IServiceScope serviceScope = serviceScopeFactory.CreateAsyncScope();
+                
                 var consumeResult = consumer.Consume(cancellationToken);
 
                 var consumerTask =
-                    _ConsumeNextEventAsync(useCaseTypes, topic, consumer, consumeResult, cancellationToken);
+                    _ConsumeNextEventAsync(useCaseTypes, topic, consumer, consumeResult, serviceScope.ServiceProvider,
+                        cancellationToken
+                    );
                 
                 consumerTasks.Add(consumerTask);
             }
@@ -674,10 +708,15 @@ public class ExternalEventStreamBroker(
             
             try
             {
+                //ScopeServices Trigger
+                using IServiceScope serviceScope = serviceScopeFactory.CreateAsyncScope();
+                
                 var consumeResult = consumer.Consume(cancellationToken);
 
                 var consumerTask =
-                    _ConsumeNextRetriableEventAsync(useCaseTypes, topic, consumer, consumeResult, cancellationToken);
+                    _ConsumeNextRetriableEventAsync(useCaseTypes, topic, consumer, consumeResult, 
+                        serviceScope.ServiceProvider, cancellationToken
+                    );
                 
                 consumerTasks.Add(consumerTask);
             }
@@ -698,7 +737,7 @@ public class ExternalEventStreamBroker(
     /*---------------------------------------------------------------*/
 
     private void _ConsumeNextMessage(Type[] useCaseTypes, string topic, IConsumer<string, string> consumer,
-        ConsumeResult<string, string> consumeResult
+        ConsumeResult<string, string> consumeResult, IServiceProvider serviceProvider
     )
     {
         IUnitOfWork unitOfWork = default;
@@ -733,6 +772,9 @@ public class ExternalEventStreamBroker(
 
                 var messageStreamHandlerMethod =
                     messageStreamHandlerType.GetMethod("Handle") ?? throw new Exception("Handle function not found !");
+                
+                var messageStreamAfterTransactionHandlerMethod =
+                    messageStreamHandlerType.GetMethod("AfterTransactionHandle") ?? throw new Exception("AfterTransactionHandle function not found !");
                 
                 var transactionConfig =
                         messageStreamHandlerMethod.GetCustomAttribute(typeof(TransactionConfigAttribute)) as TransactionConfigAttribute;
@@ -775,6 +817,10 @@ public class ExternalEventStreamBroker(
                     messageStreamHandlerMethod.Invoke(messageStreamHandler, new[] { payload });
 
                     unitOfWork.Commit();
+                    
+                    _AfterTransactionHandleMessage(messageStreamAfterTransactionHandlerMethod, messageStreamHandler, payload);
+                    
+                    _CleanCacheMessage(messageStreamHandlerMethod, serviceProvider);
                 }
             }
             
@@ -802,7 +848,7 @@ public class ExternalEventStreamBroker(
     }
     
     private void _ConsumeNextRetriableMessage(Type[] useCaseTypes, string topic, IConsumer<string, string> consumer,
-        ConsumeResult<string, string> consumeResult
+        ConsumeResult<string, string> consumeResult, IServiceProvider serviceProvider
     )
     {
         IUnitOfWork unitOfWork = default;
@@ -844,6 +890,9 @@ public class ExternalEventStreamBroker(
                 var messageStreamHandlerMethod =
                     messageStreamHandlerType.GetMethod("Handle") ?? throw new Exception("Handle function not found !");
 
+                var messageStreamAfterTransactionHandlerMethod =
+                    messageStreamHandlerType.GetMethod("AfterTransactionHandle") ?? throw new Exception("AfterTransactionHandle function not found !");
+                
                 var retryAttr =
                     messageStreamHandlerMethod.GetCustomAttribute(typeof(WithMaxRetryAttribute)) as WithMaxRetryAttribute;
                  
@@ -851,6 +900,8 @@ public class ExternalEventStreamBroker(
                 {
                     if (retryAttr.HasAfterMaxRetryHandle)
                     {
+                        //todo: should be used [Try-Catch] in here!
+                        
                         var afterMaxRetryHandlerMethod =
                             messageStreamHandlerType.GetMethod("AfterMaxRetryHandle") ?? throw new Exception("AfterMaxRetryHandle function not found !");
                  
@@ -901,6 +952,10 @@ public class ExternalEventStreamBroker(
                         messageStreamHandlerMethod.Invoke(messageStreamHandler, new[] { payload });
 
                         unitOfWork.Commit();
+                        
+                        _AfterTransactionHandleMessage(messageStreamAfterTransactionHandlerMethod, messageStreamHandler, payload);
+                        
+                        _CleanCacheMessage(messageStreamHandlerMethod, serviceProvider);
                     }
                 }
             }
@@ -931,7 +986,7 @@ public class ExternalEventStreamBroker(
     }
     
     private async Task _ConsumeNextMessageAsync(Type[] useCaseTypes, string topic, IConsumer<string, string> consumer,
-        ConsumeResult<string, string> consumeResult, CancellationToken cancellationToken
+        ConsumeResult<string, string> consumeResult, IServiceProvider serviceProvider, CancellationToken cancellationToken
     )
     {
         IUnitOfWork unitOfWork = default;
@@ -966,6 +1021,9 @@ public class ExternalEventStreamBroker(
 
                 var messageStreamHandlerMethod =
                     messageStreamHandlerType.GetMethod("HandleAsync") ?? throw new Exception("HandleAsync function not found !");
+                
+                var messageStreamAfterTransactionHandlerMethod =
+                    messageStreamHandlerType.GetMethod("AfterTransactionHandleAsync") ?? throw new Exception("AfterTransactionHandleAsync function not found !");
                 
                 var transactionConfig =
                         messageStreamHandlerMethod.GetCustomAttribute(typeof(TransactionConfigAttribute)) as TransactionConfigAttribute;
@@ -1007,6 +1065,12 @@ public class ExternalEventStreamBroker(
                     await (Task)messageStreamHandlerMethod.Invoke(messageStreamHandler, new[] { payload, cancellationToken });
 
                     await unitOfWork.CommitAsync(cancellationToken);
+
+                    await _AfterTransactionHandleMessageAsync(messageStreamAfterTransactionHandlerMethod,
+                        messageStreamHandler, payload, cancellationToken
+                    );
+
+                    await _CleanCacheMessageAsync(messageStreamHandlerMethod, serviceProvider, cancellationToken);
                 }
             }
             
@@ -1038,7 +1102,7 @@ public class ExternalEventStreamBroker(
     }
     
     private async Task _ConsumeNextRetriableMessageAsync(Type[] useCaseTypes, string topic, IConsumer<string, string> consumer,
-        ConsumeResult<string, string> consumeResult, CancellationToken cancellationToken
+        ConsumeResult<string, string> consumeResult, IServiceProvider serviceProvider, CancellationToken cancellationToken
     )
     {
         IUnitOfWork unitOfWork = default;
@@ -1080,6 +1144,9 @@ public class ExternalEventStreamBroker(
                 var messageStreamHandlerMethod =
                     messageStreamHandlerType.GetMethod("HandleAsync") ?? throw new Exception("HandleAsync function not found !");
 
+                var messageStreamAfterTransactionHandlerMethod =
+                    messageStreamHandlerType.GetMethod("AfterTransactionHandleAsync") ?? throw new Exception("AfterTransactionHandleAsync function not found !");
+                
                 var retryAttr =
                     messageStreamHandlerMethod.GetCustomAttribute(typeof(WithMaxRetryAttribute)) as WithMaxRetryAttribute;
                  
@@ -1087,6 +1154,8 @@ public class ExternalEventStreamBroker(
                 {
                     if (retryAttr.HasAfterMaxRetryHandle)
                     {
+                        //todo: should be used [Try-Catch] in here!
+                        
                         var afterMaxRetryHandlerMethod =
                             messageStreamHandlerType.GetMethod("AfterMaxRetryHandleAsync") ?? throw new Exception("AfterMaxRetryHandleAsync function not found !");
                  
@@ -1135,6 +1204,12 @@ public class ExternalEventStreamBroker(
                         await (Task)messageStreamHandlerMethod.Invoke(messageStreamHandler, new[] { payload, cancellationToken });
 
                         await unitOfWork.CommitAsync(cancellationToken);
+                        
+                        await _AfterTransactionHandleMessageAsync(messageStreamAfterTransactionHandlerMethod,
+                            messageStreamHandler, payload, cancellationToken
+                        );
+                        
+                        await _CleanCacheMessageAsync(messageStreamHandlerMethod, serviceProvider, cancellationToken);
                     }
                 }
             }
@@ -1195,7 +1270,7 @@ public class ExternalEventStreamBroker(
         producer.Produce(
             broker.Topic,
             new Message<string, string> {
-                Key = nameOfEvent, Value = serializer.Serialize(@event)
+                Key = nameOfEvent, Value = @event.Serialize()
             }
         );
     }
@@ -1225,14 +1300,14 @@ public class ExternalEventStreamBroker(
         await producer.ProduceAsync(
             broker.Topic,
             new Message<string, string> {
-                Key = nameOfEvent, Value = serializer.Serialize(@event)
+                Key = nameOfEvent, Value = @event.Serialize()
             },
             cancellationToken: cancellationToken
         );
     }
     
     private void _ConsumeNextEvent(Type[] useCaseTypes, string topic, IConsumer<string, string> consumer,
-        ConsumeResult<string, string> consumeResult
+        ConsumeResult<string, string> consumeResult, IServiceProvider serviceProvider
     )
     {
         IUnitOfWork unitOfWork = default;
@@ -1269,6 +1344,9 @@ public class ExternalEventStreamBroker(
                 
                 var eventStreamHandlerMethod =
                     eventStreamHandlerType.GetMethod("Handle") ?? throw new Exception("Handle function not found !");
+                
+                var eventStreamAfterTransactionHandlerMethod =
+                    eventStreamHandlerType.GetMethod("AfterTransactionHandle") ?? throw new Exception("AfterTransactionHandle function not found !");
                 
                 var transactionConfig =
                         eventStreamHandlerMethod.GetCustomAttribute(typeof(TransactionConfigAttribute)) as TransactionConfigAttribute;
@@ -1308,6 +1386,10 @@ public class ExternalEventStreamBroker(
                         eventStreamHandlerMethod.Invoke(eventStreamHandler, new[] { payload });
 
                         unitOfWork.Commit();
+                        
+                        _AfterTransactionHandleEvent(eventStreamAfterTransactionHandlerMethod, eventStreamHandler, payload);
+                        
+                        _CleanCacheEvent(eventStreamHandlerMethod, serviceProvider);
                     }
                 }
                 else if (transactionConfig.Type == TransactionType.Command)
@@ -1342,6 +1424,10 @@ public class ExternalEventStreamBroker(
                         eventStreamHandlerMethod.Invoke(eventStreamHandler, new[] { payload });
 
                         unitOfWork.Commit();
+                        
+                        _AfterTransactionHandleEvent(eventStreamAfterTransactionHandlerMethod, eventStreamHandler, payload);
+                        
+                        _CleanCacheEvent(eventStreamHandlerMethod, serviceProvider);
                     }
                 }
             }
@@ -1370,7 +1456,7 @@ public class ExternalEventStreamBroker(
     }
     
     private void _ConsumeNextRetriableEvent(Type[] useCaseTypes, string topic, IConsumer<string, string> consumer,
-        ConsumeResult<string, string> consumeResult
+        ConsumeResult<string, string> consumeResult, IServiceProvider serviceProvider
     )
     {
         IUnitOfWork unitOfWork = default;
@@ -1413,6 +1499,9 @@ public class ExternalEventStreamBroker(
                 
                 var eventStreamHandlerMethod =
                     eventStreamHandlerType.GetMethod("Handle") ?? throw new Exception("Handle function not found !");
+                
+                var eventStreamAfterTransactionHandlerMethod =
+                    eventStreamHandlerType.GetMethod("AfterTransactionHandle") ?? throw new Exception("AfterTransactionHandle function not found !");
                 
                 var retryAttr =
                     eventStreamHandlerMethod.GetCustomAttribute(typeof(WithMaxRetryAttribute)) as WithMaxRetryAttribute;
@@ -1467,6 +1556,10 @@ public class ExternalEventStreamBroker(
                             eventStreamHandlerMethod.Invoke(eventStreamHandler, new[] { payload });
 
                             unitOfWork.Commit();
+                            
+                            _AfterTransactionHandleEvent(eventStreamAfterTransactionHandlerMethod, eventStreamHandler, payload);
+                        
+                            _CleanCacheEvent(eventStreamHandlerMethod, serviceProvider);
                         }
                     }
                     else if (transactionConfig.Type == TransactionType.Command)
@@ -1501,6 +1594,10 @@ public class ExternalEventStreamBroker(
                             eventStreamHandlerMethod.Invoke(eventStreamHandler, new[] { payload });
 
                             unitOfWork.Commit();
+                            
+                            _AfterTransactionHandleEvent(eventStreamAfterTransactionHandlerMethod, eventStreamHandler, payload);
+                        
+                            _CleanCacheEvent(eventStreamHandlerMethod, serviceProvider);
                         }
                     }
                 }
@@ -1532,7 +1629,7 @@ public class ExternalEventStreamBroker(
     }
     
     private async Task _ConsumeNextEventAsync(Type[] useCaseTypes, string topic, IConsumer<string, string> consumer,
-        ConsumeResult<string, string> consumeResult, CancellationToken cancellationToken
+        ConsumeResult<string, string> consumeResult, IServiceProvider serviceProvider, CancellationToken cancellationToken
     )
     {
         IUnitOfWork unitOfWork = default;
@@ -1569,6 +1666,9 @@ public class ExternalEventStreamBroker(
                 
                 var eventStreamHandlerMethod =
                     eventStreamHandlerType.GetMethod("HandleAsync") ?? throw new Exception("HandleAsync function not found !");
+                
+                var eventStreamAfterTransactionHandlerMethod =
+                    eventStreamHandlerType.GetMethod("AfterTransactionHandleAsync") ?? throw new Exception("AfterTransactionHandleAsync function not found !");
                 
                 var transactionConfig =
                         eventStreamHandlerMethod.GetCustomAttribute(typeof(TransactionConfigAttribute)) as TransactionConfigAttribute;
@@ -1607,6 +1707,12 @@ public class ExternalEventStreamBroker(
                         await (Task)eventStreamHandlerMethod.Invoke(eventStreamHandler, new[] { payload, cancellationToken });
 
                         await unitOfWork.CommitAsync(cancellationToken);
+                        
+                        await _AfterTransactionHandleEventAsync(eventStreamAfterTransactionHandlerMethod,
+                            eventStreamHandler, payload, cancellationToken
+                        );
+                        
+                        await _CleanCacheEventAsync(eventStreamHandlerMethod, serviceProvider, cancellationToken);
                     }
                 }
                 else if(transactionConfig.Type == TransactionType.Command)
@@ -1640,6 +1746,12 @@ public class ExternalEventStreamBroker(
                         await (Task)eventStreamHandlerMethod.Invoke(eventStreamHandler, new[] { payload, cancellationToken });
 
                         await unitOfWork.CommitAsync(cancellationToken);
+                        
+                        await _AfterTransactionHandleEventAsync(eventStreamAfterTransactionHandlerMethod,
+                            eventStreamHandler, payload, cancellationToken
+                        );
+                        
+                        await _CleanCacheEventAsync(eventStreamHandlerMethod, serviceProvider, cancellationToken);
                     }
                 }
             }
@@ -1672,7 +1784,7 @@ public class ExternalEventStreamBroker(
     }
     
     private async Task _ConsumeNextRetriableEventAsync(Type[] useCaseTypes, string topic, IConsumer<string, string> consumer,
-        ConsumeResult<string, string> consumeResult, CancellationToken cancellationToken
+        ConsumeResult<string, string> consumeResult, IServiceProvider serviceProvider, CancellationToken cancellationToken
     )
     {
         IUnitOfWork unitOfWork = default;
@@ -1715,6 +1827,9 @@ public class ExternalEventStreamBroker(
                 
                 var eventStreamHandlerMethod =
                     eventStreamHandlerType.GetMethod("HandleAsync") ?? throw new Exception("HandleAsync function not found !");
+                
+                var eventStreamAfterTransactionHandlerMethod =
+                    eventStreamHandlerType.GetMethod("AfterTransactionHandleAsync") ?? throw new Exception("AfterTransactionHandleAsync function not found !");
                 
                 var retryAttr =
                     eventStreamHandlerMethod.GetCustomAttribute(typeof(WithMaxRetryAttribute)) as WithMaxRetryAttribute;
@@ -1768,6 +1883,12 @@ public class ExternalEventStreamBroker(
                             await (Task)eventStreamHandlerMethod.Invoke(eventStreamHandler, new[] { payload, cancellationToken });
 
                             await unitOfWork.CommitAsync(cancellationToken);
+                            
+                            await _AfterTransactionHandleEventAsync(eventStreamAfterTransactionHandlerMethod,
+                                eventStreamHandler, payload, cancellationToken
+                            );
+                        
+                            await _CleanCacheEventAsync(eventStreamHandlerMethod, serviceProvider, cancellationToken);
                         }
                     }
                     else if (transactionConfig.Type == TransactionType.Command)
@@ -1801,6 +1922,12 @@ public class ExternalEventStreamBroker(
                             await (Task)eventStreamHandlerMethod.Invoke(eventStreamHandler, new[] { payload, cancellationToken });
 
                             await unitOfWork.CommitAsync(cancellationToken);
+                            
+                            await _AfterTransactionHandleEventAsync(eventStreamAfterTransactionHandlerMethod,
+                                eventStreamHandler, payload, cancellationToken
+                            );
+                        
+                            await _CleanCacheEventAsync(eventStreamHandlerMethod, serviceProvider, cancellationToken);
                         }
                     }
                 }
@@ -1927,7 +2054,7 @@ public class ExternalEventStreamBroker(
                       producer.Produce(
                           topic,
                           new Message<string, string> {
-                              Key = payload.GetType().Name, Value = serializer.Serialize(payload), Headers = kafkaHeaders
+                              Key = payload.GetType().Name, Value = payload.Serialize(), Headers = kafkaHeaders
                           }
                       );
                       
@@ -1972,7 +2099,7 @@ public class ExternalEventStreamBroker(
                             await producer.ProduceAsync(
                                 topic,
                                 new Message<string, string> {
-                                    Key = payload.GetType().Name, Value = serializer.Serialize(payload), Headers = kafkaHeaders
+                                    Key = payload.GetType().Name, Value = payload.Serialize(), Headers = kafkaHeaders
                                 },
                                 cancellationToken
                             );
@@ -2137,5 +2264,191 @@ public class ExternalEventStreamBroker(
                 domainTypes.FirstOrDefault(type => type.GetInterfaces().Any(i => i == typeof(ICoreCommandUnitOfWork))),
             _ => throw new ArgumentNotFoundException("Must be defined transaction type!")
         };
+    }
+    
+    private void _CleanCacheMessage(MethodInfo messageStreamHandlerMethod, IServiceProvider serviceProvider)
+    {
+        try
+        {
+            if (messageStreamHandlerMethod.GetCustomAttribute(typeof(WithCleanCacheAttribute)) is WithCleanCacheAttribute withCleanCacheAttribute)
+            {
+                var redisCache = serviceProvider.GetRequiredService<IInternalDistributedCache>();
+
+                foreach (var key in withCleanCacheAttribute.Keies.Split("|"))
+                    redisCache.DeleteKey(key);
+            }
+        }
+        catch (Exception e)
+        {
+            e.FileLogger(hostEnvironment, dateTime);
+            
+            e.ElasticStackExceptionLogger(hostEnvironment, globalUniqueIdGenerator, dateTime, 
+                NameOfService, NameOfAction
+            );
+        }
+    }
+    
+    private async Task _CleanCacheMessageAsync(MethodInfo messageStreamHandlerMethod, IServiceProvider serviceProvider,
+        CancellationToken cancellationToken
+    )
+    {
+        try
+        {
+            if (messageStreamHandlerMethod.GetCustomAttribute(typeof(WithCleanCacheAttribute)) is WithCleanCacheAttribute withCleanCacheAttribute)
+            {
+                var redisCache = serviceProvider.GetRequiredService<IInternalDistributedCache>();
+
+                foreach (var key in withCleanCacheAttribute.Keies.Split("|"))
+                    await redisCache.DeleteKeyAsync(key, cancellationToken);
+            }
+        }
+        catch (Exception e)
+        {
+            //fire&forget
+            e.FileLoggerAsync(hostEnvironment, dateTime, cancellationToken);
+            
+            e.ElasticStackExceptionLogger(hostEnvironment, globalUniqueIdGenerator, dateTime, 
+                NameOfService, NameOfAction
+            );
+        }
+    }
+    
+    private void _CleanCacheEvent(MethodInfo eventStreamHandlerMethod, IServiceProvider serviceProvider)
+    {
+        try
+        {
+            if (eventStreamHandlerMethod.GetCustomAttribute(typeof(WithCleanCacheAttribute)) is WithCleanCacheAttribute withCleanCacheAttribute)
+            {
+                var redisCache = serviceProvider.GetRequiredService<IInternalDistributedCache>();
+
+                foreach (var key in withCleanCacheAttribute.Keies.Split("|"))
+                    redisCache.DeleteKey(key);
+            }
+        }
+        catch (Exception e)
+        {
+            e.FileLogger(hostEnvironment, dateTime);
+            
+            e.ElasticStackExceptionLogger(hostEnvironment, globalUniqueIdGenerator, dateTime, 
+                NameOfService, NameOfAction
+            );
+            
+            e.CentralExceptionLoggerAsStream(hostEnvironment, globalUniqueIdGenerator, this, dateTime, NameOfService,
+                $"{NameOfAction}-CleanCacheConsumer"
+            );
+        }
+    }
+    
+    private async Task _CleanCacheEventAsync(MethodInfo eventStreamHandlerMethod, IServiceProvider serviceProvider,
+        CancellationToken cancellationToken
+    )
+    {
+        try
+        {
+            if (eventStreamHandlerMethod.GetCustomAttribute(typeof(WithCleanCacheAttribute)) is WithCleanCacheAttribute withCleanCacheAttribute)
+            {
+                var redisCache = serviceProvider.GetRequiredService<IInternalDistributedCache>();
+
+                foreach (var key in withCleanCacheAttribute.Keies.Split("|"))
+                    await redisCache.DeleteKeyAsync(key, cancellationToken);
+            }
+        }
+        catch (Exception e)
+        {
+            //fire&forget
+            e.FileLoggerAsync(hostEnvironment, dateTime, cancellationToken);
+            
+            e.ElasticStackExceptionLogger(hostEnvironment, globalUniqueIdGenerator, dateTime, 
+                NameOfService, NameOfAction
+            );
+            
+            //fire&forget
+            e.CentralExceptionLoggerAsStreamAsync(hostEnvironment, globalUniqueIdGenerator, this, dateTime, NameOfService,
+                $"{NameOfAction}-CleanCacheConsumer", cancellationToken
+            );
+        }
+    }
+    
+    private void _AfterTransactionHandleMessage(MethodInfo messageStreamAfterTransactionHandlerMethod, 
+        object messageStreamHandler, object message
+    )
+    {
+        try
+        {
+            messageStreamAfterTransactionHandlerMethod.Invoke(messageStreamHandler, new object[] { message });
+        }
+        catch (Exception e)
+        {
+            e.FileLogger(hostEnvironment, dateTime);
+            
+            e.ElasticStackExceptionLogger(hostEnvironment, globalUniqueIdGenerator, dateTime, 
+                NameOfService, NameOfAction
+            );
+        }
+    }
+    
+    private async Task _AfterTransactionHandleMessageAsync(MethodInfo messageStreamAfterTransactionHandlerMethod, 
+        object messageStreamHandler, object message, CancellationToken cancellationToken
+    )
+    {
+        try
+        {
+            await (Task)messageStreamAfterTransactionHandlerMethod.Invoke(messageStreamHandler, new object[] { message, cancellationToken });
+        }
+        catch (Exception e)
+        {
+            //fire&forget
+            e.FileLoggerAsync(hostEnvironment, dateTime, cancellationToken);
+            
+            e.ElasticStackExceptionLogger(hostEnvironment, globalUniqueIdGenerator, dateTime, 
+                NameOfService, NameOfAction
+            );
+        }
+    }
+    
+    private void _AfterTransactionHandleEvent(MethodInfo eventStreamAfterTransactionHandlerMethod, 
+        object eventStreamHandler, object @event
+    )
+    {
+        try
+        {
+            eventStreamAfterTransactionHandlerMethod.Invoke(eventStreamHandler, new object[] { @event });
+        }
+        catch (Exception e)
+        {
+            e.FileLogger(hostEnvironment, dateTime);
+            
+            e.ElasticStackExceptionLogger(hostEnvironment, globalUniqueIdGenerator, dateTime, 
+                NameOfService, NameOfAction
+            );
+            
+            e.CentralExceptionLoggerAsStream(hostEnvironment, globalUniqueIdGenerator, this, dateTime, NameOfService,
+                $"{NameOfAction}-AfterTransactionHandle"
+            );
+        }
+    }
+    
+    private async Task _AfterTransactionHandleEventAsync(MethodInfo eventStreamAfterTransactionHandlerMethod, 
+        object eventStreamHandler, object @event, CancellationToken cancellationToken
+    )
+    {
+        try
+        {
+            await (Task)eventStreamAfterTransactionHandlerMethod.Invoke(eventStreamHandler, new object[] { @event, cancellationToken });
+        }
+        catch (Exception e)
+        {
+            //fire&forget
+            e.FileLoggerAsync(hostEnvironment, dateTime, cancellationToken);
+            
+            e.ElasticStackExceptionLogger(hostEnvironment, globalUniqueIdGenerator, dateTime, 
+                NameOfService, NameOfAction
+            );
+            
+            //fire&forget
+            e.CentralExceptionLoggerAsStreamAsync(hostEnvironment, globalUniqueIdGenerator, this, dateTime, NameOfService,
+                $"{NameOfAction}-AfterTransactionHandle", cancellationToken
+            );
+        }
     }
 }
