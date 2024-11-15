@@ -5,6 +5,24 @@ public interface ICommandHandler<in TCommand, TResult> where TCommand : ICommand
     /// <summary>
     /// 
     /// </summary>
+    /// <param name="message"></param>
+    /// <exception cref="NotImplementedException"></exception>
+    public void BeforeHandle(TCommand message)
+        => throw new NotImplementedException();
+    
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="message"></param>
+    /// <param name="cancellationToken"></param>
+    /// <returns></returns>
+    /// <exception cref="NotImplementedException"></exception>
+    public Task BeforeHandleAsync(TCommand message, CancellationToken cancellationToken)
+        => throw new NotImplementedException();
+    
+    /// <summary>
+    /// 
+    /// </summary>
     /// <param name="command"></param>
     /// <returns></returns>
     /// <exception cref="NotImplementedException"></exception>
@@ -25,7 +43,7 @@ public interface ICommandHandler<in TCommand, TResult> where TCommand : ICommand
     /// </summary>
     /// <param name="message"></param>
     /// <exception cref="NotImplementedException"></exception>
-    public void AfterTransactionHandle(TCommand message)
+    public void AfterHandle(TCommand message)
         => throw new NotImplementedException();
     
     /// <summary>
@@ -35,6 +53,6 @@ public interface ICommandHandler<in TCommand, TResult> where TCommand : ICommand
     /// <param name="cancellationToken"></param>
     /// <returns></returns>
     /// <exception cref="NotImplementedException"></exception>
-    public Task AfterTransactionHandleAsync(TCommand message, CancellationToken cancellationToken)
+    public Task AfterHandleAsync(TCommand message, CancellationToken cancellationToken)
         => throw new NotImplementedException();
 }

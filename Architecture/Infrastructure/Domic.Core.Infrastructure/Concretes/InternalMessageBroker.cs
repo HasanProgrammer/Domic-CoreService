@@ -242,8 +242,8 @@ public class InternalMessageBroker : IInternalMessageBroker
             if (targetConsumerCommandBusHandlerType is not null)
             {
                 var resultType = targetConsumerCommandBusHandlerType?.GetInterfaces()
-                                                                 .Select(i => i.GetGenericArguments()[1])
-                                                                 .FirstOrDefault();
+                                                                     .Select(i => i.GetGenericArguments()[1])
+                                                                     .FirstOrDefault();
             
                 var commandType = targetConsumerCommandBusHandlerType?.GetInterfaces()
                                                                       .Select(i => i.GetGenericArguments()[0])
@@ -258,11 +258,16 @@ public class InternalMessageBroker : IInternalMessageBroker
                 var commandBusHandler = serviceProvider.GetRequiredService(fullContractOfConsumerType);
                 commandBusHandlerType = commandBusHandler.GetType();
                 
+                var commandBusBeforeHandleTypeMethod =
+                    commandBusHandlerType.GetMethod("BeforeHandle") ?? throw new Exception("BeforeHandle function not found !");
+                
                 var commandBusHandlerTypeMethod =
                     commandBusHandlerType.GetMethod("Handle") ?? throw new Exception("Handle function not found !");
                 
                 var commandBusAfterTransactionHandleTypeMethod =
-                    commandBusHandlerType.GetMethod("AfterTransactionHandle") ?? throw new Exception("AfterTransactionHandle function not found !");
+                    commandBusHandlerType.GetMethod("AfterHandle") ?? throw new Exception("AfterHandle function not found !");
+                
+                _BeforeHandle(commandBusBeforeHandleTypeMethod, commandBusHandler, command);
                 
                 var retryAttr =
                     commandBusHandlerTypeMethod.GetCustomAttribute(typeof(WithMaxRetryAttribute)) as WithMaxRetryAttribute;
@@ -272,12 +277,7 @@ public class InternalMessageBroker : IInternalMessageBroker
                 if (maxRetryInfo.result)
                 {
                     if (retryAttr.HasAfterMaxRetryHandle)
-                    {
-                        var afterMaxRetryHandlerMethod =
-                            commandBusHandlerType.GetMethod("AfterMaxRetryHandle") ?? throw new Exception("AfterMaxRetryHandle function not found !");
-                        
-                        afterMaxRetryHandlerMethod.Invoke(commandBusHandler, new object[] { message });
-                    }
+                        _AfterMaxRetryHandle(commandBusHandlerType, commandBusHandler, command);
                 }
                 else
                 {
@@ -373,18 +373,12 @@ public class InternalMessageBroker : IInternalMessageBroker
 
                         unitOfWork.Commit();
                         
-                        _AfterTransactionHandle(commandBusAfterTransactionHandleTypeMethod, commandBusHandler,
-                            command, service,
-                            commandBusHandlerType is not null ? commandBusHandlerType.Name : NameOfAction
-                        );
+                        _AfterHandle(commandBusAfterTransactionHandleTypeMethod, commandBusHandler, command);
                     
-                        _CleanCache(commandBusHandlerTypeMethod, serviceProvider, service, 
-                            commandBusHandlerType is not null ? commandBusHandlerType.Name : NameOfAction
-                        );
+                        _CleanCache(commandBusHandlerTypeMethod, serviceProvider);
                     
                         _PushSuccessNotification(serviceProvider, connectionId?.ToString(), commandType.BaseType?.Name, 
-                            resultInvokeCommand, service, 
-                            commandBusHandlerType is not null ? commandBusHandlerType.Name : NameOfAction
+                            resultInvokeCommand
                         );
                     }
                     
@@ -392,9 +386,7 @@ public class InternalMessageBroker : IInternalMessageBroker
                 }
             }
             
-            _TrySendAckMessage(channel, args, service, 
-                commandBusHandlerType is not null ? commandBusHandlerType.Name : NameOfAction
-            );
+            _TrySendAckMessage(channel, args);
         }
         catch (DomainException e)
         {
@@ -404,9 +396,7 @@ public class InternalMessageBroker : IInternalMessageBroker
                 Body    = new { }
             };
             
-            _PushValidationNotification(channel, args, serviceProvider, unitOfWork, connectionId?.ToString(), payload, 
-                service, commandBusHandlerType is not null ? commandBusHandlerType.Name : NameOfAction
-            );
+            _PushValidationNotification(channel, args, serviceProvider, unitOfWork, connectionId?.ToString(), payload);
         }
         catch (UseCaseException e)
         {
@@ -416,9 +406,7 @@ public class InternalMessageBroker : IInternalMessageBroker
                 Body    = new { }
             };
             
-            _PushValidationNotification(channel, args, serviceProvider, unitOfWork, connectionId?.ToString(), payload, 
-                service, commandBusHandlerType is not null ? commandBusHandlerType.Name : NameOfAction
-            );
+            _PushValidationNotification(channel, args, serviceProvider, unitOfWork, connectionId?.ToString(), payload);
         }
         catch (Exception e)
         {
@@ -437,10 +425,7 @@ public class InternalMessageBroker : IInternalMessageBroker
             #endregion
 
             _TryRollback(unitOfWork);
-
-            _TryRequeueMessageAsDeadLetter(channel, args, service, 
-                commandBusHandlerType is not null ? commandBusHandlerType.Name : NameOfAction
-            );
+            _TryRequeueMessageAsDeadLetter(channel, args);
         }
     }
     
@@ -495,11 +480,18 @@ public class InternalMessageBroker : IInternalMessageBroker
                 var commandBusHandler = serviceProvider.GetRequiredService(fullContractOfConsumerType);
                 commandBusHandlerType = commandBusHandler.GetType();
                 
+                var commandBusBeforeHandleTypeMethod =
+                    commandBusHandlerType.GetMethod("BeforeHandleAsync") ?? throw new Exception("BeforeHandleAsync function not found !");
+                
                 var commandBusHandlerTypeMethod =
                     commandBusHandlerType.GetMethod("HandleAsync") ?? throw new Exception("HandleAsync function not found !");
                 
-                var commandBusAfterTransactionHandleTypeMethod =
-                    commandBusHandlerType.GetMethod("AfterTransactionHandleAsync") ?? throw new Exception("AfterTransactionHandleAsync function not found !");
+                var commandBusAfterHandleTypeMethod =
+                    commandBusHandlerType.GetMethod("AfterHandleAsync") ?? throw new Exception("AfterHandleAsync function not found !");
+                
+                await _BeforeHandleAsync(commandBusBeforeHandleTypeMethod, commandBusHandler, command,
+                    cancellationToken
+                );
                 
                 var retryAttr =
                     commandBusHandlerTypeMethod.GetCustomAttribute(typeof(WithMaxRetryAttribute)) as WithMaxRetryAttribute;
@@ -509,12 +501,9 @@ public class InternalMessageBroker : IInternalMessageBroker
                 if (maxRetryInfo.result)
                 {
                     if (retryAttr.HasAfterMaxRetryHandle)
-                    {
-                        var afterMaxRetryHandlerMethod =
-                            commandBusHandlerType.GetMethod("AfterMaxRetryHandleAsync") ?? throw new Exception("AfterMaxRetryHandleAsync function not found !");
-                        
-                        await (Task)afterMaxRetryHandlerMethod.Invoke(commandBusHandler, new object[] { message, cancellationToken });
-                    }
+                        await _AfterMaxRetryHandleAsync(commandBusHandlerType, commandBusHandler, command, 
+                            cancellationToken
+                        );
                 }
                 else
                 {
@@ -612,21 +601,14 @@ public class InternalMessageBroker : IInternalMessageBroker
 
                         await unitOfWork.CommitAsync(cancellationToken);
                         
-                        await _AfterTransactionHandleAsync(commandBusAfterTransactionHandleTypeMethod, 
-                            commandBusHandler, command, service, 
-                            commandBusHandlerType is not null ? commandBusHandlerType.Name : NameOfAction,
+                        await _AfterHandleAsync(commandBusAfterHandleTypeMethod, commandBusHandler, command,
                             cancellationToken
                         );
                     
-                        await _CleanCacheAsync(commandBusHandlerTypeMethod, serviceProvider, service,
-                            commandBusHandlerType is not null ? commandBusHandlerType.Name : NameOfAction,
-                            cancellationToken
-                        );
+                        await _CleanCacheAsync(commandBusHandlerTypeMethod, serviceProvider, cancellationToken);
                     
-                        await _PushSuccessNotificationAsync(serviceProvider, connectionId?.ToString(), commandType.BaseType?.Name,
-                            resultInvokeCommand, service, 
-                            commandBusHandlerType is not null ? commandBusHandlerType.Name : NameOfAction,
-                            cancellationToken
+                        await _PushSuccessNotificationAsync(serviceProvider, connectionId?.ToString(), 
+                            commandType.BaseType?.Name, resultInvokeCommand, cancellationToken
                         );
                     }
                     
@@ -634,10 +616,7 @@ public class InternalMessageBroker : IInternalMessageBroker
                 }
             }
             
-            await _TrySendAckMessageAsync(channel, args, service, 
-                commandBusHandlerType is not null ? commandBusHandlerType.Name : NameOfAction,
-                cancellationToken
-            );
+            await _TrySendAckMessageAsync(channel, args, cancellationToken);
         }
         catch (DomainException e)
         {
@@ -648,8 +627,7 @@ public class InternalMessageBroker : IInternalMessageBroker
             };
             
             await _PushValidationNotificationAsync(channel, args, serviceProvider, unitOfWork, connectionId?.ToString(), 
-                payload, service, commandBusHandlerType is not null ? commandBusHandlerType.Name : NameOfAction,
-                cancellationToken
+                payload, cancellationToken
             );
         }
         catch (UseCaseException e)
@@ -661,8 +639,7 @@ public class InternalMessageBroker : IInternalMessageBroker
             };
             
             await _PushValidationNotificationAsync(channel, args, serviceProvider, unitOfWork, connectionId?.ToString(),
-                payload, service, commandBusHandlerType is not null ? commandBusHandlerType.Name : NameOfAction,
-                cancellationToken
+                payload, cancellationToken
             );
         }
         catch (Exception e)
@@ -685,10 +662,7 @@ public class InternalMessageBroker : IInternalMessageBroker
             #endregion
 
             await _TryRollbackAsync(unitOfWork, cancellationToken);
-            await _TryRequeueMessageAsDeadLetterAsync(channel, args, service, 
-                commandBusHandlerType is not null ? commandBusHandlerType.Name : NameOfAction,
-                cancellationToken
-            );
+            await _TryRequeueMessageAsDeadLetterAsync(channel, args, cancellationToken);
         }
     }
     
@@ -724,9 +698,7 @@ public class InternalMessageBroker : IInternalMessageBroker
         }
     }
     
-    private void _TryRequeueMessageAsDeadLetter(IModel channel, BasicDeliverEventArgs args, string service, 
-        string action
-    )
+    private void _TryRequeueMessageAsDeadLetter(IModel channel, BasicDeliverEventArgs args)
     {
         try
         {
@@ -741,17 +713,17 @@ public class InternalMessageBroker : IInternalMessageBroker
             e.FileLogger(_hostEnvironment, _dateTime);
             
             e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, 
-                NameOfService, NameOfAction
+                NameOfService, $"{NameOfAction}-TryRequeueMessageAsDeadLetter"
             );
             
             e.CentralExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _externalMessageBroker, _dateTime, 
-                service, action
+                NameOfService, $"{NameOfAction}-TryRequeueMessageAsDeadLetter"
             );
         }
     }
     
-    private async Task _TryRequeueMessageAsDeadLetterAsync(IModel channel, BasicDeliverEventArgs args, string service,
-        string action, CancellationToken cancellationToken
+    private async Task _TryRequeueMessageAsDeadLetterAsync(IModel channel, BasicDeliverEventArgs args, 
+        CancellationToken cancellationToken
     )
     {
         try
@@ -768,17 +740,17 @@ public class InternalMessageBroker : IInternalMessageBroker
             e.FileLoggerAsync(_hostEnvironment, _dateTime, cancellationToken);
             
             e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, 
-                NameOfService, NameOfAction
+                NameOfService, $"{NameOfAction}-TryRequeueMessageAsDeadLetter"
             );
             
             //fire&forget
             e.CentralExceptionLoggerAsync(_hostEnvironment, _globalUniqueIdGenerator, _externalMessageBroker, _dateTime, 
-                service, action, cancellationToken
+                NameOfService, $"{NameOfAction}-TryRequeueMessageAsDeadLetter", cancellationToken
             );
         }
     }
     
-    private void _TrySendAckMessage(IModel channel, BasicDeliverEventArgs args, string service, string action)
+    private void _TrySendAckMessage(IModel channel, BasicDeliverEventArgs args)
     {
         try
         {
@@ -793,18 +765,16 @@ public class InternalMessageBroker : IInternalMessageBroker
             e.FileLogger(_hostEnvironment, _dateTime);
 
             e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, 
-                NameOfService, NameOfAction
+                NameOfService, $"{NameOfAction}-TrySendAckMessage"
             );
             
-            e.CentralExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _externalMessageBroker, _dateTime, service, 
-                action
+            e.CentralExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _externalMessageBroker, _dateTime, 
+                NameOfService, $"{NameOfAction}-TrySendAckMessage"
             );
         }
     }
     
-    private async Task _TrySendAckMessageAsync(IModel channel, BasicDeliverEventArgs args, string service, string action,
-        CancellationToken cancellationToken
-    )
+    private async Task _TrySendAckMessageAsync(IModel channel, BasicDeliverEventArgs args, CancellationToken cancellationToken)
     {
         try
         {
@@ -820,12 +790,12 @@ public class InternalMessageBroker : IInternalMessageBroker
             e.FileLoggerAsync(_hostEnvironment, _dateTime, cancellationToken);
 
             e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, 
-                NameOfService, NameOfAction
+                NameOfService, $"{NameOfAction}-TrySendAckMessage"
             );
             
             //fire&forget
             e.CentralExceptionLoggerAsync(_hostEnvironment, _globalUniqueIdGenerator, _externalMessageBroker, _dateTime, 
-                service, action, cancellationToken
+                NameOfService, $"{NameOfAction}-TrySendAckMessage", cancellationToken
             );
         }
     }
@@ -893,7 +863,7 @@ public class InternalMessageBroker : IInternalMessageBroker
     }
 
     private void _PushSuccessNotification(IServiceProvider serviceProvider, string connectionId, string typeOfCommand,
-        object result, string service, string action
+        object result
     )
     {
         var notificationUrl = serviceProvider.GetRequiredService<IServiceDiscovery>()
@@ -934,11 +904,11 @@ public class InternalMessageBroker : IInternalMessageBroker
             e.FileLogger(_hostEnvironment, _dateTime);
             
             e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, 
-                NameOfService, NameOfAction
+                NameOfService, $"{NameOfAction}-PushSuccessNotification"
             );
             
-            e.CentralExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _externalMessageBroker, _dateTime, service, 
-                action
+            e.CentralExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _externalMessageBroker, _dateTime, 
+                NameOfService, $"{NameOfAction}-PushSuccessNotification"
             );
         }
         finally
@@ -948,7 +918,7 @@ public class InternalMessageBroker : IInternalMessageBroker
     }
     
     private async Task _PushSuccessNotificationAsync(IServiceProvider serviceProvider, string connectionId, string typeOfCommand,
-        object result, string service, string action, CancellationToken cancellationToken
+        object result, CancellationToken cancellationToken
     )
     {
         var notificationUrl = await serviceProvider.GetRequiredService<IServiceDiscovery>()
@@ -988,12 +958,12 @@ public class InternalMessageBroker : IInternalMessageBroker
             e.FileLoggerAsync(_hostEnvironment, _dateTime, cancellationToken);
             
             e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, 
-                NameOfService, NameOfAction
+                NameOfService, $"{NameOfAction}-PushSuccessNotification"
             );
             
             //fire&forget
             e.CentralExceptionLoggerAsync(_hostEnvironment, _globalUniqueIdGenerator, _externalMessageBroker, 
-                _dateTime, service, action, cancellationToken
+                _dateTime, NameOfService, $"{NameOfAction}-PushSuccessNotification", cancellationToken
             );
         }
         finally
@@ -1003,8 +973,7 @@ public class InternalMessageBroker : IInternalMessageBroker
     }
     
     private void _PushValidationNotification(IModel channel, BasicDeliverEventArgs args, 
-        IServiceProvider serviceProvider, IUnitOfWork unitOfWork, string connectionId, Payload payload, string service,
-        string action
+        IServiceProvider serviceProvider, IUnitOfWork unitOfWork, string connectionId, Payload payload
     )
     {
         _TryRollback(unitOfWork);
@@ -1029,11 +998,11 @@ public class InternalMessageBroker : IInternalMessageBroker
             e.FileLogger(_hostEnvironment, _dateTime);
             
             e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, 
-                NameOfService, NameOfAction
+                NameOfService, $"{NameOfAction}-PushValidationNotification"
             );
             
-            e.CentralExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _externalMessageBroker, _dateTime, service, 
-                action
+            e.CentralExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _externalMessageBroker, _dateTime, 
+                NameOfService, $"{NameOfAction}-PushValidationNotification"
             );
         }
         finally
@@ -1041,12 +1010,12 @@ public class InternalMessageBroker : IInternalMessageBroker
             hubConnection.DisposeAsync();
         }
 
-        _TrySendAckMessage(channel, args, service, action);
+        _TrySendAckMessage(channel, args);
     }
     
     private async Task _PushValidationNotificationAsync(IModel channel, BasicDeliverEventArgs args,
-        IServiceProvider serviceProvider, IUnitOfWork unitOfWork, string connectionId, Payload payload, string service, 
-        string action, CancellationToken cancellationToken
+        IServiceProvider serviceProvider, IUnitOfWork unitOfWork, string connectionId, Payload payload, 
+        CancellationToken cancellationToken
     )
     {
         await _TryRollbackAsync(unitOfWork, cancellationToken);
@@ -1070,12 +1039,12 @@ public class InternalMessageBroker : IInternalMessageBroker
             e.FileLoggerAsync(_hostEnvironment, _dateTime, cancellationToken);
             
             e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, 
-                NameOfService, NameOfAction
+                NameOfService, $"{NameOfAction}-PushValidationNotification"
             );
             
             //fire&forget
             e.CentralExceptionLoggerAsync(_hostEnvironment, _globalUniqueIdGenerator, _externalMessageBroker, _dateTime, 
-                service, action, cancellationToken
+                NameOfService, $"{NameOfAction}-PushValidationNotification", cancellationToken
             );
         }
         finally
@@ -1083,12 +1052,10 @@ public class InternalMessageBroker : IInternalMessageBroker
             await hubConnection.DisposeAsync();
         }
 
-        await _TrySendAckMessageAsync(channel, args, service, action, cancellationToken);
+        await _TrySendAckMessageAsync(channel, args, cancellationToken);
     }
     
-    private void _CleanCache(MethodInfo eventBusHandlerMethod, IServiceProvider serviceProvider, string service, 
-        string action
-    )
+    private void _CleanCache(MethodInfo eventBusHandlerMethod, IServiceProvider serviceProvider)
     {
         try
         {
@@ -1105,17 +1072,17 @@ public class InternalMessageBroker : IInternalMessageBroker
             e.FileLogger(_hostEnvironment, _dateTime);
             
             e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, 
-                NameOfService, NameOfAction
+                NameOfService, $"{NameOfAction}-CleanCacheConsumer"
             );
             
-            e.CentralExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _externalMessageBroker, _dateTime, service, 
-                action
+            e.CentralExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _externalMessageBroker, _dateTime, 
+                NameOfService, $"{NameOfAction}-CleanCacheConsumer"
             );
         }
     }
     
-    private async Task _CleanCacheAsync(MethodInfo eventBusHandlerMethod, IServiceProvider serviceProvider, string service, 
-        string action, CancellationToken cancellationToken
+    private async Task _CleanCacheAsync(MethodInfo eventBusHandlerMethod, IServiceProvider serviceProvider, 
+        CancellationToken cancellationToken
     )
     {
         try
@@ -1134,56 +1101,150 @@ public class InternalMessageBroker : IInternalMessageBroker
             e.FileLoggerAsync(_hostEnvironment, _dateTime, cancellationToken);
             
             e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, 
-                NameOfService, NameOfAction
+                NameOfService, $"{NameOfAction}-CleanCacheConsumer"
             );
             
             //fire&forget
-            e.CentralExceptionLoggerAsync(_hostEnvironment, _globalUniqueIdGenerator, _externalMessageBroker, _dateTime, service, 
-                action, cancellationToken
-            );
-        }
-    }
-
-    private void _AfterTransactionHandle(MethodInfo commandBusAfterTransactionHandlerMethod, object commandBusHandler, 
-        object command, string service, string action
-    )
-    {
-        try
-        {
-            commandBusAfterTransactionHandlerMethod.Invoke(commandBusHandler, new[] { command });
-        }
-        catch (Exception e)
-        {
-            e.FileLogger(_hostEnvironment, _dateTime);
-            
-            e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, 
-                NameOfService, NameOfAction
-            );
-            
-            e.CentralExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _externalMessageBroker, _dateTime, service, 
-                action
+            e.CentralExceptionLoggerAsync(_hostEnvironment, _globalUniqueIdGenerator, _externalMessageBroker, _dateTime, 
+                NameOfService, $"{NameOfAction}-CleanCacheConsumer", cancellationToken
             );
         }
     }
     
-    private async Task _AfterTransactionHandleAsync(MethodInfo commandBusAfterTransactionHandlerMethod, object commandBusHandler, 
-        object command, string service, string action, CancellationToken cancellationToken
-    )
+    private void _BeforeHandle(MethodInfo commandBusBeforeHandlerMethod, object commandBusHandler, object command)
     {
         try
         {
-            await (Task)commandBusAfterTransactionHandlerMethod.Invoke(commandBusHandler, new[] { command, cancellationToken});
+            commandBusBeforeHandlerMethod.Invoke(commandBusHandler, new[] { command });
         }
         catch (Exception e)
         {
             e.FileLogger(_hostEnvironment, _dateTime);
             
             e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, 
-                NameOfService, NameOfAction
+                NameOfService, $"{NameOfAction}-BeforeHandle"
             );
             
-            e.CentralExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _externalMessageBroker, _dateTime, service, 
-                action
+            e.CentralExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _externalMessageBroker, _dateTime, 
+                NameOfService, $"{NameOfAction}-BeforeHandle"
+            );
+        }
+    }
+    
+    private async Task _BeforeHandleAsync(MethodInfo commandBusBeforeHandlerMethod, object commandBusHandler, 
+        object command, CancellationToken cancellationToken
+    )
+    {
+        try
+        {
+            await (Task)commandBusBeforeHandlerMethod.Invoke(commandBusHandler, new[] { command, cancellationToken});
+        }
+        catch (Exception e)
+        {
+            //fire&forget
+            e.FileLoggerAsync(_hostEnvironment, _dateTime, cancellationToken);
+            
+            e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, 
+                NameOfService, $"{NameOfAction}-BeforeHandle"
+            );
+            
+            //fire&forget
+            e.CentralExceptionLoggerAsync(_hostEnvironment, _globalUniqueIdGenerator, _externalMessageBroker, _dateTime, 
+                NameOfService, $"{NameOfAction}-BeforeHandle", cancellationToken
+            );
+        }
+    }
+
+    private void _AfterHandle(MethodInfo commandBusAfterHandlerMethod, object commandBusHandler, object command)
+    {
+        try
+        {
+            commandBusAfterHandlerMethod.Invoke(commandBusHandler, new[] { command });
+        }
+        catch (Exception e)
+        {
+            e.FileLogger(_hostEnvironment, _dateTime);
+            
+            e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, 
+                NameOfService, $"{NameOfAction}-AfterHandle"
+            );
+            
+            e.CentralExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _externalMessageBroker, _dateTime, 
+                NameOfService, $"{NameOfAction}-AfterHandle"
+            );
+        }
+    }
+    
+    private async Task _AfterHandleAsync(MethodInfo commandBusAfterHandlerMethod, object commandBusHandler, 
+        object command, CancellationToken cancellationToken
+    )
+    {
+        try
+        {
+            await (Task)commandBusAfterHandlerMethod.Invoke(commandBusHandler, new[] { command, cancellationToken});
+        }
+        catch (Exception e)
+        {
+            //fire&forget
+            e.FileLoggerAsync(_hostEnvironment, _dateTime, cancellationToken);
+            
+            e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, 
+                NameOfService, $"{NameOfAction}-AfterHandle"
+            );
+            
+            //fire&forget
+            e.CentralExceptionLoggerAsync(_hostEnvironment, _globalUniqueIdGenerator, _externalMessageBroker, _dateTime, 
+                NameOfService, $"{NameOfAction}-AfterHandle", cancellationToken
+            );
+        }
+    }
+    
+    private void _AfterMaxRetryHandle(Type commandBusHandlerType, object commandBusHandler, object command)
+    {
+        try
+        {
+            var afterMaxRetryHandlerMethod =
+                commandBusHandlerType.GetMethod("AfterMaxRetryHandle") ?? throw new Exception("AfterMaxRetryHandle function not found !");
+                        
+            afterMaxRetryHandlerMethod.Invoke(commandBusHandler, new[] { command });
+        }
+        catch (Exception e)
+        {
+            e.FileLogger(_hostEnvironment, _dateTime);
+            
+            e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, 
+                NameOfService, $"{NameOfAction}-AfterMaxRetryHandle"
+            );
+            
+            e.CentralExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _externalMessageBroker, _dateTime, 
+                NameOfService, $"{NameOfAction}-AfterMaxRetryHandle"
+            );
+        }
+    }
+    
+    private async Task _AfterMaxRetryHandleAsync(Type commandBusHandlerType, object commandBusHandler, object command,
+        CancellationToken cancellationToken
+    )
+    {
+        try
+        {
+            var afterMaxRetryHandlerMethod =
+                commandBusHandlerType.GetMethod("AfterMaxRetryHandleAsync") ?? throw new Exception("AfterMaxRetryHandleAsync function not found !");
+                        
+            await (Task)afterMaxRetryHandlerMethod.Invoke(commandBusHandler, new[] { command, cancellationToken });
+        }
+        catch (Exception e)
+        {
+            //fire&forget
+            e.FileLoggerAsync(_hostEnvironment, _dateTime, cancellationToken);
+            
+            e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, 
+                NameOfService, $"{NameOfAction}-AfterMaxRetryHandle"
+            );
+            
+            //fire&forget
+            e.CentralExceptionLoggerAsync(_hostEnvironment, _globalUniqueIdGenerator, _externalMessageBroker, _dateTime, 
+                NameOfService, $"{NameOfAction}-AfterMaxRetryHandle", cancellationToken
             );
         }
     }

@@ -467,7 +467,7 @@ public class ExternalMessageBroker : IExternalMessageBroker
                 
                 var @event = Encoding.UTF8.GetString(args.Body.ToArray()).DeSerialize<Event>();
                 
-                _EventOfQueueHandle(channel, args, @event, NameOfService, serviceScope.ServiceProvider);
+                _EventOfQueueHandle(channel, args, @event, serviceScope.ServiceProvider);
                 
             };
 
@@ -509,7 +509,7 @@ public class ExternalMessageBroker : IExternalMessageBroker
                 
                 var @event = Encoding.UTF8.GetString(args.Body.ToArray()).DeSerialize<Event>();
                 
-               await _EventOfQueueHandleAsync(channel, args, @event, NameOfService, serviceScope.ServiceProvider, 
+               await _EventOfQueueHandleAsync(channel, args, @event, serviceScope.ServiceProvider, 
                    cancellationToken
                );
                 
@@ -550,18 +550,24 @@ public class ExternalMessageBroker : IExternalMessageBroker
         IServiceProvider serviceProvider
     ) where TMessage : class
     {
-        IUnitOfWork unitOfWork = null;
+        IUnitOfWork unitOfWork     = null;
+        Type messageBusHandlerType = null;
 
         try
         {
-            var messageBusHandler     = serviceProvider.GetRequiredService(typeof(IConsumerMessageBusHandler<TMessage>));
-            var messageBusHandlerType = messageBusHandler.GetType();
+            var messageBusHandler = serviceProvider.GetRequiredService(typeof(IConsumerMessageBusHandler<TMessage>));
+            messageBusHandlerType = messageBusHandler.GetType();
+            
+            var messageBusBeforeHandlerMethod =
+                messageBusHandlerType.GetMethod("BeforeHandle") ?? throw new Exception("BeforeHandle function not found !");
             
             var messageBusHandlerMethod =
                 messageBusHandlerType.GetMethod("Handle") ?? throw new Exception("Handle function not found !");
             
-            var messageBusAfterTransactionHandlerMethod =
-                messageBusHandlerType.GetMethod("AfterTransactionHandle") ?? throw new Exception("AfterTransactionHandle function not found !");
+            var messageBusAfterHandlerMethod =
+                messageBusHandlerType.GetMethod("AfterHandle") ?? throw new Exception("AfterHandle function not found !");
+            
+            _BeforeHandleMessage(messageBusBeforeHandlerMethod, messageBusHandler, message);
 
             var retryAttr =
                 messageBusHandlerMethod.GetCustomAttribute(typeof(WithMaxRetryAttribute)) as WithMaxRetryAttribute;
@@ -571,14 +577,7 @@ public class ExternalMessageBroker : IExternalMessageBroker
             if (maxRetryInfo.result)
             {
                 if (retryAttr.HasAfterMaxRetryHandle)
-                {
-                    //todo: should be used [Try-Catch] in here!
-                    
-                    var afterMaxRetryHandlerMethod =
-                        messageBusHandlerType.GetMethod("AfterMaxRetryHandle") ?? throw new Exception("AfterMaxRetryHandle function not found !");
-                    
-                    afterMaxRetryHandlerMethod.Invoke(messageBusHandler, new object[] { message });
-                }
+                    _AfterMaxRetryHandleMessage(messageBusHandlerType, messageBusHandler, message);
             }
             else
             {
@@ -625,7 +624,7 @@ public class ExternalMessageBroker : IExternalMessageBroker
                 
                     unitOfWork.Commit();
 
-                    _AfterTransactionHandleMessage(messageBusAfterTransactionHandlerMethod, messageBusHandler, message);
+                    _AfterHandleMessage(messageBusAfterHandlerMethod, messageBusHandler, message);
 
                     _CleanCacheMessage(messageBusHandlerMethod, serviceProvider);
                 }
@@ -638,7 +637,7 @@ public class ExternalMessageBroker : IExternalMessageBroker
             e.FileLogger(_hostEnvironment, _dateTime);
             
             e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, 
-                NameOfService, NameOfAction
+                NameOfService, messageBusHandlerType is not null ? messageBusHandlerType.Name : NameOfAction
             );
             
             _TryRollback(unitOfWork);
@@ -651,35 +650,38 @@ public class ExternalMessageBroker : IExternalMessageBroker
         IServiceProvider serviceProvider, CancellationToken cancellationToken
     ) where TMessage : class
     {
-        IUnitOfWork unitOfWork = null;
+        IUnitOfWork unitOfWork     = null;
+        Type messageBusHandlerType = null;
 
         try
         {
-            var messageBusHandler     = serviceProvider.GetRequiredService(typeof(IConsumerMessageBusHandler<TMessage>));
-            var messageBusHandlerType = messageBusHandler.GetType();
+            var messageBusHandler = serviceProvider.GetRequiredService(typeof(IConsumerMessageBusHandler<TMessage>));
+            messageBusHandlerType = messageBusHandler.GetType();
+            
+            var messageBusBeforeHandlerMethod =
+                messageBusHandlerType.GetMethod("BeforeHandleAsync") ?? throw new Exception("BeforeHandleAsync function not found !");
             
             var messageBusHandlerMethod =
                 messageBusHandlerType.GetMethod("HandleAsync") ?? throw new Exception("HandleAsync function not found !");
+            
+            var messageBusAfterHandlerMethod =
+                messageBusHandlerType.GetMethod("AfterHandleAsync") ?? throw new Exception("AfterHandleAsync function not found !");
 
+            await _BeforeHandleMessageAsync(messageBusBeforeHandlerMethod, messageBusHandler, message,
+                cancellationToken
+            );
+            
             var retryAttr =
                 messageBusHandlerMethod.GetCustomAttribute(typeof(WithMaxRetryAttribute)) as WithMaxRetryAttribute;
-            
-            var messageBusAfterTransactionHandlerMethod =
-                messageBusHandlerType.GetMethod("AfterTransactionHandleAsync") ?? throw new Exception("AfterTransactionHandleAsync function not found !");
             
             var maxRetryInfo = _IsMaxRetryMessage(args, retryAttr);
             
             if (maxRetryInfo.result)
             {
                 if (retryAttr.HasAfterMaxRetryHandle)
-                {
-                    //todo: should be used [Try-Catch] in here!
-                    
-                    var afterMaxRetryHandlerMethod =
-                        messageBusHandlerType.GetMethod("AfterMaxRetryHandleAsync") ?? throw new Exception("AfterMaxRetryHandleAsync function not found !");
-                    
-                    await (Task)afterMaxRetryHandlerMethod.Invoke(messageBusHandler, new object[] { message, cancellationToken });
-                }
+                    await _AfterMaxRetryHandleMessageAsync(messageBusHandlerType, messageBusHandler, message, 
+                        cancellationToken
+                    );
             }
             else
             {
@@ -725,7 +727,7 @@ public class ExternalMessageBroker : IExternalMessageBroker
                 
                     await unitOfWork.CommitAsync(cancellationToken);
 
-                    await _AfterTransactionHandleMessageAsync(messageBusAfterTransactionHandlerMethod,
+                    await _AfterHandleMessageAsync(messageBusAfterHandlerMethod,
                         messageBusHandler, message, cancellationToken
                     );
 
@@ -741,10 +743,11 @@ public class ExternalMessageBroker : IExternalMessageBroker
             e.FileLoggerAsync(_hostEnvironment, _dateTime, cancellationToken: cancellationToken);
             
             e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, 
-                NameOfService, NameOfAction
+                NameOfService, messageBusHandlerType is not null ? messageBusHandlerType.Name : NameOfAction
             );
 
             await _TryRollbackAsync(unitOfWork, cancellationToken);
+            
             await _TryRequeueMessageAsDeadLetterAsync(channel, args, cancellationToken);
         }
     }
@@ -753,8 +756,9 @@ public class ExternalMessageBroker : IExternalMessageBroker
         IServiceProvider serviceProvider
     )
     {
-       IUnitOfWork unitOfWork = null;
-
+        IUnitOfWork unitOfWork     = null;
+        Type messageBusHandlerType = null;
+       
         try
         {
             var messageType = message.GetType();
@@ -762,14 +766,19 @@ public class ExternalMessageBroker : IExternalMessageBroker
             var consumerMessageBusHandlerContract =
                 typeof(IConsumerMessageBusHandler<>).MakeGenericType(messageType);
                 
-            var messageBusHandler     = serviceProvider.GetRequiredService(consumerMessageBusHandlerContract);
-            var messageBusHandlerType = messageBusHandler.GetType();
+            var messageBusHandler = serviceProvider.GetRequiredService(consumerMessageBusHandlerContract);
+            messageBusHandlerType = messageBusHandler.GetType();
+            
+            var messageBusBeforeHandlerMethod =
+                messageBusHandlerType.GetMethod("BeforeHandle") ?? throw new Exception("BeforeHandle function not found !");
             
             var messageBusHandlerMethod =
                 messageBusHandlerType.GetMethod("Handle") ?? throw new Exception("Handle function not found !");
             
-            var messageBusAfterTransactionHandlerMethod =
-                messageBusHandlerType.GetMethod("AfterTransactionHandle") ?? throw new Exception("AfterTransactionHandle function not found !");
+            var messageBusAfterHandlerMethod =
+                messageBusHandlerType.GetMethod("AfterHandle") ?? throw new Exception("AfterHandle function not found !");
+            
+            _BeforeHandleMessage(messageBusBeforeHandlerMethod, messageBusHandler, message);
 
             var retryAttr =
                 messageBusHandlerMethod.GetCustomAttribute(typeof(WithMaxRetryAttribute)) as WithMaxRetryAttribute;
@@ -779,14 +788,7 @@ public class ExternalMessageBroker : IExternalMessageBroker
             if (maxRetryInfo.result)
             {
                 if (retryAttr.HasAfterMaxRetryHandle)
-                {
-                    //todo: should be used [Try-Catch] in here!
-                    
-                    var afterMaxRetryHandlerMethod =
-                        messageBusHandlerType.GetMethod("AfterMaxRetryHandle") ?? throw new Exception("AfterMaxRetryHandle function not found !");
-                    
-                    afterMaxRetryHandlerMethod.Invoke(messageBusHandler, new[] { message });
-                }
+                    _AfterMaxRetryHandleMessage(messageBusHandlerType, messageBusHandler, message);
             }
             else
             {
@@ -833,7 +835,7 @@ public class ExternalMessageBroker : IExternalMessageBroker
                 
                     unitOfWork.Commit();
                     
-                    _AfterTransactionHandleMessage(messageBusAfterTransactionHandlerMethod, messageBusHandler, message);
+                    _AfterHandleMessage(messageBusAfterHandlerMethod, messageBusHandler, message);
 
                     _CleanCacheMessage(messageBusHandlerMethod, serviceProvider);
                 }
@@ -846,7 +848,7 @@ public class ExternalMessageBroker : IExternalMessageBroker
             e.FileLogger(_hostEnvironment, _dateTime);
             
             e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, 
-                NameOfService, NameOfAction
+                NameOfService, messageBusHandlerType is not null ? messageBusHandlerType.Name : NameOfAction
             );
             
             _TryRollback(unitOfWork);
@@ -859,8 +861,9 @@ public class ExternalMessageBroker : IExternalMessageBroker
         IServiceProvider serviceProvider, CancellationToken cancellationToken
     )
     {
-       IUnitOfWork unitOfWork = null;
-
+        IUnitOfWork unitOfWork     = null;
+        Type messageBusHandlerType = null;
+       
         try
         {
             var messageType = message.GetType();
@@ -868,15 +871,22 @@ public class ExternalMessageBroker : IExternalMessageBroker
             var consumerMessageBusHandlerContract =
                 typeof(IConsumerMessageBusHandler<>).MakeGenericType(messageType);
                 
-            var messageBusHandler     = serviceProvider.GetRequiredService(consumerMessageBusHandlerContract);
-            var messageBusHandlerType = messageBusHandler.GetType();
+            var messageBusHandler = serviceProvider.GetRequiredService(consumerMessageBusHandlerContract);
+            messageBusHandlerType = messageBusHandler.GetType();
+            
+            var messageBusBeforeHandlerMethod =
+                messageBusHandlerType.GetMethod("BeforeHandleAsync") ?? throw new Exception("BeforeHandleAsync function not found !");
             
             var messageBusHandlerMethod =
                 messageBusHandlerType.GetMethod("HandleAsync") ?? throw new Exception("HandleAsync function not found !");
             
             var messageBusAfterTransactionHandlerMethod =
-                messageBusHandlerType.GetMethod("AfterTransactionHandleAsync") ?? throw new Exception("AfterTransactionHandleAsync function not found !");
+                messageBusHandlerType.GetMethod("AfterHandleAsync") ?? throw new Exception("AfterHandleAsync function not found !");
 
+            await _BeforeHandleMessageAsync(messageBusBeforeHandlerMethod, messageBusHandler, message,
+                cancellationToken
+            );
+            
             var retryAttr =
                 messageBusHandlerMethod.GetCustomAttribute(typeof(WithMaxRetryAttribute)) as WithMaxRetryAttribute;
 
@@ -885,14 +895,9 @@ public class ExternalMessageBroker : IExternalMessageBroker
             if (maxRetryInfo.result)
             {
                 if (retryAttr.HasAfterMaxRetryHandle)
-                {
-                    //todo: should be used [Try-Catch] in here!
-                    
-                    var afterMaxRetryHandlerMethod =
-                        messageBusHandlerType.GetMethod("AfterMaxRetryHandleAsync") ?? throw new Exception("AfterMaxRetryHandleAsync function not found !");
-                    
-                    await (Task)afterMaxRetryHandlerMethod.Invoke(messageBusHandler, new[] { message, cancellationToken });
-                }
+                    await _AfterMaxRetryHandleMessageAsync(messageBusHandlerType, messageBusHandler, message, 
+                        cancellationToken
+                    );
             }
             else
             {
@@ -938,7 +943,7 @@ public class ExternalMessageBroker : IExternalMessageBroker
                 
                     await unitOfWork.CommitAsync(cancellationToken);
 
-                    await _AfterTransactionHandleMessageAsync(messageBusAfterTransactionHandlerMethod, messageBusHandler,
+                    await _AfterHandleMessageAsync(messageBusAfterTransactionHandlerMethod, messageBusHandler,
                         message, cancellationToken
                     );
 
@@ -954,10 +959,11 @@ public class ExternalMessageBroker : IExternalMessageBroker
             e.FileLoggerAsync(_hostEnvironment, _dateTime, cancellationToken);
             
             e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, 
-                NameOfService, NameOfAction
+                NameOfService, messageBusHandlerType is not null ? messageBusHandlerType.Name : NameOfAction
             );
 
             await _TryRollbackAsync(unitOfWork, cancellationToken);
+            
             await _TryRequeueMessageAsDeadLetterAsync(channel, args, cancellationToken);
         }
     }
@@ -996,7 +1002,7 @@ public class ExternalMessageBroker : IExternalMessageBroker
         }
     }
     
-    private void _EventOfQueueHandle(IModel channel, BasicDeliverEventArgs args, Event @event, string service,
+    private void _EventOfQueueHandle(IModel channel, BasicDeliverEventArgs args, Event @event,
         IServiceProvider serviceProvider
     )
     {
@@ -1028,12 +1034,17 @@ public class ExternalMessageBroker : IExternalMessageBroker
                 eventBusHandlerType = eventBusHandler.GetType();
                 
                 var payload = JsonConvert.DeserializeObject(@event.Payload, eventType);
+                
+                var eventBusBeforeHandlerMethod =
+                    eventBusHandlerType.GetMethod("BeforeHandle") ?? throw new Exception("BeforeHandle function not found !");
 
                 var eventBusHandlerMethod =
                     eventBusHandlerType.GetMethod("Handle") ?? throw new Exception("Handle function not found !");
 
-                var eventBusAfterTransactionHandlerMethod =
-                    eventBusHandlerType.GetMethod("AfterTransactionHandle") ?? throw new Exception("AfterTransactionHandle function not found !");
+                var eventBusAfterHandlerMethod =
+                    eventBusHandlerType.GetMethod("AfterHandle") ?? throw new Exception("AfterHandle function not found !");
+                
+                _BeforeHandleEvent(eventBusBeforeHandlerMethod, eventBusHandler, @event);
                 
                 var retryAttr =
                     eventBusHandlerMethod.GetCustomAttribute(typeof(WithMaxRetryAttribute)) as WithMaxRetryAttribute;
@@ -1043,14 +1054,7 @@ public class ExternalMessageBroker : IExternalMessageBroker
                 if (maxRetryInfo.result)
                 {
                     if (retryAttr.HasAfterMaxRetryHandle)
-                    {
-                        //todo: should be used [Try-Catch] in here!
-                        
-                        var afterMaxRetryHandlerMethod =
-                            eventBusHandlerType.GetMethod("AfterMaxRetryHandle") ?? throw new Exception("AfterMaxRetryHandle function not found !");
-                        
-                        afterMaxRetryHandlerMethod.Invoke(eventBusHandler, new[] { payload });
-                    }
+                        _AfterMaxRetryHandleEvent(eventBusHandlerType, eventBusHandler, @event);
                 }
                 else
                 {
@@ -1093,7 +1097,7 @@ public class ExternalMessageBroker : IExternalMessageBroker
 
                             unitOfWork.Commit();
                             
-                            _AfterTransactionHandleEvent(eventBusAfterTransactionHandlerMethod, eventBusHandler, @event);
+                            _AfterHandleEvent(eventBusAfterHandlerMethod, eventBusHandler, @event);
         
                             _CleanCacheEvent(eventBusHandlerMethod, serviceProvider);
                         }
@@ -1133,7 +1137,7 @@ public class ExternalMessageBroker : IExternalMessageBroker
 
                             unitOfWork.Commit();
                             
-                            _AfterTransactionHandleEvent(eventBusAfterTransactionHandlerMethod, eventBusHandler, @event);
+                            _AfterHandleEvent(eventBusAfterHandlerMethod, eventBusHandler, @event);
 
                             _CleanCacheEvent(eventBusHandlerMethod, serviceProvider);
                         }
@@ -1150,10 +1154,10 @@ public class ExternalMessageBroker : IExternalMessageBroker
             e.FileLogger(_hostEnvironment, _dateTime);
             
             e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, 
-                NameOfService, NameOfAction
+                NameOfService, eventBusHandlerType is not null ? eventBusHandlerType.Name : NameOfAction
             );
             
-            e.CentralExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, this, _dateTime, service, 
+            e.CentralExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, this, _dateTime, NameOfService, 
                 eventBusHandlerType is not null ? eventBusHandlerType.Name : NameOfAction
             );
             
@@ -1164,11 +1168,11 @@ public class ExternalMessageBroker : IExternalMessageBroker
     }
     
     private async Task _EventOfQueueHandleAsync(IModel channel, BasicDeliverEventArgs args, Event @event, 
-        string service, IServiceProvider serviceProvider, CancellationToken cancellationToken
+        IServiceProvider serviceProvider, CancellationToken cancellationToken
     )
     {
         Type eventBusHandlerType = null;
-        IUnitOfWork unitOfWork = null;
+        IUnitOfWork unitOfWork   = null;
 
         try
         {
@@ -1195,13 +1199,20 @@ public class ExternalMessageBroker : IExternalMessageBroker
                 eventBusHandlerType = eventBusHandler.GetType();
                 
                 var payload = JsonConvert.DeserializeObject(@event.Payload, eventType);
+                
+                var eventBusBeforeHandlerMethod =
+                    eventBusHandlerType.GetMethod("BeforeHandleAsync") ?? throw new Exception("BeforeHandleAsync function not found !");
 
                 var eventBusHandlerMethod =
                     eventBusHandlerType.GetMethod("HandleAsync") ?? throw new Exception("HandleAsync function not found !");
                 
-                var eventBusAfterTransactionHandlerMethod =
-                    eventBusHandlerType.GetMethod("AfterTransactionHandleAsync") ?? throw new Exception("AfterTransactionHandleAsync function not found !");
+                var eventBusAfterHandlerMethod =
+                    eventBusHandlerType.GetMethod("AfterHandleAsync") ?? throw new Exception("AfterHandleAsync function not found !");
 
+                await _BeforeHandleEventAsync(eventBusBeforeHandlerMethod, eventBusHandler, @event,
+                    cancellationToken
+                );
+                
                 var retryAttr =
                     eventBusHandlerMethod.GetCustomAttribute(typeof(WithMaxRetryAttribute)) as WithMaxRetryAttribute;
 
@@ -1210,14 +1221,9 @@ public class ExternalMessageBroker : IExternalMessageBroker
                 if (maxRetryInfo.result)
                 {
                     if (retryAttr.HasAfterMaxRetryHandle)
-                    {
-                        //todo: should be used [Try-Catch] in here!
-                        
-                        var afterMaxRetryHandlerMethod =
-                            eventBusHandlerType.GetMethod("AfterMaxRetryHandleAsync") ?? throw new Exception("AfterMaxRetryHandleAsync function not found !");
-                        
-                        await (Task)afterMaxRetryHandlerMethod.Invoke(eventBusHandler, new[] { payload, cancellationToken });
-                    }
+                        await _AfterMaxRetryHandleEventAsync(eventBusHandlerType, eventBusHandler, @event,
+                            cancellationToken
+                        );
                 }
                 else
                 {
@@ -1260,7 +1266,7 @@ public class ExternalMessageBroker : IExternalMessageBroker
 
                             await unitOfWork.CommitAsync(cancellationToken);
                             
-                            await _AfterTransactionHandleEventAsync(eventBusAfterTransactionHandlerMethod,
+                            await _AfterHandleEventAsync(eventBusAfterHandlerMethod,
                                 eventBusHandler, @event, cancellationToken
                             );
         
@@ -1303,7 +1309,7 @@ public class ExternalMessageBroker : IExternalMessageBroker
 
                             await unitOfWork.CommitAsync(cancellationToken);
 
-                            await _AfterTransactionHandleEventAsync(eventBusAfterTransactionHandlerMethod,
+                            await _AfterHandleEventAsync(eventBusAfterHandlerMethod,
                                 eventBusHandler, @event, cancellationToken
                             );
 
@@ -1322,16 +1328,17 @@ public class ExternalMessageBroker : IExternalMessageBroker
             e.FileLoggerAsync(_hostEnvironment, _dateTime, cancellationToken: cancellationToken);
             
             e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, 
-                NameOfService, NameOfAction
+                NameOfService, eventBusHandlerType is not null ? eventBusHandlerType.Name : NameOfAction
             );
             
             //fire&forget
-            e.CentralExceptionLoggerAsync(_hostEnvironment, _globalUniqueIdGenerator, this, _dateTime, service, 
-                eventBusHandlerType is not null ? eventBusHandlerType.Name : NameOfAction, 
+            e.CentralExceptionLoggerAsync(_hostEnvironment, _globalUniqueIdGenerator, this, _dateTime, NameOfService,
+                eventBusHandlerType is not null ? eventBusHandlerType.Name : NameOfAction,
                 cancellationToken: cancellationToken
             );
 
             await _TryRollbackAsync(unitOfWork, cancellationToken);
+            
             await _TryRequeueMessageAsDeadLetterAsync(channel, args, cancellationToken);
         }
     }
@@ -1383,7 +1390,7 @@ public class ExternalMessageBroker : IExternalMessageBroker
             e.FileLogger(_hostEnvironment, _dateTime);
             
             e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, 
-                NameOfService, NameOfAction
+                NameOfService, $"{NameOfAction}-TryRequeueMessageAsDeadLetter"
             );
         }
     }
@@ -1406,7 +1413,7 @@ public class ExternalMessageBroker : IExternalMessageBroker
             e.FileLoggerAsync(_hostEnvironment, _dateTime, cancellationToken);
             
             e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, 
-                NameOfService, NameOfAction
+                NameOfService, $"{NameOfAction}-TryRequeueMessageAsDeadLetter"
             );
         }
     }
@@ -1426,7 +1433,7 @@ public class ExternalMessageBroker : IExternalMessageBroker
             e.FileLogger(_hostEnvironment, _dateTime);
             
             e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, 
-                NameOfService, NameOfAction
+                NameOfService, $"{NameOfAction}-TrySendAckMessage"
             );
         }
     }
@@ -1449,7 +1456,7 @@ public class ExternalMessageBroker : IExternalMessageBroker
             e.FileLoggerAsync(_hostEnvironment, _dateTime, cancellationToken);
             
             e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, 
-                NameOfService, NameOfAction
+                NameOfService, $"{NameOfAction}-TrySendAckMessage"
             );
         }
     }
@@ -1479,11 +1486,11 @@ public class ExternalMessageBroker : IExternalMessageBroker
             e.FileLogger(_hostEnvironment, _dateTime);
 
             e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime,
-                NameOfService, NameOfAction
+                NameOfService, $"{NameOfAction}-TryAcquireDistributedLock"
             );
 
             e.CentralExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, this, _dateTime, NameOfService,
-                NameOfAction
+                $"{NameOfAction}-TryAcquireDistributedLock"
             );
         }
 
@@ -1505,11 +1512,11 @@ public class ExternalMessageBroker : IExternalMessageBroker
             e.FileLogger(_hostEnvironment, _dateTime);
 
             e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime,
-                NameOfService, NameOfAction
+                NameOfService, $"{NameOfAction}-TryReleaseDistributedLocks"
             );
 
             e.CentralExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, this, _dateTime, NameOfService,
-                NameOfAction
+                $"{NameOfAction}-TryReleaseDistributedLocks"
             );
         }
     }
@@ -1541,12 +1548,12 @@ public class ExternalMessageBroker : IExternalMessageBroker
             e.FileLoggerAsync(_hostEnvironment, _dateTime, cancellationToken);
 
             e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime,
-                NameOfService, NameOfAction
+                NameOfService, $"{NameOfAction}-TryAcquireDistributedLock"
             );
 
             //fire&forget
             e.CentralExceptionLoggerAsync(_hostEnvironment, _globalUniqueIdGenerator, this, _dateTime, NameOfService,
-                NameOfAction, cancellationToken
+                $"{NameOfAction}-TryAcquireDistributedLock", cancellationToken
             );
         }
 
@@ -1574,12 +1581,12 @@ public class ExternalMessageBroker : IExternalMessageBroker
             e.FileLoggerAsync(_hostEnvironment, _dateTime, cancellationToken);
 
             e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime,
-                NameOfService, NameOfAction
+                NameOfService, $"{NameOfAction}-TryReleaseDistributedLocks"
             );
 
             //fire&forget
             e.CentralExceptionLoggerAsync(_hostEnvironment, _globalUniqueIdGenerator, this, _dateTime, NameOfService,
-                NameOfAction, cancellationToken
+                $"{NameOfAction}-TryReleaseDistributedLocks", cancellationToken
             );
         }
     }
@@ -1636,7 +1643,7 @@ public class ExternalMessageBroker : IExternalMessageBroker
             e.FileLogger(_hostEnvironment, _dateTime);
             
             e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, 
-                NameOfService, NameOfAction
+                NameOfService, $"{NameOfAction}-CleanCacheConsumer"
             );
         }
     }
@@ -1661,7 +1668,7 @@ public class ExternalMessageBroker : IExternalMessageBroker
             e.FileLoggerAsync(_hostEnvironment, _dateTime, cancellationToken);
             
             e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, 
-                NameOfService, NameOfAction
+                NameOfService, $"{NameOfAction}-CleanCacheConsumer"
             );
         }
     }
@@ -1683,7 +1690,7 @@ public class ExternalMessageBroker : IExternalMessageBroker
             e.FileLogger(_hostEnvironment, _dateTime);
             
             e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, 
-                NameOfService, NameOfAction
+                NameOfService, $"{NameOfAction}-CleanCacheConsumer"
             );
             
             e.CentralExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, this, _dateTime, NameOfService,
@@ -1712,7 +1719,7 @@ public class ExternalMessageBroker : IExternalMessageBroker
             e.FileLoggerAsync(_hostEnvironment, _dateTime, cancellationToken);
             
             e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, 
-                NameOfService, NameOfAction
+                NameOfService, $"{NameOfAction}-CleanCacheConsumer"
             );
             
             //fire&forget
@@ -1722,31 +1729,31 @@ public class ExternalMessageBroker : IExternalMessageBroker
         }
     }
     
-    private void _AfterTransactionHandleMessage<TMessage>(MethodInfo messageBusAfterTransactionHandlerMethod, 
-        object messageBusHandler, TMessage message
+    private void _BeforeHandleMessage<TMessage>(MethodInfo messageBusBeforeHandlerMethod, object messageBusHandler, 
+        TMessage message
     ) where TMessage : class
     {
         try
         {
-            messageBusAfterTransactionHandlerMethod.Invoke(messageBusHandler, new object[] { message });
+            messageBusBeforeHandlerMethod.Invoke(messageBusHandler, new object[] { message });
         }
         catch (Exception e)
         {
             e.FileLogger(_hostEnvironment, _dateTime);
             
             e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, 
-                NameOfService, NameOfAction
+                NameOfService, $"{NameOfAction}-BeforeHandle"
             );
         }
     }
     
-    private async Task _AfterTransactionHandleMessageAsync<TMessage>(MethodInfo messageBusAfterTransactionHandlerMethod, 
+    private async Task _BeforeHandleMessageAsync<TMessage>(MethodInfo messageBusBeforeHandlerMethod, 
         object messageBusHandler, TMessage message, CancellationToken cancellationToken
     ) where TMessage : class
     {
         try
         {
-            await (Task)messageBusAfterTransactionHandlerMethod.Invoke(messageBusHandler, new object[] { message, cancellationToken });
+            await (Task)messageBusBeforeHandlerMethod.Invoke(messageBusHandler, new object[] { message, cancellationToken});
         }
         catch (Exception e)
         {
@@ -1754,40 +1761,36 @@ public class ExternalMessageBroker : IExternalMessageBroker
             e.FileLoggerAsync(_hostEnvironment, _dateTime, cancellationToken);
             
             e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, 
-                NameOfService, NameOfAction
+                NameOfService, $"{NameOfAction}-BeforeHandle"
             );
         }
     }
     
-    private void _AfterTransactionHandleEvent(MethodInfo eventBusAfterTransactionHandlerMethod, object eventBusHandler, 
-        object @event
-    )
+    private void _AfterHandleMessage<TMessage>(MethodInfo messageBusAfterHandlerMethod, 
+        object messageBusHandler, TMessage message
+    ) where TMessage : class
     {
         try
         {
-            eventBusAfterTransactionHandlerMethod.Invoke(eventBusHandler, new object[] { @event });
+            messageBusAfterHandlerMethod.Invoke(messageBusHandler, new object[] { message });
         }
         catch (Exception e)
         {
             e.FileLogger(_hostEnvironment, _dateTime);
             
             e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, 
-                NameOfService, NameOfAction
-            );
-            
-            e.CentralExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, this, _dateTime, NameOfService,
-                $"{NameOfAction}-AfterTransactionHandle"
+                NameOfService, $"{NameOfAction}-AfterHandle"
             );
         }
     }
     
-    private async Task _AfterTransactionHandleEventAsync(MethodInfo eventBusAfterTransactionHandlerMethod, 
-        object eventBusHandler, object @event, CancellationToken cancellationToken
-    )
+    private async Task _AfterHandleMessageAsync<TMessage>(MethodInfo messageBusAfterHandlerMethod, 
+        object messageBusHandler, TMessage message, CancellationToken cancellationToken
+    ) where TMessage : class
     {
         try
         {
-            await (Task)eventBusAfterTransactionHandlerMethod.Invoke(eventBusHandler, new object[] { @event, cancellationToken });
+            await (Task)messageBusAfterHandlerMethod.Invoke(messageBusHandler, new object[] { message, cancellationToken });
         }
         catch (Exception e)
         {
@@ -1795,12 +1798,189 @@ public class ExternalMessageBroker : IExternalMessageBroker
             e.FileLoggerAsync(_hostEnvironment, _dateTime, cancellationToken);
             
             e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, 
-                NameOfService, NameOfAction
+                NameOfService, $"{NameOfAction}-AfterHandle"
+            );
+        }
+    }
+    
+    private void _AfterMaxRetryHandleMessage<TMessage>(Type messageBusHandlerType, object messageBusHandler, TMessage message)
+        where TMessage : class
+    {
+        try
+        {
+            var afterMaxRetryHandlerMethod =
+                messageBusHandlerType.GetMethod("AfterMaxRetryHandle") ?? throw new Exception("AfterMaxRetryHandle function not found !");
+                        
+            afterMaxRetryHandlerMethod.Invoke(messageBusHandler, new object[] { message });
+        }
+        catch (Exception e)
+        {
+            e.FileLogger(_hostEnvironment, _dateTime);
+            
+            e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, 
+                NameOfService, $"{NameOfAction}-AfterMaxRetryHandle"
+            );
+        }
+    }
+    
+    private async Task _AfterMaxRetryHandleMessageAsync<TMessage>(Type messageBusHandlerType, object messageBusHandler,
+        TMessage message, CancellationToken cancellationToken
+    ) where TMessage : class
+    {
+        try
+        {
+            var afterMaxRetryHandlerMethod =
+                messageBusHandlerType.GetMethod("AfterMaxRetryHandleAsync") ?? throw new Exception("AfterMaxRetryHandleAsync function not found !");
+                        
+            await (Task)afterMaxRetryHandlerMethod.Invoke(messageBusHandler, new object[] { message, cancellationToken });
+        }
+        catch (Exception e)
+        {
+            //fire&forget
+            e.FileLoggerAsync(_hostEnvironment, _dateTime, cancellationToken);
+            
+            e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, 
+                NameOfService, $"{NameOfAction}-AfterMaxRetryHandle"
+            );
+        }
+    }
+    
+    private void _BeforeHandleEvent(MethodInfo eventBusBeforeHandlerMethod, object eventBusHandler, object @event)
+    {
+        try
+        {
+            eventBusBeforeHandlerMethod.Invoke(eventBusHandler, new[] { @event });
+        }
+        catch (Exception e)
+        {
+            e.FileLogger(_hostEnvironment, _dateTime);
+            
+            e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, 
+                NameOfService, $"{NameOfAction}-BeforeHandle"
+            );
+            
+            e.CentralExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, this, _dateTime, 
+                NameOfService, $"{NameOfAction}-BeforeHandle"
+            );
+        }
+    }
+    
+    private async Task _BeforeHandleEventAsync(MethodInfo eventBusBeforeHandlerMethod, object eventBusHandler, 
+        object @event, CancellationToken cancellationToken
+    )
+    {
+        try
+        {
+            await (Task)eventBusBeforeHandlerMethod.Invoke(eventBusHandler, new[] { @event, cancellationToken});
+        }
+        catch (Exception e)
+        {
+            //fire&forget
+            e.FileLoggerAsync(_hostEnvironment, _dateTime, cancellationToken);
+            
+            e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, 
+                NameOfService, $"{NameOfAction}-BeforeHandle"
+            );
+            
+            //fire&forget
+            e.CentralExceptionLoggerAsync(_hostEnvironment, _globalUniqueIdGenerator, this, _dateTime, 
+                NameOfService, $"{NameOfAction}-BeforeHandle", cancellationToken
+            );
+        }
+    }
+    
+    private void _AfterHandleEvent(MethodInfo eventBusAfterHandlerMethod, object eventBusHandler, 
+        object @event
+    )
+    {
+        try
+        {
+            eventBusAfterHandlerMethod.Invoke(eventBusHandler, new[] { @event });
+        }
+        catch (Exception e)
+        {
+            e.FileLogger(_hostEnvironment, _dateTime);
+            
+            e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, 
+                NameOfService, $"{NameOfAction}-AfterHandle"
+            );
+            
+            e.CentralExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, this, _dateTime, NameOfService,
+                $"{NameOfAction}-AfterHandle"
+            );
+        }
+    }
+    
+    private async Task _AfterHandleEventAsync(MethodInfo eventBusAfterHandlerMethod, object eventBusHandler,
+        object @event, CancellationToken cancellationToken
+    )
+    {
+        try
+        {
+            await (Task)eventBusAfterHandlerMethod.Invoke(eventBusHandler, new[] { @event, cancellationToken });
+        }
+        catch (Exception e)
+        {
+            //fire&forget
+            e.FileLoggerAsync(_hostEnvironment, _dateTime, cancellationToken);
+            
+            e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, 
+                NameOfService, $"{NameOfAction}-AfterHandle"
             );
             
             //fire&forget
             e.CentralExceptionLoggerAsync(_hostEnvironment, _globalUniqueIdGenerator, this, _dateTime, NameOfService,
-                $"{NameOfAction}-AfterTransactionHandle", cancellationToken
+                $"{NameOfAction}-AfterHandle", cancellationToken
+            );
+        }
+    }
+    
+    private void _AfterMaxRetryHandleEvent(Type eventBusHandlerType, object eventBusHandler, object @event)
+    {
+        try
+        {
+            var afterMaxRetryHandlerMethod =
+                eventBusHandlerType.GetMethod("AfterMaxRetryHandle") ?? throw new Exception("AfterMaxRetryHandle function not found !");
+                        
+            afterMaxRetryHandlerMethod.Invoke(eventBusHandler, new[] { @event });
+        }
+        catch (Exception e)
+        {
+            e.FileLogger(_hostEnvironment, _dateTime);
+            
+            e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, 
+                NameOfService, $"{NameOfAction}-AfterMaxRetryHandle"
+            );
+            
+            e.CentralExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, this, _dateTime, 
+                NameOfService, $"{NameOfAction}-AfterMaxRetryHandle"
+            );
+        }
+    }
+    
+    private async Task _AfterMaxRetryHandleEventAsync(Type eventBusHandlerType, object eventBusHandler,
+        object @event, CancellationToken cancellationToken
+    )
+    {
+        try
+        {
+            var afterMaxRetryHandlerMethod =
+                eventBusHandlerType.GetMethod("AfterMaxRetryHandleAsync") ?? throw new Exception("AfterMaxRetryHandleAsync function not found !");
+                        
+            await (Task)afterMaxRetryHandlerMethod.Invoke(eventBusHandler, new[] { @event, cancellationToken });
+        }
+        catch (Exception e)
+        {
+            //fire&forget
+            e.FileLoggerAsync(_hostEnvironment, _dateTime, cancellationToken);
+            
+            e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, 
+                NameOfService, $"{NameOfAction}-AfterMaxRetryHandle"
+            );
+            
+            //fire&forget
+            e.CentralExceptionLoggerAsync(_hostEnvironment, _globalUniqueIdGenerator, this, _dateTime, 
+                NameOfService, $"{NameOfAction}-AfterMaxRetryHandle", cancellationToken
             );
         }
     }

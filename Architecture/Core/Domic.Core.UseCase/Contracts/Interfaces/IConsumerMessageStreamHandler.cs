@@ -6,7 +6,23 @@ public interface IConsumerMessageStreamHandler<in TMessage> where TMessage : cla
     /// 
     /// </summary>
     /// <param name="message"></param>
-    public void Handle(TMessage message);
+    public void BeforeHandle(TMessage message) => throw new NotImplementedException();
+    
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="message"></param>
+    /// <param name="cancellationToken"></param>
+    /// <returns></returns>
+    /// <exception cref="NotImplementedException"></exception>
+    public Task BeforeHandleAsync(TMessage message, CancellationToken cancellationToken) 
+        => throw new NotImplementedException();
+    
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="message"></param>
+    public void Handle(TMessage message) => throw new NotImplementedException();
     
     /// <summary>
     /// 
@@ -20,7 +36,7 @@ public interface IConsumerMessageStreamHandler<in TMessage> where TMessage : cla
     /// 
     /// </summary>
     /// <param name="message"></param>
-    public void AfterTransactionHandle(TMessage message);
+    public void AfterHandle(TMessage message) => throw new NotImplementedException();
     
     /// <summary>
     /// 
@@ -29,7 +45,7 @@ public interface IConsumerMessageStreamHandler<in TMessage> where TMessage : cla
     /// <param name="cancellationToken"></param>
     /// <returns></returns>
     /// <exception cref="NotImplementedException"></exception>
-    public Task AfterTransactionHandleAsync(TMessage message, CancellationToken cancellationToken) 
+    public Task AfterHandleAsync(TMessage message, CancellationToken cancellationToken) 
         => throw new NotImplementedException();
     
     /// <summary>

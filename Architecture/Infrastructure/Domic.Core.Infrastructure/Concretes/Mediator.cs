@@ -25,16 +25,20 @@ public class Mediator : IMediator
         Type[] argTypes  = { command.GetType() , typeof(TResult) };
         Type handlerType = type.MakeGenericType(argTypes);
         
-        object commandHandler           = _serviceProvider.GetRequiredService(handlerType);
-        Type commandHandlerType         = commandHandler.GetType();
+        object commandHandler   = _serviceProvider.GetRequiredService(handlerType);
+        Type commandHandlerType = commandHandler.GetType();
+        
+        MethodInfo commandBeforeHandlerMethod = commandHandlerType.GetMethod("BeforeHandle")
+                                               ??
+                                               throw new Exception("BeforeHandle function not found !");
         
         MethodInfo commandHandlerMethod = commandHandlerType.GetMethod("Handle") 
                                           ??
                                           throw new Exception("Handle function not found !");
         
-        MethodInfo commandAfterTransactionHandlerMethod = commandHandlerType.GetMethod("AfterTransactionHandle") 
-                                                          ??
-                                                          throw new Exception("AfterTransactionHandle function not found !");
+        MethodInfo commandAfterHandlerMethod = commandHandlerType.GetMethod("AfterHandle") 
+                                               ??
+                                               throw new Exception("AfterHandle function not found !");
 
         if (commandHandlerMethod.GetCustomAttribute(typeof(WithPessimisticConcurrencyAttribute)) is not null)
         {
@@ -54,19 +58,23 @@ public class Mediator : IMediator
                     
                 lock (lockField.GetValue(commandHandler))
                 {
+                    _BeforeHandle(commandHandler, commandBeforeHandlerMethod, command, _serviceProvider);
+                    
                     _Validation(commandHandler, commandHandlerType, commandHandlerMethod, command);
                 
                     return _InvokeHandleMethod(commandHandler, commandHandlerMethod, 
-                        commandAfterTransactionHandlerMethod, command
+                        commandAfterHandlerMethod, command
                     );
                 }
             }
         }
         
+        _BeforeHandle(commandHandler, commandBeforeHandlerMethod, command, _serviceProvider);
+        
         _Validation(commandHandler, commandHandlerType, commandHandlerMethod, command);
         
         return _InvokeHandleMethod(commandHandler, commandHandlerMethod, 
-            commandAfterTransactionHandlerMethod, command
+            commandAfterHandlerMethod, command
         );
     }
 
@@ -84,16 +92,20 @@ public class Mediator : IMediator
         Type[] argTypes  = { command.GetType(), typeof(TResult) };
         Type handlerType = type.MakeGenericType(argTypes);
         
-        object commandHandler           = _serviceProvider.GetRequiredService(handlerType);
-        Type commandHandlerType         = commandHandler.GetType();
+        object commandHandler   = _serviceProvider.GetRequiredService(handlerType);
+        Type commandHandlerType = commandHandler.GetType();
+        
+        MethodInfo commandBeforeHandlerMethod = commandHandlerType.GetMethod("BeforeHandleAsync") 
+                                               ??
+                                               throw new Exception("BeforeHandleAsync function not found !");
         
         MethodInfo commandHandlerMethod = commandHandlerType.GetMethod("HandleAsync")
                                           ??
                                           throw new Exception("HandleAsync function not found !");
         
-        MethodInfo commandAfterTransactionHandlerMethod = commandHandlerType.GetMethod("AfterTransactionHandleAsync") 
-                                                          ??
-                                                          throw new Exception("AfterTransactionHandleAsync function not found !");
+        MethodInfo commandAfterHandlerMethod = commandHandlerType.GetMethod("AfterHandleAsync") 
+                                               ??
+                                               throw new Exception("AfterHandleAsync function not found !");
 
         if (commandHandlerMethod.GetCustomAttribute(typeof(WithPessimisticConcurrencyAttribute)) is not null)
         {
@@ -117,11 +129,15 @@ public class Mediator : IMediator
 
                 try
                 {
+                    await _BeforeHandleAsync(commandHandler, commandBeforeHandlerMethod, command,
+                        _serviceProvider, cancellationToken
+                    );
+                    
                     await _ValidationAsync(commandHandler, commandHandlerType, commandHandlerMethod, command,
                         cancellationToken);
 
                     var result = await _InvokeHandleMethodAsync(commandHandler, commandHandlerMethod, 
-                        commandAfterTransactionHandlerMethod, command, cancellationToken
+                        commandAfterHandlerMethod, command, cancellationToken
                     );
 
                     return result;
@@ -138,10 +154,14 @@ public class Mediator : IMediator
             }
         }
 
+        await _BeforeHandleAsync(commandHandler, commandBeforeHandlerMethod, command,
+            _serviceProvider, cancellationToken
+        );
+        
         await _ValidationAsync(commandHandler, commandHandlerType, commandHandlerMethod, command, cancellationToken);
         
         var resultWithoutTransaction =
-            await _InvokeHandleMethodAsync(commandHandler, commandHandlerMethod, commandAfterTransactionHandlerMethod,
+            await _InvokeHandleMethodAsync(commandHandler, commandHandlerMethod, commandAfterHandlerMethod,
                 command, cancellationToken
             );
         
@@ -318,7 +338,7 @@ public class Mediator : IMediator
     }
     
     private TResult _InvokeHandleMethod<TResult>(object commandHandler, MethodInfo commandHandlerMethod,
-        MethodInfo commandAfterTransactionHandlerMethod, ICommand<TResult> command
+        MethodInfo commandAfterHandlerMethod, ICommand<TResult> command
     )
     {
         #region Transaction
@@ -333,7 +353,7 @@ public class Mediator : IMediator
             
             unitOfWork.Commit();
 
-            _AfterTransactionHandle<TResult>(commandHandler, commandAfterTransactionHandlerMethod, command,
+            _AfterHandle<TResult>(commandHandler, commandAfterHandlerMethod, command,
                 _serviceProvider
             );
                     
@@ -348,6 +368,10 @@ public class Mediator : IMediator
             (TResult)commandHandlerMethod.Invoke(commandHandler, new object[]{ command });
             
         _CleanCache(commandHandlerMethod, _serviceProvider);
+        
+        _AfterHandle<TResult>(commandHandler, commandAfterHandlerMethod, command,
+            _serviceProvider
+        );
         
         return resultWithoutTransaction;
     }
@@ -383,7 +407,7 @@ public class Mediator : IMediator
     }
     
     private async Task<TResult> _InvokeHandleMethodAsync<TResult>(object commandHandler, MethodInfo commandHandlerMethod,
-        MethodInfo commandAfterTransactionHandlerMethod, ICommand<TResult> command, CancellationToken cancellationToken
+        MethodInfo commandAfterHandlerMethod, ICommand<TResult> command, CancellationToken cancellationToken
     )
     {
         #region Transaction
@@ -398,7 +422,7 @@ public class Mediator : IMediator
             
             await unitOfWork.CommitAsync(cancellationToken);
             
-            await _AfterTransactionHandleAsync<TResult>(commandHandler, commandAfterTransactionHandlerMethod, command,
+            await _AfterHandleAsync<TResult>(commandHandler, commandAfterHandlerMethod, command,
                 _serviceProvider, cancellationToken
             );
 
@@ -413,6 +437,10 @@ public class Mediator : IMediator
             await (Task<TResult>)commandHandlerMethod.Invoke(commandHandler, new object[]{ command , cancellationToken });
         
         await _CleanCacheAsync(commandHandlerMethod, _serviceProvider, cancellationToken);
+        
+        await _AfterHandleAsync<TResult>(commandHandler, commandAfterHandlerMethod, command,
+            _serviceProvider, cancellationToken
+        );
         
         return resultWithoutTransaction;
     }
@@ -542,13 +570,13 @@ public class Mediator : IMediator
         }
     }
     
-    private void _AfterTransactionHandle<TResult>(object commandHandler, MethodInfo commandAfterTransactionHandlerMethod,
+    private void _BeforeHandle<TResult>(object commandHandler, MethodInfo commandBeforeHandlerMethod,
         ICommand<TResult> command, IServiceProvider serviceProvider
     )
     {
         try
         {
-            commandAfterTransactionHandlerMethod.Invoke(commandHandler, new object[] { command });
+            commandBeforeHandlerMethod.Invoke(commandHandler, new object[] { command });
         }
         catch (Exception e)
         {
@@ -560,7 +588,7 @@ public class Mediator : IMediator
             e.FileLogger(hostEnvironment, dateTime);
             
             e.ElasticStackExceptionLogger(hostEnvironment, globalUniqueIdGenerator, dateTime, 
-                configuration.GetValue<string>("NameOfService"), "AfterTransactionHandle"
+                configuration.GetValue<string>("NameOfService"), "BeforeHandle"
             );
 
             if (configuration.GetSection("LoggerType").Get<LoggerType>().Messaging)
@@ -568,7 +596,7 @@ public class Mediator : IMediator
                 var externalMessageBroker = serviceProvider.GetRequiredService<IExternalMessageBroker>();
                     
                 e.CentralExceptionLogger(hostEnvironment, globalUniqueIdGenerator, externalMessageBroker, dateTime, 
-                    configuration.GetValue<string>("NameOfService"), "AfterTransactionHandle"
+                    configuration.GetValue<string>("NameOfService"), "BeforeHandle"
                 );
             }
             else
@@ -577,20 +605,20 @@ public class Mediator : IMediator
                     
                 e.CentralExceptionLoggerAsStream(hostEnvironment, globalUniqueIdGenerator, 
                     externalEventStreamBroker, dateTime, configuration.GetValue<string>("NameOfService"), 
-                    "AfterTransactionHandle"
+                    "BeforeHandle"
                 );
             }
         }
     }
     
-    private async Task _AfterTransactionHandleAsync<TResult>(object commandHandler,
-        MethodInfo commandAfterTransactionHandlerMethod, ICommand<TResult> command, IServiceProvider serviceProvider, 
+    private async Task _BeforeHandleAsync<TResult>(object commandHandler,
+        MethodInfo commandBeforeHandlerMethod, ICommand<TResult> command, IServiceProvider serviceProvider, 
         CancellationToken cancellationToken
     )
     {
         try
         {
-            await (Task)commandAfterTransactionHandlerMethod.Invoke(commandHandler, new object[] { command, cancellationToken });
+            await (Task)commandBeforeHandlerMethod.Invoke(commandHandler, new object[] { command, cancellationToken });
         }
         catch (Exception e)
         {
@@ -603,7 +631,7 @@ public class Mediator : IMediator
             e.FileLoggerAsync(hostEnvironment, dateTime, cancellationToken);
             
             e.ElasticStackExceptionLogger(hostEnvironment, globalUniqueIdGenerator, dateTime, 
-                configuration.GetValue<string>("NameOfService"), "AfterTransactionHandleAsync"
+                configuration.GetValue<string>("NameOfService"), "BeforeHandle"
             );
 
             if (configuration.GetSection("LoggerType").Get<LoggerType>().Messaging)
@@ -612,7 +640,7 @@ public class Mediator : IMediator
                     
                 //fire&forget
                 e.CentralExceptionLoggerAsync(hostEnvironment, globalUniqueIdGenerator, externalMessageBroker, dateTime, 
-                    configuration.GetValue<string>("NameOfService"), "AfterTransactionHandleAsync", cancellationToken
+                    configuration.GetValue<string>("NameOfService"), "BeforeHandle", cancellationToken
                 );
             }
             else
@@ -622,7 +650,93 @@ public class Mediator : IMediator
                 //fire&forget
                 e.CentralExceptionLoggerAsStreamAsync(hostEnvironment, globalUniqueIdGenerator, 
                     externalEventStreamBroker, dateTime, configuration.GetValue<string>("NameOfService"), 
-                    "AfterTransactionHandleAsync", cancellationToken
+                    "BeforeHandle", cancellationToken
+                );
+            }
+        }
+    }
+    
+    private void _AfterHandle<TResult>(object commandHandler, MethodInfo commandAfterHandlerMethod,
+        ICommand<TResult> command, IServiceProvider serviceProvider
+    )
+    {
+        try
+        {
+            commandAfterHandlerMethod.Invoke(commandHandler, new object[] { command });
+        }
+        catch (Exception e)
+        {
+            var hostEnvironment = serviceProvider.GetRequiredService<IHostEnvironment>();
+            var dateTime = serviceProvider.GetRequiredService<IDateTime>();
+            var globalUniqueIdGenerator = serviceProvider.GetRequiredService<IGlobalUniqueIdGenerator>();
+            var configuration = serviceProvider.GetRequiredService<IConfiguration>();
+                
+            e.FileLogger(hostEnvironment, dateTime);
+            
+            e.ElasticStackExceptionLogger(hostEnvironment, globalUniqueIdGenerator, dateTime, 
+                configuration.GetValue<string>("NameOfService"), "AfterHandle"
+            );
+
+            if (configuration.GetSection("LoggerType").Get<LoggerType>().Messaging)
+            {
+                var externalMessageBroker = serviceProvider.GetRequiredService<IExternalMessageBroker>();
+                    
+                e.CentralExceptionLogger(hostEnvironment, globalUniqueIdGenerator, externalMessageBroker, dateTime, 
+                    configuration.GetValue<string>("NameOfService"), "AfterHandle"
+                );
+            }
+            else
+            {
+                var externalEventStreamBroker = serviceProvider.GetRequiredService<IExternalEventStreamBroker>();
+                    
+                e.CentralExceptionLoggerAsStream(hostEnvironment, globalUniqueIdGenerator, 
+                    externalEventStreamBroker, dateTime, configuration.GetValue<string>("NameOfService"), 
+                    "AfterHandle"
+                );
+            }
+        }
+    }
+    
+    private async Task _AfterHandleAsync<TResult>(object commandHandler,
+        MethodInfo commandAfterHandlerMethod, ICommand<TResult> command, IServiceProvider serviceProvider, 
+        CancellationToken cancellationToken
+    )
+    {
+        try
+        {
+            await (Task)commandAfterHandlerMethod.Invoke(commandHandler, new object[] { command, cancellationToken });
+        }
+        catch (Exception e)
+        {
+            var hostEnvironment = serviceProvider.GetRequiredService<IHostEnvironment>();
+            var dateTime = serviceProvider.GetRequiredService<IDateTime>();
+            var globalUniqueIdGenerator = serviceProvider.GetRequiredService<IGlobalUniqueIdGenerator>();
+            var configuration = serviceProvider.GetRequiredService<IConfiguration>();
+                
+            //fire&forget
+            e.FileLoggerAsync(hostEnvironment, dateTime, cancellationToken);
+            
+            e.ElasticStackExceptionLogger(hostEnvironment, globalUniqueIdGenerator, dateTime, 
+                configuration.GetValue<string>("NameOfService"), "AfterHandle"
+            );
+
+            if (configuration.GetSection("LoggerType").Get<LoggerType>().Messaging)
+            {
+                var externalMessageBroker = serviceProvider.GetRequiredService<IExternalMessageBroker>();
+                    
+                //fire&forget
+                e.CentralExceptionLoggerAsync(hostEnvironment, globalUniqueIdGenerator, externalMessageBroker, dateTime, 
+                    configuration.GetValue<string>("NameOfService"), "AfterHandle", cancellationToken
+                );
+            }
+            else
+            {
+                var externalEventStreamBroker = serviceProvider.GetRequiredService<IExternalEventStreamBroker>();
+                    
+                //fire&forget
+                e.CentralExceptionLoggerAsStreamAsync(hostEnvironment, globalUniqueIdGenerator, 
+                    externalEventStreamBroker, dateTime, configuration.GetValue<string>("NameOfService"), 
+                    "AfterHandle", cancellationToken
                 );
             }
         }

@@ -740,8 +740,8 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
         ConsumeResult<string, string> consumeResult, IServiceProvider serviceProvider
     )
     {
-        IUnitOfWork unitOfWork = default;
-        object payload = default;
+        IUnitOfWork unitOfWork        = default;
+        object payload                = default;
         Type messageStreamHandlerType = default;
         
         try
@@ -769,12 +769,17 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
                 messageStreamHandlerType = messageStreamHandler.GetType();
 
                 payload = JsonConvert.DeserializeObject(consumeResult.Message.Value, messageStreamType);
+                
+                var messageStreamBeforeHandlerMethod =
+                    messageStreamHandlerType.GetMethod("BeforeHandle") ?? throw new Exception("BeforeHandle function not found !");
 
                 var messageStreamHandlerMethod =
                     messageStreamHandlerType.GetMethod("Handle") ?? throw new Exception("Handle function not found !");
                 
-                var messageStreamAfterTransactionHandlerMethod =
-                    messageStreamHandlerType.GetMethod("AfterTransactionHandle") ?? throw new Exception("AfterTransactionHandle function not found !");
+                var messageStreamAfterHandlerMethod =
+                    messageStreamHandlerType.GetMethod("AfterHandle") ?? throw new Exception("AfterHandle function not found !");
+                
+                _BeforeHandleMessage(messageStreamBeforeHandlerMethod, messageStreamHandler, payload);
                 
                 var transactionConfig =
                         messageStreamHandlerMethod.GetCustomAttribute(typeof(TransactionConfigAttribute)) as TransactionConfigAttribute;
@@ -818,7 +823,7 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
 
                     unitOfWork.Commit();
                     
-                    _AfterTransactionHandleMessage(messageStreamAfterTransactionHandlerMethod, messageStreamHandler, payload);
+                    _AfterHandleMessage(messageStreamAfterHandlerMethod, messageStreamHandler, payload);
                     
                     _CleanCacheMessage(messageStreamHandlerMethod, serviceProvider);
                 }
@@ -831,7 +836,7 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
             e.FileLogger(hostEnvironment, dateTime);
 
             e.ElasticStackExceptionLogger(hostEnvironment, globalUniqueIdGenerator, dateTime,
-                NameOfService, NameOfAction
+                NameOfService, messageStreamHandlerType is not null ? messageStreamHandlerType.Name : NameOfAction
             );
             
             e.CentralExceptionLoggerAsStream(hostEnvironment, globalUniqueIdGenerator, this, dateTime, NameOfService, 
@@ -851,8 +856,8 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
         ConsumeResult<string, string> consumeResult, IServiceProvider serviceProvider
     )
     {
-        IUnitOfWork unitOfWork = default;
-        object payload = default;
+        IUnitOfWork unitOfWork        = default;
+        object payload                = default;
         Type messageStreamHandlerType = default;
 
         var countOfRetryValue = Convert.ToInt32(
@@ -886,27 +891,25 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
                 messageStreamHandlerType = messageStreamHandler.GetType();
 
                 payload = JsonConvert.DeserializeObject(consumeResult.Message.Value, messageStreamType);
+                
+                var messageStreamBeforeHandlerMethod =
+                    messageStreamHandlerType.GetMethod("BeforeHandle") ?? throw new Exception("BeforeHandle function not found !");
 
                 var messageStreamHandlerMethod =
                     messageStreamHandlerType.GetMethod("Handle") ?? throw new Exception("Handle function not found !");
 
-                var messageStreamAfterTransactionHandlerMethod =
-                    messageStreamHandlerType.GetMethod("AfterTransactionHandle") ?? throw new Exception("AfterTransactionHandle function not found !");
+                var messageStreamAfterHandlerMethod =
+                    messageStreamHandlerType.GetMethod("AfterHandle") ?? throw new Exception("AfterHandle function not found !");
+                
+                _BeforeHandleMessage(messageStreamBeforeHandlerMethod, messageStreamHandler, payload);
                 
                 var retryAttr =
                     messageStreamHandlerMethod.GetCustomAttribute(typeof(WithMaxRetryAttribute)) as WithMaxRetryAttribute;
                  
-                if (countOfRetryValue > retryAttr.Count)
+                if (countOfRetryValue > retryAttr?.Count)
                 {
                     if (retryAttr.HasAfterMaxRetryHandle)
-                    {
-                        //todo: should be used [Try-Catch] in here!
-                        
-                        var afterMaxRetryHandlerMethod =
-                            messageStreamHandlerType.GetMethod("AfterMaxRetryHandle") ?? throw new Exception("AfterMaxRetryHandle function not found !");
-                 
-                        afterMaxRetryHandlerMethod.Invoke(messageStreamHandler, new[] { payload });
-                    }
+                        _AfterMaxRetryHandleMessage(messageStreamHandlerType, messageStreamHandler, payload);
                 }
                 else
                 {
@@ -953,7 +956,7 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
 
                         unitOfWork.Commit();
                         
-                        _AfterTransactionHandleMessage(messageStreamAfterTransactionHandlerMethod, messageStreamHandler, payload);
+                        _AfterHandleMessage(messageStreamAfterHandlerMethod, messageStreamHandler, payload);
                         
                         _CleanCacheMessage(messageStreamHandlerMethod, serviceProvider);
                     }
@@ -967,7 +970,7 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
             e.FileLogger(hostEnvironment, dateTime);
 
             e.ElasticStackExceptionLogger(hostEnvironment, globalUniqueIdGenerator, dateTime,
-                NameOfService, NameOfAction
+                NameOfService, messageStreamHandlerType is not null ? messageStreamHandlerType.Name : NameOfAction
             );
             
             e.CentralExceptionLoggerAsStream(hostEnvironment, globalUniqueIdGenerator, this, dateTime, NameOfService, 
@@ -989,8 +992,8 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
         ConsumeResult<string, string> consumeResult, IServiceProvider serviceProvider, CancellationToken cancellationToken
     )
     {
-        IUnitOfWork unitOfWork = default;
-        object payload = default;
+        IUnitOfWork unitOfWork        = default;
+        object payload                = default;
         Type messageStreamHandlerType = default;
         
         try
@@ -1018,12 +1021,19 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
                 messageStreamHandlerType = messageStreamHandler.GetType();
 
                 payload = JsonConvert.DeserializeObject(consumeResult.Message.Value, messageStreamType);
+                
+                var messageStreamBeforeHandlerMethod =
+                    messageStreamHandlerType.GetMethod("BeforeHandleAsync") ?? throw new Exception("BeforeHandleAsync function not found !");
 
                 var messageStreamHandlerMethod =
                     messageStreamHandlerType.GetMethod("HandleAsync") ?? throw new Exception("HandleAsync function not found !");
                 
-                var messageStreamAfterTransactionHandlerMethod =
-                    messageStreamHandlerType.GetMethod("AfterTransactionHandleAsync") ?? throw new Exception("AfterTransactionHandleAsync function not found !");
+                var messageStreamAfterHandlerMethod =
+                    messageStreamHandlerType.GetMethod("AfterHandleAsync") ?? throw new Exception("AfterHandleAsync function not found !");
+
+                await _BeforeHandleMessageAsync(messageStreamBeforeHandlerMethod, messageStreamHandler, payload,
+                    cancellationToken
+                );
                 
                 var transactionConfig =
                         messageStreamHandlerMethod.GetCustomAttribute(typeof(TransactionConfigAttribute)) as TransactionConfigAttribute;
@@ -1066,7 +1076,7 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
 
                     await unitOfWork.CommitAsync(cancellationToken);
 
-                    await _AfterTransactionHandleMessageAsync(messageStreamAfterTransactionHandlerMethod,
+                    await _AfterHandleMessageAsync(messageStreamAfterHandlerMethod,
                         messageStreamHandler, payload, cancellationToken
                     );
 
@@ -1082,7 +1092,7 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
             e.FileLoggerAsync(hostEnvironment, dateTime, cancellationToken: cancellationToken);
 
             e.ElasticStackExceptionLogger(hostEnvironment, globalUniqueIdGenerator, dateTime,
-                NameOfService, NameOfAction
+                NameOfService, messageStreamHandlerType is not null ? messageStreamHandlerType.Name : NameOfAction
             );
             
             //fire&forget
@@ -1105,8 +1115,8 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
         ConsumeResult<string, string> consumeResult, IServiceProvider serviceProvider, CancellationToken cancellationToken
     )
     {
-        IUnitOfWork unitOfWork = default;
-        object payload = default;
+        IUnitOfWork unitOfWork        = default;
+        object payload                = default;
         Type messageStreamHandlerType = default;
         
         var countOfRetryValue = Convert.ToInt32(
@@ -1140,27 +1150,29 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
                 messageStreamHandlerType = messageStreamHandler.GetType();
 
                 payload = JsonConvert.DeserializeObject(consumeResult.Message.Value, messageStreamType);
+                
+                var messageStreamBeforeHandlerMethod =
+                    messageStreamHandlerType.GetMethod("BeforeHandleAsync") ?? throw new Exception("BeforeHandleAsync function not found !");
 
                 var messageStreamHandlerMethod =
                     messageStreamHandlerType.GetMethod("HandleAsync") ?? throw new Exception("HandleAsync function not found !");
 
-                var messageStreamAfterTransactionHandlerMethod =
-                    messageStreamHandlerType.GetMethod("AfterTransactionHandleAsync") ?? throw new Exception("AfterTransactionHandleAsync function not found !");
+                var messageStreamAfterHandlerMethod =
+                    messageStreamHandlerType.GetMethod("AfterHandleAsync") ?? throw new Exception("AfterHandleAsync function not found !");
+                
+                await _BeforeHandleMessageAsync(messageStreamBeforeHandlerMethod, messageStreamHandler, payload,
+                    cancellationToken
+                );
                 
                 var retryAttr =
                     messageStreamHandlerMethod.GetCustomAttribute(typeof(WithMaxRetryAttribute)) as WithMaxRetryAttribute;
                  
-                if (countOfRetryValue > retryAttr.Count)
+                if (countOfRetryValue > retryAttr?.Count)
                 {
                     if (retryAttr.HasAfterMaxRetryHandle)
-                    {
-                        //todo: should be used [Try-Catch] in here!
-                        
-                        var afterMaxRetryHandlerMethod =
-                            messageStreamHandlerType.GetMethod("AfterMaxRetryHandleAsync") ?? throw new Exception("AfterMaxRetryHandleAsync function not found !");
-                 
-                        await (Task)afterMaxRetryHandlerMethod.Invoke(messageStreamHandler, new[] { payload, cancellationToken });
-                    }
+                        await _AfterMaxRetryHandleMessageAsync(messageStreamHandlerType, messageStreamHandler, payload,
+                            cancellationToken
+                        );
                 }
                 else
                 {
@@ -1205,7 +1217,7 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
 
                         await unitOfWork.CommitAsync(cancellationToken);
                         
-                        await _AfterTransactionHandleMessageAsync(messageStreamAfterTransactionHandlerMethod,
+                        await _AfterHandleMessageAsync(messageStreamAfterHandlerMethod,
                             messageStreamHandler, payload, cancellationToken
                         );
                         
@@ -1222,7 +1234,7 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
             e.FileLoggerAsync(hostEnvironment, dateTime, cancellationToken: cancellationToken);
 
             e.ElasticStackExceptionLogger(hostEnvironment, globalUniqueIdGenerator, dateTime,
-                NameOfService, NameOfAction
+                NameOfService, messageStreamHandlerType is not null ? messageStreamHandlerType.Name : NameOfAction
             );
             
             //fire&forget
@@ -1310,8 +1322,8 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
         ConsumeResult<string, string> consumeResult, IServiceProvider serviceProvider
     )
     {
-        IUnitOfWork unitOfWork = default;
-        Event @event = default;
+        IUnitOfWork unitOfWork      = default;
+        Event @event                = default;
         Type eventStreamHandlerType = default;
         
         try
@@ -1342,11 +1354,16 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
 
                 var payload = JsonConvert.DeserializeObject(@event.Payload, eventStreamType);
                 
+                var eventStreamBeforeHandlerMethod =
+                    eventStreamHandlerType.GetMethod("BeforeHandle") ?? throw new Exception("BeforeHandle function not found !");
+                
                 var eventStreamHandlerMethod =
                     eventStreamHandlerType.GetMethod("Handle") ?? throw new Exception("Handle function not found !");
                 
-                var eventStreamAfterTransactionHandlerMethod =
-                    eventStreamHandlerType.GetMethod("AfterTransactionHandle") ?? throw new Exception("AfterTransactionHandle function not found !");
+                var eventStreamAfterHandlerMethod =
+                    eventStreamHandlerType.GetMethod("AfterHandle") ?? throw new Exception("AfterHandle function not found !");
+                
+                _BeforeHandleEvent(eventStreamBeforeHandlerMethod, eventStreamHandler, @event);
                 
                 var transactionConfig =
                         eventStreamHandlerMethod.GetCustomAttribute(typeof(TransactionConfigAttribute)) as TransactionConfigAttribute;
@@ -1387,7 +1404,7 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
 
                         unitOfWork.Commit();
                         
-                        _AfterTransactionHandleEvent(eventStreamAfterTransactionHandlerMethod, eventStreamHandler, payload);
+                        _AfterHandleEvent(eventStreamAfterHandlerMethod, eventStreamHandler, payload);
                         
                         _CleanCacheEvent(eventStreamHandlerMethod, serviceProvider);
                     }
@@ -1425,7 +1442,7 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
 
                         unitOfWork.Commit();
                         
-                        _AfterTransactionHandleEvent(eventStreamAfterTransactionHandlerMethod, eventStreamHandler, payload);
+                        _AfterHandleEvent(eventStreamAfterHandlerMethod, eventStreamHandler, payload);
                         
                         _CleanCacheEvent(eventStreamHandlerMethod, serviceProvider);
                     }
@@ -1439,7 +1456,7 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
             e.FileLogger(hostEnvironment, dateTime);
 
             e.ElasticStackExceptionLogger(hostEnvironment, globalUniqueIdGenerator, dateTime,
-                NameOfService, NameOfAction
+                NameOfService, eventStreamHandlerType is not null ? eventStreamHandlerType.Name : NameOfAction
             );
             
             e.CentralExceptionLoggerAsStream(hostEnvironment, globalUniqueIdGenerator, this, dateTime, NameOfService, 
@@ -1459,8 +1476,8 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
         ConsumeResult<string, string> consumeResult, IServiceProvider serviceProvider
     )
     {
-        IUnitOfWork unitOfWork = default;
-        Event @event = default;
+        IUnitOfWork unitOfWork      = default;
+        Event @event                = default;
         Type eventStreamHandlerType = default;
         
         var countOfRetryValue = Convert.ToInt32(
@@ -1497,24 +1514,24 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
 
                 var payload = JsonConvert.DeserializeObject(@event.Payload, eventStreamType);
                 
+                var eventStreamBeforeHandlerMethod =
+                    eventStreamHandlerType.GetMethod("BeforeHandle") ?? throw new Exception("BeforeHandle function not found !");
+                
                 var eventStreamHandlerMethod =
                     eventStreamHandlerType.GetMethod("Handle") ?? throw new Exception("Handle function not found !");
                 
                 var eventStreamAfterTransactionHandlerMethod =
-                    eventStreamHandlerType.GetMethod("AfterTransactionHandle") ?? throw new Exception("AfterTransactionHandle function not found !");
+                    eventStreamHandlerType.GetMethod("AfterHandle") ?? throw new Exception("AfterHandle function not found !");
+                
+                _BeforeHandleEvent(eventStreamBeforeHandlerMethod, eventStreamHandler, @event);
                 
                 var retryAttr =
                     eventStreamHandlerMethod.GetCustomAttribute(typeof(WithMaxRetryAttribute)) as WithMaxRetryAttribute;
                  
-                if (countOfRetryValue > retryAttr.Count)
+                if (countOfRetryValue > retryAttr?.Count)
                 {
                     if (retryAttr.HasAfterMaxRetryHandle)
-                    {
-                        var afterMaxRetryHandlerMethod =
-                            eventStreamHandlerType.GetMethod("AfterMaxRetryHandle") ?? throw new Exception("AfterMaxRetryHandle function not found !");
-                 
-                        afterMaxRetryHandlerMethod.Invoke(eventStreamHandlerType, new[] { payload });
-                    }
+                        _AfterMaxRetryHandleEvent(eventStreamHandlerType, eventStreamHandler, @event);
                 }
                 else
                 {
@@ -1557,7 +1574,7 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
 
                             unitOfWork.Commit();
                             
-                            _AfterTransactionHandleEvent(eventStreamAfterTransactionHandlerMethod, eventStreamHandler, payload);
+                            _AfterHandleEvent(eventStreamAfterTransactionHandlerMethod, eventStreamHandler, payload);
                         
                             _CleanCacheEvent(eventStreamHandlerMethod, serviceProvider);
                         }
@@ -1595,7 +1612,7 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
 
                             unitOfWork.Commit();
                             
-                            _AfterTransactionHandleEvent(eventStreamAfterTransactionHandlerMethod, eventStreamHandler, payload);
+                            _AfterHandleEvent(eventStreamAfterTransactionHandlerMethod, eventStreamHandler, payload);
                         
                             _CleanCacheEvent(eventStreamHandlerMethod, serviceProvider);
                         }
@@ -1610,7 +1627,7 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
             e.FileLogger(hostEnvironment, dateTime);
 
             e.ElasticStackExceptionLogger(hostEnvironment, globalUniqueIdGenerator, dateTime,
-                NameOfService, NameOfAction
+                NameOfService, eventStreamHandlerType is not null ? eventStreamHandlerType.Name : NameOfAction
             );
             
             e.CentralExceptionLoggerAsStream(hostEnvironment, globalUniqueIdGenerator, this, dateTime, NameOfService, 
@@ -1632,8 +1649,8 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
         ConsumeResult<string, string> consumeResult, IServiceProvider serviceProvider, CancellationToken cancellationToken
     )
     {
-        IUnitOfWork unitOfWork = default;
-        Event @event = default;
+        IUnitOfWork unitOfWork      = default;
+        Event @event                = default;
         Type eventStreamHandlerType = default;
         
         try
@@ -1664,11 +1681,18 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
 
                 var payload = JsonConvert.DeserializeObject(@event.Payload, eventStreamType);
                 
+                var eventStreamBeforeHandlerMethod =
+                    eventStreamHandlerType.GetMethod("BeforeHandleAsync") ?? throw new Exception("BeforeHandleAsync function not found !");
+                
                 var eventStreamHandlerMethod =
                     eventStreamHandlerType.GetMethod("HandleAsync") ?? throw new Exception("HandleAsync function not found !");
                 
-                var eventStreamAfterTransactionHandlerMethod =
-                    eventStreamHandlerType.GetMethod("AfterTransactionHandleAsync") ?? throw new Exception("AfterTransactionHandleAsync function not found !");
+                var eventStreamAfterHandlerMethod =
+                    eventStreamHandlerType.GetMethod("AfterHandleAsync") ?? throw new Exception("AfterHandleAsync function not found !");
+                
+                await _BeforeHandleEventAsync(eventStreamBeforeHandlerMethod, eventStreamHandler, @event,
+                    cancellationToken
+                );
                 
                 var transactionConfig =
                         eventStreamHandlerMethod.GetCustomAttribute(typeof(TransactionConfigAttribute)) as TransactionConfigAttribute;
@@ -1708,7 +1732,7 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
 
                         await unitOfWork.CommitAsync(cancellationToken);
                         
-                        await _AfterTransactionHandleEventAsync(eventStreamAfterTransactionHandlerMethod,
+                        await _AfterHandleEventAsync(eventStreamAfterHandlerMethod,
                             eventStreamHandler, payload, cancellationToken
                         );
                         
@@ -1747,7 +1771,7 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
 
                         await unitOfWork.CommitAsync(cancellationToken);
                         
-                        await _AfterTransactionHandleEventAsync(eventStreamAfterTransactionHandlerMethod,
+                        await _AfterHandleEventAsync(eventStreamAfterHandlerMethod,
                             eventStreamHandler, payload, cancellationToken
                         );
                         
@@ -1764,12 +1788,12 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
             e.FileLoggerAsync(hostEnvironment, dateTime, cancellationToken: cancellationToken);
 
             e.ElasticStackExceptionLogger(hostEnvironment, globalUniqueIdGenerator, dateTime,
-                NameOfService, NameOfAction
+                NameOfService, eventStreamHandlerType is not null ? eventStreamHandlerType.Name : NameOfAction
             );
             
             //fire&forget
-            e.CentralExceptionLoggerAsStreamAsync(hostEnvironment, globalUniqueIdGenerator, this, dateTime, NameOfService, 
-                eventStreamHandlerType is not null ? eventStreamHandlerType.Name : NameOfAction,
+            e.CentralExceptionLoggerAsStreamAsync(hostEnvironment, globalUniqueIdGenerator, this, dateTime, 
+                NameOfService, eventStreamHandlerType is not null ? eventStreamHandlerType.Name : NameOfAction,
                 cancellationToken: cancellationToken
             );
 
@@ -1787,8 +1811,8 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
         ConsumeResult<string, string> consumeResult, IServiceProvider serviceProvider, CancellationToken cancellationToken
     )
     {
-        IUnitOfWork unitOfWork = default;
-        Event @event = default;
+        IUnitOfWork unitOfWork      = default;
+        Event @event                = default;
         Type eventStreamHandlerType = default;
         
         var countOfRetryValue = Convert.ToInt32(
@@ -1825,24 +1849,28 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
 
                 var payload = JsonConvert.DeserializeObject(@event.Payload, eventStreamType);
                 
+                var eventStreamBeforeHandlerMethod =
+                    eventStreamHandlerType.GetMethod("BeforeHandleAsync") ?? throw new Exception("BeforeHandleAsync function not found !");
+                
                 var eventStreamHandlerMethod =
                     eventStreamHandlerType.GetMethod("HandleAsync") ?? throw new Exception("HandleAsync function not found !");
                 
-                var eventStreamAfterTransactionHandlerMethod =
-                    eventStreamHandlerType.GetMethod("AfterTransactionHandleAsync") ?? throw new Exception("AfterTransactionHandleAsync function not found !");
+                var eventStreamAfterHandlerMethod =
+                    eventStreamHandlerType.GetMethod("AfterHandleAsync") ?? throw new Exception("AfterHandleAsync function not found !");
+                
+                await _BeforeHandleEventAsync(eventStreamBeforeHandlerMethod, eventStreamHandler, @event,
+                    cancellationToken
+                );
                 
                 var retryAttr =
                     eventStreamHandlerMethod.GetCustomAttribute(typeof(WithMaxRetryAttribute)) as WithMaxRetryAttribute;
                  
-                if (countOfRetryValue > retryAttr.Count)
+                if (countOfRetryValue > retryAttr?.Count)
                 {
                     if (retryAttr.HasAfterMaxRetryHandle)
-                    {
-                        var afterMaxRetryHandlerMethod =
-                            eventStreamHandlerType.GetMethod("AfterMaxRetryHandleAsync") ?? throw new Exception("AfterMaxRetryHandleAsync function not found !");
-                 
-                        await (Task)afterMaxRetryHandlerMethod.Invoke(eventStreamHandlerType, new[] { payload, cancellationToken });
-                    }
+                        await _AfterMaxRetryHandleEventAsync(eventStreamHandlerType, eventStreamHandler, @event,
+                            cancellationToken
+                        );
                 }
                 else
                 {
@@ -1884,7 +1912,7 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
 
                             await unitOfWork.CommitAsync(cancellationToken);
                             
-                            await _AfterTransactionHandleEventAsync(eventStreamAfterTransactionHandlerMethod,
+                            await _AfterHandleEventAsync(eventStreamAfterHandlerMethod,
                                 eventStreamHandler, payload, cancellationToken
                             );
                         
@@ -1923,7 +1951,7 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
 
                             await unitOfWork.CommitAsync(cancellationToken);
                             
-                            await _AfterTransactionHandleEventAsync(eventStreamAfterTransactionHandlerMethod,
+                            await _AfterHandleEventAsync(eventStreamAfterHandlerMethod,
                                 eventStreamHandler, payload, cancellationToken
                             );
                         
@@ -1941,12 +1969,12 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
             e.FileLoggerAsync(hostEnvironment, dateTime, cancellationToken: cancellationToken);
 
             e.ElasticStackExceptionLogger(hostEnvironment, globalUniqueIdGenerator, dateTime,
-                NameOfService, NameOfAction
+                NameOfService, eventStreamHandlerType is not null ? eventStreamHandlerType.Name : NameOfAction
             );
             
             //fire&forget
-            e.CentralExceptionLoggerAsStreamAsync(hostEnvironment, globalUniqueIdGenerator, this, dateTime, NameOfService, 
-                eventStreamHandlerType is not null ? eventStreamHandlerType.Name : NameOfAction,
+            e.CentralExceptionLoggerAsStreamAsync(hostEnvironment, globalUniqueIdGenerator, this, dateTime, 
+                NameOfService, eventStreamHandlerType is not null ? eventStreamHandlerType.Name : NameOfAction,
                 cancellationToken: cancellationToken
             );
 
@@ -1955,7 +1983,9 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
             countOfRetryValue++;
             
             var isSuccessRetry =
-                await _TryRetryEventOrMessageOfTopicAsync($"{NameOfService}-Retry-{topic}", @event, countOfRetryValue, cancellationToken);
+                await _TryRetryEventOrMessageOfTopicAsync($"{NameOfService}-Retry-{topic}", @event, countOfRetryValue, 
+                    cancellationToken
+                );
             
             if(isSuccessRetry)
                 await _TryCommitOffsetAsync(consumer, consumeResult, cancellationToken);
@@ -2007,6 +2037,10 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
         catch (Exception e)
         {
             e.FileLogger(hostEnvironment, dateTime);
+            
+            e.ElasticStackExceptionLogger(hostEnvironment, globalUniqueIdGenerator, dateTime, 
+                NameOfService, $"{NameOfAction}-TryCommitOffset"
+            );
         }
     }
     
@@ -2026,6 +2060,10 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
         {
             //fire&forget
             e.FileLoggerAsync(hostEnvironment, dateTime, cancellationToken);
+            
+            e.ElasticStackExceptionLogger(hostEnvironment, globalUniqueIdGenerator, dateTime, 
+                NameOfService, $"{NameOfAction}-TryCommitOffset"
+            );
         }
 
         return Task.CompletedTask;
@@ -2065,7 +2103,7 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
             e.FileLogger(hostEnvironment, dateTime);
             
             e.ElasticStackExceptionLogger(hostEnvironment, globalUniqueIdGenerator, dateTime, 
-                NameOfService, NameOfAction
+                NameOfService, $"{NameOfAction}-TryRetryEventOrMessageOfTopic"
             );
 
             return false;
@@ -2112,7 +2150,7 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
             e.FileLoggerAsync(hostEnvironment, dateTime, cancellationToken: cancellationToken);
             
             e.ElasticStackExceptionLogger(hostEnvironment, globalUniqueIdGenerator, dateTime, 
-                NameOfService, NameOfAction
+                NameOfService, $"{NameOfAction}-TryRetryEventOrMessageOfTopic"
             );
 
             return false;
@@ -2146,11 +2184,11 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
             e.FileLogger(hostEnvironment, dateTime);
 
             e.ElasticStackExceptionLogger(hostEnvironment, globalUniqueIdGenerator, dateTime,
-                NameOfService, NameOfAction
+                NameOfService,  $"{NameOfAction}-TryAcquireDistributedLock"
             );
 
             e.CentralExceptionLoggerAsStream(hostEnvironment, globalUniqueIdGenerator, this, dateTime, NameOfService,
-                NameOfAction
+                $"{NameOfAction}-TryAcquireDistributedLock"
             );
         }
 
@@ -2172,11 +2210,11 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
             e.FileLogger(hostEnvironment, dateTime);
 
             e.ElasticStackExceptionLogger(hostEnvironment, globalUniqueIdGenerator, dateTime,
-                NameOfService, NameOfAction
+                NameOfService, $"{NameOfAction}-TryReleaseDistributedLocks"
             );
 
             e.CentralExceptionLoggerAsStream(hostEnvironment, globalUniqueIdGenerator, this, dateTime, NameOfService,
-                NameOfAction
+                $"{NameOfAction}-TryReleaseDistributedLocks"
             );
         }
     }
@@ -2208,12 +2246,12 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
             e.FileLoggerAsync(hostEnvironment, dateTime, cancellationToken);
 
             e.ElasticStackExceptionLogger(hostEnvironment, globalUniqueIdGenerator, dateTime,
-                NameOfService, NameOfAction
+                NameOfService, $"{NameOfAction}-TryAcquireDistributedLock"
             );
 
             //fire&forget
-            e.CentralExceptionLoggerAsStreamAsync(hostEnvironment, globalUniqueIdGenerator, this, dateTime, NameOfService,
-                NameOfAction, cancellationToken
+            e.CentralExceptionLoggerAsStreamAsync(hostEnvironment, globalUniqueIdGenerator, this, dateTime, 
+                NameOfService, $"{NameOfAction}-TryAcquireDistributedLock", cancellationToken
             );
         }
 
@@ -2241,12 +2279,12 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
             e.FileLoggerAsync(hostEnvironment, dateTime, cancellationToken);
 
             e.ElasticStackExceptionLogger(hostEnvironment, globalUniqueIdGenerator, dateTime,
-                NameOfService, NameOfAction
+                NameOfService, $"{NameOfAction}-TryReleaseDistributedLocks"
             );
 
             //fire&forget
-            e.CentralExceptionLoggerAsStreamAsync(hostEnvironment, globalUniqueIdGenerator, this, dateTime, NameOfService,
-                NameOfAction, cancellationToken
+            e.CentralExceptionLoggerAsStreamAsync(hostEnvironment, globalUniqueIdGenerator, this, dateTime, 
+                NameOfService, $"{NameOfAction}-TryReleaseDistributedLocks", cancellationToken
             );
         }
     }
@@ -2283,7 +2321,7 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
             e.FileLogger(hostEnvironment, dateTime);
             
             e.ElasticStackExceptionLogger(hostEnvironment, globalUniqueIdGenerator, dateTime, 
-                NameOfService, NameOfAction
+                NameOfService, $"{NameOfAction}-CleanCacheConsumer"
             );
         }
     }
@@ -2308,7 +2346,7 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
             e.FileLoggerAsync(hostEnvironment, dateTime, cancellationToken);
             
             e.ElasticStackExceptionLogger(hostEnvironment, globalUniqueIdGenerator, dateTime, 
-                NameOfService, NameOfAction
+                NameOfService, $"{NameOfAction}-CleanCacheConsumer"
             );
         }
     }
@@ -2330,7 +2368,7 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
             e.FileLogger(hostEnvironment, dateTime);
             
             e.ElasticStackExceptionLogger(hostEnvironment, globalUniqueIdGenerator, dateTime, 
-                NameOfService, NameOfAction
+                NameOfService, $"{NameOfAction}-CleanCacheConsumer"
             );
             
             e.CentralExceptionLoggerAsStream(hostEnvironment, globalUniqueIdGenerator, this, dateTime, NameOfService,
@@ -2359,7 +2397,7 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
             e.FileLoggerAsync(hostEnvironment, dateTime, cancellationToken);
             
             e.ElasticStackExceptionLogger(hostEnvironment, globalUniqueIdGenerator, dateTime, 
-                NameOfService, NameOfAction
+                NameOfService, $"{NameOfAction}-CleanCacheConsumer"
             );
             
             //fire&forget
@@ -2369,7 +2407,44 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
         }
     }
     
-    private void _AfterTransactionHandleMessage(MethodInfo messageStreamAfterTransactionHandlerMethod, 
+    private void _BeforeHandleMessage(MethodInfo messageStreamBeforeHandlerMethod, object messageStreamHandler, 
+        object message
+    )
+    {
+        try
+        {
+            messageStreamBeforeHandlerMethod.Invoke(messageStreamHandler, new[] { message });
+        }
+        catch (Exception e)
+        {
+            e.FileLogger(hostEnvironment, dateTime);
+            
+            e.ElasticStackExceptionLogger(hostEnvironment, globalUniqueIdGenerator, dateTime, 
+                NameOfService, $"{NameOfAction}-BeforeHandle"
+            );
+        }
+    }
+    
+    private async Task _BeforeHandleMessageAsync(MethodInfo messageStreamBeforeHandlerMethod, 
+        object messageStreamHandler, object message, CancellationToken cancellationToken
+    )
+    {
+        try
+        {
+            await (Task)messageStreamBeforeHandlerMethod.Invoke(messageStreamHandler, new[] { message, cancellationToken});
+        }
+        catch (Exception e)
+        {
+            //fire&forget
+            e.FileLoggerAsync(hostEnvironment, dateTime, cancellationToken);
+            
+            e.ElasticStackExceptionLogger(hostEnvironment, globalUniqueIdGenerator, dateTime, 
+                NameOfService, $"{NameOfAction}-BeforeHandle"
+            );
+        }
+    }
+    
+    private void _AfterHandleMessage(MethodInfo messageStreamAfterTransactionHandlerMethod, 
         object messageStreamHandler, object message
     )
     {
@@ -2387,7 +2462,7 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
         }
     }
     
-    private async Task _AfterTransactionHandleMessageAsync(MethodInfo messageStreamAfterTransactionHandlerMethod, 
+    private async Task _AfterHandleMessageAsync(MethodInfo messageStreamAfterTransactionHandlerMethod, 
         object messageStreamHandler, object message, CancellationToken cancellationToken
     )
     {
@@ -2406,7 +2481,94 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
         }
     }
     
-    private void _AfterTransactionHandleEvent(MethodInfo eventStreamAfterTransactionHandlerMethod, 
+    private void _AfterMaxRetryHandleMessage(Type messageStreamHandlerType, object messageStreamHandler, object message)
+    {
+        try
+        {
+            var afterMaxRetryHandlerMethod =
+                messageStreamHandlerType.GetMethod("AfterMaxRetryHandle") ?? throw new Exception("AfterMaxRetryHandle function not found !");
+                        
+            afterMaxRetryHandlerMethod.Invoke(messageStreamHandler, new[] { message });
+        }
+        catch (Exception e)
+        {
+            e.FileLogger(hostEnvironment, dateTime);
+            
+            e.ElasticStackExceptionLogger(hostEnvironment, globalUniqueIdGenerator, dateTime, 
+                NameOfService, $"{NameOfAction}-AfterMaxRetryHandle"
+            );
+        }
+    }
+    
+    private async Task _AfterMaxRetryHandleMessageAsync(Type messageStreamHandlerType, object messageStreamHandler,
+        object message, CancellationToken cancellationToken
+    )
+    {
+        try
+        {
+            var afterMaxRetryHandlerMethod =
+                messageStreamHandlerType.GetMethod("AfterMaxRetryHandleAsync") ?? throw new Exception("AfterMaxRetryHandleAsync function not found !");
+                        
+            await (Task)afterMaxRetryHandlerMethod.Invoke(messageStreamHandler, new[] { message, cancellationToken });
+        }
+        catch (Exception e)
+        {
+            //fire&forget
+            e.FileLoggerAsync(hostEnvironment, dateTime, cancellationToken);
+            
+            e.ElasticStackExceptionLogger(hostEnvironment, globalUniqueIdGenerator, dateTime, 
+                NameOfService, $"{NameOfAction}-AfterMaxRetryHandle"
+            );
+        }
+    }
+    
+    private void _BeforeHandleEvent(MethodInfo eventStreamBeforeHandlerMethod, object eventStreamHandler, 
+        object @event
+    )
+    {
+        try
+        {
+            eventStreamBeforeHandlerMethod.Invoke(eventStreamHandler, new[] { @event });
+        }
+        catch (Exception e)
+        {
+            e.FileLogger(hostEnvironment, dateTime);
+            
+            e.ElasticStackExceptionLogger(hostEnvironment, globalUniqueIdGenerator, dateTime, 
+                NameOfService, $"{NameOfAction}-BeforeHandle"
+            );
+            
+            e.CentralExceptionLoggerAsStream(hostEnvironment, globalUniqueIdGenerator, this, dateTime,
+                NameOfService, $"{NameOfAction}-BeforeHandle"
+            );
+        }
+    }
+    
+    private async Task _BeforeHandleEventAsync(MethodInfo eventStreamBeforeHandlerMethod, 
+        object eventStreamHandler, object @event, CancellationToken cancellationToken
+    )
+    {
+        try
+        {
+            await (Task)eventStreamBeforeHandlerMethod.Invoke(eventStreamHandler, new[] { @event, cancellationToken});
+        }
+        catch (Exception e)
+        {
+            //fire&forget
+            e.FileLoggerAsync(hostEnvironment, dateTime, cancellationToken);
+            
+            e.ElasticStackExceptionLogger(hostEnvironment, globalUniqueIdGenerator, dateTime, 
+                NameOfService, $"{NameOfAction}-BeforeHandle"
+            );
+            
+            //fire&forget
+            e.CentralExceptionLoggerAsStreamAsync(hostEnvironment, globalUniqueIdGenerator, this, dateTime,
+                NameOfService, $"{NameOfAction}-BeforeHandle", cancellationToken
+            );
+        }
+    }
+    
+    private void _AfterHandleEvent(MethodInfo eventStreamAfterTransactionHandlerMethod, 
         object eventStreamHandler, object @event
     )
     {
@@ -2423,12 +2585,12 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
             );
             
             e.CentralExceptionLoggerAsStream(hostEnvironment, globalUniqueIdGenerator, this, dateTime, NameOfService,
-                $"{NameOfAction}-AfterTransactionHandle"
+                $"{NameOfAction}-AfterHandle"
             );
         }
     }
     
-    private async Task _AfterTransactionHandleEventAsync(MethodInfo eventStreamAfterTransactionHandlerMethod, 
+    private async Task _AfterHandleEventAsync(MethodInfo eventStreamAfterTransactionHandlerMethod, 
         object eventStreamHandler, object @event, CancellationToken cancellationToken
     )
     {
@@ -2447,7 +2609,57 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
             
             //fire&forget
             e.CentralExceptionLoggerAsStreamAsync(hostEnvironment, globalUniqueIdGenerator, this, dateTime, NameOfService,
-                $"{NameOfAction}-AfterTransactionHandle", cancellationToken
+                $"{NameOfAction}-AfterHandle", cancellationToken
+            );
+        }
+    }
+    
+    private void _AfterMaxRetryHandleEvent(Type eventStreamHandlerType, object eventStreamHandler, object @event)
+    {
+        try
+        {
+            var afterMaxRetryHandlerMethod =
+                eventStreamHandlerType.GetMethod("AfterMaxRetryHandle") ?? throw new Exception("AfterMaxRetryHandle function not found !");
+                        
+            afterMaxRetryHandlerMethod.Invoke(eventStreamHandler, new[] { @event });
+        }
+        catch (Exception e)
+        {
+            e.FileLogger(hostEnvironment, dateTime);
+            
+            e.ElasticStackExceptionLogger(hostEnvironment, globalUniqueIdGenerator, dateTime, 
+                NameOfService, $"{NameOfAction}-AfterMaxRetryHandle"
+            );
+            
+            e.CentralExceptionLoggerAsStream(hostEnvironment, globalUniqueIdGenerator, this, dateTime, 
+                NameOfService, $"{NameOfAction}-AfterMaxRetryHandle"
+            );
+        }
+    }
+    
+    private async Task _AfterMaxRetryHandleEventAsync(Type eventStreamHandlerType, object eventStreamHandler,
+        object @event, CancellationToken cancellationToken
+    )
+    {
+        try
+        {
+            var afterMaxRetryHandlerMethod =
+                eventStreamHandlerType.GetMethod("AfterMaxRetryHandleAsync") ?? throw new Exception("AfterMaxRetryHandleAsync function not found !");
+                        
+            await (Task)afterMaxRetryHandlerMethod.Invoke(eventStreamHandler, new[] { @event, cancellationToken });
+        }
+        catch (Exception e)
+        {
+            //fire&forget
+            e.FileLoggerAsync(hostEnvironment, dateTime, cancellationToken);
+            
+            e.ElasticStackExceptionLogger(hostEnvironment, globalUniqueIdGenerator, dateTime, 
+                NameOfService, $"{NameOfAction}-AfterMaxRetryHandle"
+            );
+            
+            //fire&forget
+            e.CentralExceptionLoggerAsStreamAsync(hostEnvironment, globalUniqueIdGenerator, this, dateTime, 
+                NameOfService, $"{NameOfAction}-AfterMaxRetryHandle", cancellationToken
             );
         }
     }

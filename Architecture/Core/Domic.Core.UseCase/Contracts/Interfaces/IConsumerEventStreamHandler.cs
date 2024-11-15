@@ -8,7 +8,7 @@ public interface IConsumerEventStreamHandler<in TEvent> where TEvent : IDomainEv
     /// 
     /// </summary>
     /// <param name="event"></param>
-    public void Handle(TEvent @event);
+    public void Handle(TEvent @event) => throw new NotImplementedException();
     
     /// <summary>
     /// 
@@ -22,7 +22,7 @@ public interface IConsumerEventStreamHandler<in TEvent> where TEvent : IDomainEv
     /// 
     /// </summary>
     /// <param name="event"></param>
-    public void AfterTransactionHandle(TEvent @event);
+    public void AfterHandle(TEvent @event) => throw new NotImplementedException();
 
     /// <summary>
     /// 
@@ -30,7 +30,7 @@ public interface IConsumerEventStreamHandler<in TEvent> where TEvent : IDomainEv
     /// <param name="event"></param>
     /// <param name="cancellationToken"></param>
     /// <returns></returns>
-    public Task AfterTransactionHandleAsync(TEvent @event, CancellationToken cancellationToken) 
+    public Task AfterHandleAsync(TEvent @event, CancellationToken cancellationToken) 
         => throw new NotImplementedException();
     
     /// <summary>

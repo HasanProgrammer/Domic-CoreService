@@ -8,7 +8,22 @@ public interface IConsumerEventBusHandler<in TEvent> where TEvent : IDomainEvent
     /// 
     /// </summary>
     /// <param name="event"></param>
-    public void Handle(TEvent @event);
+    public void BeforeHandle(TEvent @event) => throw new NotImplementedException();
+
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="event"></param>
+    /// <param name="cancellationToken"></param>
+    /// <returns></returns>
+    public Task BeforeHandleAsync(TEvent @event, CancellationToken cancellationToken) 
+        => throw new NotImplementedException();
+    
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="event"></param>
+    public void Handle(TEvent @event) => throw new NotImplementedException();
 
     /// <summary>
     /// 
@@ -17,12 +32,12 @@ public interface IConsumerEventBusHandler<in TEvent> where TEvent : IDomainEvent
     /// <param name="cancellationToken"></param>
     /// <returns></returns>
     public Task HandleAsync(TEvent @event, CancellationToken cancellationToken) => throw new NotImplementedException();
-    
+
     /// <summary>
     /// 
     /// </summary>
     /// <param name="event"></param>
-    public void AfterTransactionHandle(TEvent @event);
+    public void AfterHandle(TEvent @event) => throw new NotImplementedException();
 
     /// <summary>
     /// 
@@ -30,7 +45,7 @@ public interface IConsumerEventBusHandler<in TEvent> where TEvent : IDomainEvent
     /// <param name="event"></param>
     /// <param name="cancellationToken"></param>
     /// <returns></returns>
-    public Task AfterTransactionHandleAsync(TEvent @event, CancellationToken cancellationToken) 
+    public Task AfterHandleAsync(TEvent @event, CancellationToken cancellationToken) 
         => throw new NotImplementedException();
 
     /// <summary>
