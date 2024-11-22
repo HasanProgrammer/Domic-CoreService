@@ -1363,7 +1363,7 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
                 var eventStreamAfterHandlerMethod =
                     eventStreamHandlerType.GetMethod("AfterHandle") ?? throw new Exception("AfterHandle function not found !");
                 
-                _BeforeHandleEvent(eventStreamBeforeHandlerMethod, eventStreamHandler, @event);
+                _BeforeHandleEvent(eventStreamBeforeHandlerMethod, eventStreamHandler, payload);
                 
                 var transactionConfig =
                         eventStreamHandlerMethod.GetCustomAttribute(typeof(TransactionConfigAttribute)) as TransactionConfigAttribute;
@@ -1523,7 +1523,7 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
                 var eventStreamAfterHandlerMethod =
                     eventStreamHandlerType.GetMethod("AfterHandle") ?? throw new Exception("AfterHandle function not found !");
                 
-                _BeforeHandleEvent(eventStreamBeforeHandlerMethod, eventStreamHandler, @event);
+                _BeforeHandleEvent(eventStreamBeforeHandlerMethod, eventStreamHandler, payload);
                 
                 var retryAttr =
                     eventStreamHandlerMethod.GetCustomAttribute(typeof(WithMaxRetryAttribute)) as WithMaxRetryAttribute;
@@ -1531,7 +1531,7 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
                 if (countOfRetryValue > retryAttr?.Count)
                 {
                     if (retryAttr.HasAfterMaxRetryHandle)
-                        _AfterMaxRetryHandleEvent(eventStreamHandlerType, eventStreamHandler, @event);
+                        _AfterMaxRetryHandleEvent(eventStreamHandlerType, eventStreamHandler, payload);
                 }
                 else
                 {
@@ -1690,7 +1690,7 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
                 var eventStreamAfterHandlerMethod =
                     eventStreamHandlerType.GetMethod("AfterHandleAsync") ?? throw new Exception("AfterHandleAsync function not found !");
                 
-                await _BeforeHandleEventAsync(eventStreamBeforeHandlerMethod, eventStreamHandler, @event,
+                await _BeforeHandleEventAsync(eventStreamBeforeHandlerMethod, eventStreamHandler, payload,
                     cancellationToken
                 );
                 
@@ -1858,7 +1858,7 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
                 var eventStreamAfterHandlerMethod =
                     eventStreamHandlerType.GetMethod("AfterHandleAsync") ?? throw new Exception("AfterHandleAsync function not found !");
                 
-                await _BeforeHandleEventAsync(eventStreamBeforeHandlerMethod, eventStreamHandler, @event,
+                await _BeforeHandleEventAsync(eventStreamBeforeHandlerMethod, eventStreamHandler, payload,
                     cancellationToken
                 );
                 
@@ -1868,7 +1868,7 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
                 if (countOfRetryValue > retryAttr?.Count)
                 {
                     if (retryAttr.HasAfterMaxRetryHandle)
-                        await _AfterMaxRetryHandleEventAsync(eventStreamHandlerType, eventStreamHandler, @event,
+                        await _AfterMaxRetryHandleEventAsync(eventStreamHandlerType, eventStreamHandler, payload,
                             cancellationToken
                         );
                 }

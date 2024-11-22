@@ -1044,7 +1044,7 @@ public class ExternalMessageBroker : IExternalMessageBroker
                 var eventBusAfterHandlerMethod =
                     eventBusHandlerType.GetMethod("AfterHandle") ?? throw new Exception("AfterHandle function not found !");
                 
-                _BeforeHandleEvent(eventBusBeforeHandlerMethod, eventBusHandler, @event);
+                _BeforeHandleEvent(eventBusBeforeHandlerMethod, eventBusHandler, payload);
                 
                 var retryAttr =
                     eventBusHandlerMethod.GetCustomAttribute(typeof(WithMaxRetryAttribute)) as WithMaxRetryAttribute;
@@ -1054,7 +1054,7 @@ public class ExternalMessageBroker : IExternalMessageBroker
                 if (maxRetryInfo.result)
                 {
                     if (retryAttr.HasAfterMaxRetryHandle)
-                        _AfterMaxRetryHandleEvent(eventBusHandlerType, eventBusHandler, @event);
+                        _AfterMaxRetryHandleEvent(eventBusHandlerType, eventBusHandler, payload);
                 }
                 else
                 {
@@ -1097,7 +1097,7 @@ public class ExternalMessageBroker : IExternalMessageBroker
 
                             unitOfWork.Commit();
                             
-                            _AfterHandleEvent(eventBusAfterHandlerMethod, eventBusHandler, @event);
+                            _AfterHandleEvent(eventBusAfterHandlerMethod, eventBusHandler, payload);
         
                             _CleanCacheEvent(eventBusHandlerMethod, serviceProvider);
                         }
@@ -1137,7 +1137,7 @@ public class ExternalMessageBroker : IExternalMessageBroker
 
                             unitOfWork.Commit();
                             
-                            _AfterHandleEvent(eventBusAfterHandlerMethod, eventBusHandler, @event);
+                            _AfterHandleEvent(eventBusAfterHandlerMethod, eventBusHandler, payload);
 
                             _CleanCacheEvent(eventBusHandlerMethod, serviceProvider);
                         }
@@ -1209,9 +1209,7 @@ public class ExternalMessageBroker : IExternalMessageBroker
                 var eventBusAfterHandlerMethod =
                     eventBusHandlerType.GetMethod("AfterHandleAsync") ?? throw new Exception("AfterHandleAsync function not found !");
 
-                await _BeforeHandleEventAsync(eventBusBeforeHandlerMethod, eventBusHandler, @event,
-                    cancellationToken
-                );
+                await _BeforeHandleEventAsync(eventBusBeforeHandlerMethod, eventBusHandler, payload, cancellationToken);
                 
                 var retryAttr =
                     eventBusHandlerMethod.GetCustomAttribute(typeof(WithMaxRetryAttribute)) as WithMaxRetryAttribute;
@@ -1221,7 +1219,7 @@ public class ExternalMessageBroker : IExternalMessageBroker
                 if (maxRetryInfo.result)
                 {
                     if (retryAttr.HasAfterMaxRetryHandle)
-                        await _AfterMaxRetryHandleEventAsync(eventBusHandlerType, eventBusHandler, @event,
+                        await _AfterMaxRetryHandleEventAsync(eventBusHandlerType, eventBusHandler, payload,
                             cancellationToken
                         );
                 }
@@ -1267,7 +1265,7 @@ public class ExternalMessageBroker : IExternalMessageBroker
                             await unitOfWork.CommitAsync(cancellationToken);
                             
                             await _AfterHandleEventAsync(eventBusAfterHandlerMethod,
-                                eventBusHandler, @event, cancellationToken
+                                eventBusHandler, payload, cancellationToken
                             );
         
                             await _CleanCacheEventAsync(eventBusHandlerMethod, serviceProvider, cancellationToken);
@@ -1310,7 +1308,7 @@ public class ExternalMessageBroker : IExternalMessageBroker
                             await unitOfWork.CommitAsync(cancellationToken);
 
                             await _AfterHandleEventAsync(eventBusAfterHandlerMethod,
-                                eventBusHandler, @event, cancellationToken
+                                eventBusHandler, payload, cancellationToken
                             );
 
                             await _CleanCacheEventAsync(eventBusHandlerMethod, serviceProvider, cancellationToken);
