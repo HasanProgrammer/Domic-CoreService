@@ -5,67 +5,67 @@ public interface IConsumerCommandBusHandler<in TCommand, TResult> where TCommand
     /// <summary>
     /// 
     /// </summary>
-    /// <param name="message"></param>
+    /// <param name="command"></param>
     /// <exception cref="NotImplementedException"></exception>
-    public void BeforeHandle(TCommand message)
+    public void BeforeHandle(TCommand command)
         => throw new NotImplementedException();
     
     /// <summary>
     /// 
     /// </summary>
-    /// <param name="message"></param>
+    /// <param name="command"></param>
     /// <param name="cancellationToken"></param>
     /// <returns></returns>
     /// <exception cref="NotImplementedException"></exception>
-    public Task BeforeHandleAsync(TCommand message, CancellationToken cancellationToken)
-        => throw new NotImplementedException();
-
-    /// <summary>
-    /// 
-    /// </summary>
-    /// <param name="message"></param>
-    /// <returns></returns>
-    public TResult Handle(TCommand message) => throw new NotImplementedException();
-
-    /// <summary>
-    /// 
-    /// </summary>
-    /// <param name="message"></param>
-    /// <param name="cancellationToken"></param>
-    /// <returns></returns>
-    public Task<TResult> HandleAsync(TCommand message, CancellationToken cancellationToken) 
-        => throw new NotImplementedException();
-    
-    /// <summary>
-    /// 
-    /// </summary>
-    /// <param name="message"></param>
-    /// <exception cref="NotImplementedException"></exception>
-    public void AfterHandle(TCommand message) => throw new NotImplementedException();
-    
-    /// <summary>
-    /// 
-    /// </summary>
-    /// <param name="message"></param>
-    /// <param name="cancellationToken"></param>
-    /// <returns></returns>
-    /// <exception cref="NotImplementedException"></exception>
-    public Task AfterHandleAsync(TCommand message, CancellationToken cancellationToken)
+    public Task BeforeHandleAsync(TCommand command, CancellationToken cancellationToken)
         => throw new NotImplementedException();
 
     /// <summary>
     /// 
     /// </summary>
-    /// <param name="message"></param>
-    /// <exception cref="NotImplementedException"></exception>
-    public void AfterMaxRetryHandle(TCommand message) => throw new NotImplementedException();
+    /// <param name="command"></param>
+    /// <returns></returns>
+    public TResult Handle(TCommand command) => throw new NotImplementedException();
+
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="command"></param>
+    /// <param name="cancellationToken"></param>
+    /// <returns></returns>
+    public Task<TResult> HandleAsync(TCommand command, CancellationToken cancellationToken) 
+        => throw new NotImplementedException();
     
     /// <summary>
     /// 
     /// </summary>
-    /// <param name="message"></param>
+    /// <param name="command"></param>
+    /// <exception cref="NotImplementedException"></exception>
+    public void AfterHandle(TCommand command) => throw new NotImplementedException();
+    
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="command"></param>
+    /// <param name="cancellationToken"></param>
+    /// <returns></returns>
+    /// <exception cref="NotImplementedException"></exception>
+    public Task AfterHandleAsync(TCommand command, CancellationToken cancellationToken)
+        => throw new NotImplementedException();
+
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="command"></param>
+    /// <exception cref="NotImplementedException"></exception>
+    public void AfterMaxRetryHandle(TCommand command) => throw new NotImplementedException();
+    
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="command"></param>
     /// <param name="cancellationToken"></param>
     /// <exception cref="NotImplementedException"></exception>
-    public Task AfterMaxRetryHandleAsync(TCommand message, CancellationToken cancellationToken) 
+    public Task AfterMaxRetryHandleAsync(TCommand command, CancellationToken cancellationToken) 
         => throw new NotImplementedException();
 }
