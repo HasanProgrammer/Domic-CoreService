@@ -880,7 +880,7 @@ public class ExternalMessageBroker : IExternalMessageBroker
             var messageBusHandlerMethod =
                 messageBusHandlerType.GetMethod("HandleAsync") ?? throw new Exception("HandleAsync function not found !");
             
-            var messageBusAfterTransactionHandlerMethod =
+            var messageBusAfterHandlerMethod =
                 messageBusHandlerType.GetMethod("AfterHandleAsync") ?? throw new Exception("AfterHandleAsync function not found !");
 
             await _BeforeHandleMessageAsync(messageBusBeforeHandlerMethod, messageBusHandler, message,
@@ -943,7 +943,7 @@ public class ExternalMessageBroker : IExternalMessageBroker
                 
                     await unitOfWork.CommitAsync(cancellationToken);
 
-                    await _AfterHandleMessageAsync(messageBusAfterTransactionHandlerMethod, messageBusHandler,
+                    await _AfterHandleMessageAsync(messageBusAfterHandlerMethod, messageBusHandler,
                         message, cancellationToken
                     );
 

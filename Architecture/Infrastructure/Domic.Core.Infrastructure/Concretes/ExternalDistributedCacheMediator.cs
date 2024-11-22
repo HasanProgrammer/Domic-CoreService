@@ -36,12 +36,12 @@ public class ExternalDistributedCacheMediator : IExternalDistributedCacheMediato
 
             if (cacheHandlerMethodAttr.Ttl is not 0)
                 externalDistributedCache.SetCacheValue(
-                    new KeyValuePair<string, string>(cacheHandlerMethodAttr.Key, base64 ) ,
+                    new KeyValuePair<string, string>(cacheHandlerMethodAttr.Key, base64) ,
                     TimeSpan.FromMinutes( cacheHandlerMethodAttr.Ttl )
                 );
             else
                 externalDistributedCache.SetCacheValue(
-                    new KeyValuePair<string, string>(cacheHandlerMethodAttr.Key, base64 ) 
+                    new KeyValuePair<string, string>(cacheHandlerMethodAttr.Key, base64) 
                 );
 
             return result;
@@ -79,13 +79,13 @@ public class ExternalDistributedCacheMediator : IExternalDistributedCacheMediato
             
             if(cacheHandlerMethodAttr.Ttl is not 0)
                 await externalDistributedCache.SetCacheValueAsync(
-                    new KeyValuePair<string, string>(cacheHandlerMethodAttr.Key, base64 ) ,
+                    new KeyValuePair<string, string>(cacheHandlerMethodAttr.Key, base64) ,
                     TimeSpan.FromMinutes( cacheHandlerMethodAttr.Ttl ) ,
                     cancellationToken: cancellationToken
                 );
             else
                 await externalDistributedCache.SetCacheValueAsync(
-                    new KeyValuePair<string, string>(cacheHandlerMethodAttr.Key, base64 ), 
+                    new KeyValuePair<string, string>(cacheHandlerMethodAttr.Key, base64), 
                     cancellationToken: cancellationToken
                 );
 

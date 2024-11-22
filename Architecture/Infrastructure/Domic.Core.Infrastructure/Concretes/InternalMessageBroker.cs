@@ -264,7 +264,7 @@ public class InternalMessageBroker : IInternalMessageBroker
                 var commandBusHandlerTypeMethod =
                     commandBusHandlerType.GetMethod("Handle") ?? throw new Exception("Handle function not found !");
                 
-                var commandBusAfterTransactionHandleTypeMethod =
+                var commandBusAfterHandleTypeMethod =
                     commandBusHandlerType.GetMethod("AfterHandle") ?? throw new Exception("AfterHandle function not found !");
                 
                 _BeforeHandle(commandBusBeforeHandleTypeMethod, commandBusHandler, command);
@@ -373,7 +373,7 @@ public class InternalMessageBroker : IInternalMessageBroker
 
                         unitOfWork.Commit();
                         
-                        _AfterHandle(commandBusAfterTransactionHandleTypeMethod, commandBusHandler, command);
+                        _AfterHandle(commandBusAfterHandleTypeMethod, commandBusHandler, command);
                     
                         _CleanCache(commandBusHandlerTypeMethod, serviceProvider);
                     

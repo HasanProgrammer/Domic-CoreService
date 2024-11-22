@@ -1520,7 +1520,7 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
                 var eventStreamHandlerMethod =
                     eventStreamHandlerType.GetMethod("Handle") ?? throw new Exception("Handle function not found !");
                 
-                var eventStreamAfterTransactionHandlerMethod =
+                var eventStreamAfterHandlerMethod =
                     eventStreamHandlerType.GetMethod("AfterHandle") ?? throw new Exception("AfterHandle function not found !");
                 
                 _BeforeHandleEvent(eventStreamBeforeHandlerMethod, eventStreamHandler, @event);
@@ -1574,7 +1574,7 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
 
                             unitOfWork.Commit();
                             
-                            _AfterHandleEvent(eventStreamAfterTransactionHandlerMethod, eventStreamHandler, payload);
+                            _AfterHandleEvent(eventStreamAfterHandlerMethod, eventStreamHandler, payload);
                         
                             _CleanCacheEvent(eventStreamHandlerMethod, serviceProvider);
                         }
@@ -1612,7 +1612,7 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
 
                             unitOfWork.Commit();
                             
-                            _AfterHandleEvent(eventStreamAfterTransactionHandlerMethod, eventStreamHandler, payload);
+                            _AfterHandleEvent(eventStreamAfterHandlerMethod, eventStreamHandler, payload);
                         
                             _CleanCacheEvent(eventStreamHandlerMethod, serviceProvider);
                         }
@@ -2444,13 +2444,13 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
         }
     }
     
-    private void _AfterHandleMessage(MethodInfo messageStreamAfterTransactionHandlerMethod, 
-        object messageStreamHandler, object message
+    private void _AfterHandleMessage(MethodInfo messageStreamAfterHandlerMethod, object messageStreamHandler, 
+        object message
     )
     {
         try
         {
-            messageStreamAfterTransactionHandlerMethod.Invoke(messageStreamHandler, new object[] { message });
+            messageStreamAfterHandlerMethod.Invoke(messageStreamHandler, new object[] { message });
         }
         catch (Exception e)
         {
@@ -2462,13 +2462,13 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
         }
     }
     
-    private async Task _AfterHandleMessageAsync(MethodInfo messageStreamAfterTransactionHandlerMethod, 
-        object messageStreamHandler, object message, CancellationToken cancellationToken
+    private async Task _AfterHandleMessageAsync(MethodInfo messageStreamAfterHandlerMethod, object messageStreamHandler, 
+        object message, CancellationToken cancellationToken
     )
     {
         try
         {
-            await (Task)messageStreamAfterTransactionHandlerMethod.Invoke(messageStreamHandler, new object[] { message, cancellationToken });
+            await (Task)messageStreamAfterHandlerMethod.Invoke(messageStreamHandler, new object[] { message, cancellationToken });
         }
         catch (Exception e)
         {
@@ -2568,13 +2568,11 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
         }
     }
     
-    private void _AfterHandleEvent(MethodInfo eventStreamAfterTransactionHandlerMethod, 
-        object eventStreamHandler, object @event
-    )
+    private void _AfterHandleEvent(MethodInfo eventStreamAfterHandlerMethod, object eventStreamHandler, object @event)
     {
         try
         {
-            eventStreamAfterTransactionHandlerMethod.Invoke(eventStreamHandler, new object[] { @event });
+            eventStreamAfterHandlerMethod.Invoke(eventStreamHandler, new object[] { @event });
         }
         catch (Exception e)
         {
@@ -2590,13 +2588,13 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
         }
     }
     
-    private async Task _AfterHandleEventAsync(MethodInfo eventStreamAfterTransactionHandlerMethod, 
-        object eventStreamHandler, object @event, CancellationToken cancellationToken
+    private async Task _AfterHandleEventAsync(MethodInfo eventStreamAfterHandlerMethod, object eventStreamHandler, 
+        object @event, CancellationToken cancellationToken
     )
     {
         try
         {
-            await (Task)eventStreamAfterTransactionHandlerMethod.Invoke(eventStreamHandler, new object[] { @event, cancellationToken });
+            await (Task)eventStreamAfterHandlerMethod.Invoke(eventStreamHandler, new object[] { @event, cancellationToken });
         }
         catch (Exception e)
         {
