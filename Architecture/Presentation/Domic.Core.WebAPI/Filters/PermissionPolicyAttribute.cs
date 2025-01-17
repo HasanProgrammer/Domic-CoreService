@@ -12,11 +12,11 @@ public class PermissionPolicyAttribute : ActionFilterAttribute
 
     public override async Task OnActionExecutionAsync(ActionExecutingContext context, ActionExecutionDelegate next)
     {
-        var redisCache   = context.HttpContext.RequestServices.GetRequiredService<IInternalDistributedCache>();
         var jsonWebToken = context.HttpContext.RequestServices.GetRequiredService<IJsonWebToken>();
+        var externalDistributedCache = context.HttpContext.RequestServices.GetRequiredService<IExternalDistributedCache>();
 
         var username    = jsonWebToken.GetUsername(context.HttpContext.GetRowToken());
-        var permissions = redisCache.GetCacheValue($"{username}-permissions");
+        var permissions = externalDistributedCache.GetCacheValue($"{username}-permissions");
         
         if (!permissions.Contains(Type))
             throw new PresentationException("شما سطح دسترسی لازم برای ورود به این قسمت را دارا نمی باشید !");
