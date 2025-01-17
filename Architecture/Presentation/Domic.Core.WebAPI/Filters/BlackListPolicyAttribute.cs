@@ -24,11 +24,11 @@ public class BlackListPolicyAttribute : ActionFilterAttribute
         
         if (ignoreCondition)
         {
-            var externalDistributedCache =
-                context.HttpContext.RequestServices.GetRequiredService<IExternalDistributedCache>();
+            var internalDistributedCache =
+                context.HttpContext.RequestServices.GetRequiredService<IInternalDistributedCache>();
             
             var blackListCondition =
-                externalDistributedCache.GetCacheValue("BlackList-Auth")?
+                internalDistributedCache.GetCacheValue("BlackList-Auth")?
                                         .DeSerialize<List<string>>()
                                         .Contains( context.HttpContext.GetRowToken() ) ?? false;
             
