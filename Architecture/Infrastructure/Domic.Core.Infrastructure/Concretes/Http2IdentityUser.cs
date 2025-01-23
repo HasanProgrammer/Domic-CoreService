@@ -13,7 +13,7 @@ public class Http2IdentityUser(IJsonWebToken jsonWebToken) : IIdentityUser
             _authToken = token;
     }
 
-    public string GetIdentity() => jsonWebToken.GetIdentityUserId(_authToken);
+    public string GetIdentity() => jsonWebToken.GetUserIdentity(_authToken);
 
     public string GetUsername() => jsonWebToken.GetUsername(_authToken);
 

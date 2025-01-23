@@ -22,28 +22,22 @@ public class JsonWebToken : IJsonWebToken
         return token;
     }
 
-    public string GetIdentityUserId(string token) 
+    public string GetUserIdentity(string token)
         => new JwtSecurityTokenHandler().ReadJwtToken(token ?? "")
                                         .Claims?
-                                        .Where(claim => claim.Type.Equals("UserId")).Select(Claim => Claim.Value)
+                                        .Where(claim => claim.Type.Equals("user_identity")).Select(Claim => Claim.Value)
                                         .FirstOrDefault();
 
-    public string GetUsername(string token) 
+    public string GetUsername(string token)
         => new JwtSecurityTokenHandler().ReadJwtToken(token ?? "")
                                         .Claims?
-                                        .Where(claim => claim.Type.Equals("unique_name")).Select(Claim => Claim.Value)
+                                        .Where(claim => claim.Type.Equals("username")).Select(Claim => Claim.Value)
                                         .FirstOrDefault();
 
-    public List<string> GetRoles(string token) 
+    public List<string> GetRoles(string token)
         => new JwtSecurityTokenHandler().ReadJwtToken(token ?? "")
                                         .Claims?
-                                        .Where(claim => claim.Type.Equals("Role")).Select(Claim => Claim.Value)
-                                        .ToList();
-
-    public List<string> GetPermissions(string token) 
-        => new JwtSecurityTokenHandler().ReadJwtToken(token ?? "")
-                                        .Claims?
-                                        .Where(claim => claim.Type.Equals("Permission")).Select(Claim => Claim.Value)
+                                        .Where(claim => claim.Type.Equals("role")).Select(Claim => Claim.Value)
                                         .ToList();
     
     public List<string> GetClaimsToken(string token, string claimType) 

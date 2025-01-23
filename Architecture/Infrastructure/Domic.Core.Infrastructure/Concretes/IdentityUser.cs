@@ -16,7 +16,7 @@ public class IdentityUser : IIdentityUser
         _authToken = httpContextAccessor.HttpContext.GetRowToken();
     }
 
-    public string GetIdentity() => _jsonWebToken.GetIdentityUserId(_authToken);
+    public string GetIdentity() => _jsonWebToken.GetUserIdentity(_authToken);
 
     public string GetUsername() => _jsonWebToken.GetUsername(_authToken);
 

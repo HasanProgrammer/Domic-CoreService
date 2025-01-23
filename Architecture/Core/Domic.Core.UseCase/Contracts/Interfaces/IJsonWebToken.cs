@@ -17,7 +17,7 @@ public interface IJsonWebToken
     /// </summary>
     /// <param name="token"></param>
     /// <returns></returns>
-    public string GetIdentityUserId(string token);
+    public string GetUserIdentity(string token);
 
     /// <summary>
     /// 
@@ -32,13 +32,6 @@ public interface IJsonWebToken
     /// <param name="token"></param>
     /// <returns></returns>
     public List<string> GetRoles(string token);
-    
-    /// <summary>
-    /// 
-    /// </summary>
-    /// <param name="token"></param>
-    /// <returns></returns>
-    public List<string> GetPermissions(string token);
     
     /// <summary>
     /// 
