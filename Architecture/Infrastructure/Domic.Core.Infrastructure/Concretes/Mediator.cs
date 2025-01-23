@@ -2,6 +2,7 @@
 
 using System.Reflection;
 using System.Text;
+using Domic.Core.Common.ClassConsts;
 using Domic.Core.Common.ClassModels;
 using Domic.Core.Domain.Contracts.Interfaces;
 using Domic.Core.Infrastructure.Extensions;
@@ -328,12 +329,14 @@ public class Mediator : IMediator
     
     /*---------------------------------------------------------------*/
     
-    private Type _GetTypeOfUnitOfWork()
+    private Type _GetTypeOfUnitOfWork(TransactionType transactionType)
     {
         var domainTypes = Assembly.Load(new AssemblyName("Domic.Domain")).GetTypes();
 
         return domainTypes.FirstOrDefault(
-            type => type.GetInterfaces().Any(i => i == typeof(ICoreCommandUnitOfWork))
+            type => transactionType == TransactionType.Command
+                ? type.GetInterfaces().Any(i => i == typeof(ICoreCommandUnitOfWork))
+                : type.GetInterfaces().Any(i => i == typeof(ICoreQueryUnitOfWork))
         );
     }
     
@@ -345,7 +348,7 @@ public class Mediator : IMediator
         
         if(commandHandlerMethod.GetCustomAttribute(typeof(WithTransactionAttribute)) is WithTransactionAttribute transactionAttr)
         {
-            var unitOfWork = _serviceProvider.GetRequiredService(_GetTypeOfUnitOfWork()) as ICoreCommandUnitOfWork;
+            var unitOfWork = _serviceProvider.GetRequiredService(_GetTypeOfUnitOfWork(transactionAttr.Type)) as IUnitOfWork;
             
             unitOfWork.Transaction(transactionAttr.IsolationLevel);
             
@@ -414,7 +417,7 @@ public class Mediator : IMediator
 
         if (commandHandlerMethod.GetCustomAttribute(typeof(WithTransactionAttribute)) is WithTransactionAttribute transactionAttr)
         {
-            var unitOfWork = _serviceProvider.GetRequiredService(_GetTypeOfUnitOfWork()) as ICoreCommandUnitOfWork;
+            var unitOfWork = _serviceProvider.GetRequiredService(_GetTypeOfUnitOfWork(transactionAttr.Type)) as IUnitOfWork;
             
             await unitOfWork.TransactionAsync(transactionAttr.IsolationLevel, cancellationToken);
             
