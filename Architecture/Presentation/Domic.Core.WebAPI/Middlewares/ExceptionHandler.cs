@@ -43,6 +43,12 @@ public class ExceptionHandler
 
     public async Task Invoke(HttpContext context)
     {
+        var layerExceptionResponseDto = new {
+            Code = _configuration.GetErrorStatusCode(),
+            Message = _configuration.GetTokenExpireMessage(),
+            Body = new { }
+        };
+        
         var serviceName = _configuration.GetValue<string>("NameOfService");
         
         try
@@ -76,9 +82,9 @@ public class ExceptionHandler
         catch (TokenNotValidException)
         {
             var Payload = new {
-                code = _configuration.GetUnAuthorizedStatusCode() ,
-                msg  = _configuration.GetTokenNotValidMessage()   ,
-                body = new { }
+                Code = _configuration.GetUnAuthorizedStatusCode(),
+                Message = _configuration.GetTokenNotValidMessage(),
+                Body = new { }
             };
 
             await context.JsonContent().StatusCode(200).SendPayloadAsync(Payload);
@@ -86,9 +92,9 @@ public class ExceptionHandler
         catch (TokenExpireException)
         {
             var Payload = new {
-                code = _configuration.GetUnAuthorizedStatusCode() ,
-                msg  = _configuration.GetTokenExpireMessage()     ,
-                body = new { }
+                Code = _configuration.GetUnAuthorizedStatusCode(),
+                Message = _configuration.GetTokenExpireMessage(),
+                Body = new { }
             };
 
             await context.JsonContent().StatusCode(200).SendPayloadAsync(Payload);
@@ -96,9 +102,9 @@ public class ExceptionHandler
         catch (ChallengeException)
         {
             var Payload = new {
-                code = _configuration.GetUnAuthorizedStatusCode() ,
-                msg  = _configuration.GetChallengeMessage()       ,
-                body = new { }
+                Code = _configuration.GetUnAuthorizedStatusCode(),
+                Message = _configuration.GetChallengeMessage(),
+                Body = new { }
             };
 
             await context.JsonContent().StatusCode(200).SendPayloadAsync(Payload);
@@ -106,9 +112,9 @@ public class ExceptionHandler
         catch (UnAuthorizedException)
         {
             var Payload = new {
-                code = _configuration.GetUnAuthorizedStatusCode(),
-                msg  = _configuration.GetUnAuthorizedMessage(),
-                body = new { }
+                Code = _configuration.GetUnAuthorizedStatusCode(),
+                Message = _configuration.GetUnAuthorizedMessage(),
+                Body = new { }
             };
 
             await context.JsonContent().StatusCode(200).SendPayloadAsync(Payload);
@@ -116,42 +122,24 @@ public class ExceptionHandler
         catch (AuthenticationFailedException)
         {
             var Payload = new {
-                code = _configuration.GetUnAuthorizedStatusCode() ,
-                msg  = _configuration.GetForbiddenMessage()       ,
-                body = new { }
+                Code = _configuration.GetUnAuthorizedStatusCode(),
+                Message = _configuration.GetForbiddenMessage(),
+                Body = new { }
             };
 
             await context.JsonContent().StatusCode(200).SendPayloadAsync(Payload);
         }
         catch (DomainException e)
         {
-            var Payload = new {
-                code = _configuration.GetErrorStatusCode(),
-                msg  = e.Message,
-                body = new { }
-            };
-
-            await context.JsonContent().StatusCode(200).SendPayloadAsync(Payload);
+            await context.JsonContent().StatusCode(200).SendPayloadAsync(_GetLayerExceptionResponseDto(e.Message));
         }
         catch (UseCaseException e)
         {
-            var Payload = new {
-                code = _configuration.GetErrorStatusCode(),
-                msg  = e.Message,
-                body = new { }
-            };
-
-            await context.JsonContent().StatusCode(200).SendPayloadAsync(Payload);
+            await context.JsonContent().StatusCode(200).SendPayloadAsync(_GetLayerExceptionResponseDto(e.Message));
         }
         catch (PresentationException e)
         {
-            var Payload = new {
-                code = _configuration.GetErrorStatusCode(),
-                msg  = e.Message,
-                body = new { }
-            };
-
-            await context.JsonContent().StatusCode(200).SendPayloadAsync(Payload);
+            await context.JsonContent().StatusCode(200).SendPayloadAsync(_GetLayerExceptionResponseDto(e.Message));
         }
         catch (RpcException e)
         {
@@ -205,9 +193,20 @@ public class ExceptionHandler
         #endregion
             
         return new {
-            code = _configuration.GetServerErrorStatusCode() ,
-            msg  = _configuration.GetServerErrorMessage()    ,
-            body = new { }
+            Code = _configuration.GetServerErrorStatusCode(),
+            Message = _configuration.GetServerErrorMessage(),
+            Body = new { }
         };
     }
+    
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="message"></param>
+    /// <returns></returns>
+    private object _GetLayerExceptionResponseDto(string message) => new {
+        Code = _configuration.GetErrorStatusCode(),
+        Message = message,
+        Body = new { }
+    };
 }
