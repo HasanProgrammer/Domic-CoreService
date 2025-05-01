@@ -3,6 +3,7 @@
 using System.Reflection;
 using System.Text;
 using Domic.Core.Common.ClassConsts;
+using Domic.Core.Common.ClassEnums;
 using Domic.Core.Common.ClassModels;
 using Domic.Core.Domain.Contracts.Interfaces;
 using Domic.Core.Infrastructure.Extensions;
@@ -11,6 +12,7 @@ using Domic.Core.UseCase.Contracts.Interfaces;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Polly;
 
 namespace Domic.Core.Infrastructure.Concretes;
 
@@ -30,18 +32,37 @@ public class Mediator : IMediator
         Type commandHandlerType = commandHandler.GetType();
         
         MethodInfo commandBeforeHandlerMethod = commandHandlerType.GetMethod("BeforeHandle")
-                                               ??
-                                               throw new Exception("BeforeHandle function not found !");
+                                                ??
+                                                throw new Exception("BeforeHandle function not found !");
         
-        MethodInfo commandHandlerMethod = commandHandlerType.GetMethod("Handle") 
+        MethodInfo commandHandlerMethod = commandHandlerType.GetMethod("Handle")
                                           ??
                                           throw new Exception("Handle function not found !");
         
-        MethodInfo commandAfterHandlerMethod = commandHandlerType.GetMethod("AfterHandle") 
+        MethodInfo commandAfterHandlerMethod = commandHandlerType.GetMethod("AfterHandle")
                                                ??
                                                throw new Exception("AfterHandle function not found !");
 
-        if (commandHandlerMethod.GetCustomAttribute(typeof(WithPessimisticConcurrencyAttribute)) is not null)
+        if(commandHandlerMethod.GetCustomAttribute(typeof(WithDistributedPessimisticLockAttribute)) is WithDistributedPessimisticLockAttribute distributedLockAttr)
+        {
+            _BeforeHandle(commandHandler, commandBeforeHandlerMethod, command, _serviceProvider);
+                    
+            _Validation(commandHandler, commandHandlerType, commandHandlerMethod, command);
+                
+            var internalDistributedCache = _serviceProvider.GetRequiredService<IInternalDistributedCache>();
+            
+            _TryAcquireDistributedLock(internalDistributedCache, distributedLockAttr.Key, distributedLockAttr.Key);
+                
+            var result = _InvokeHandleMethod(commandHandler, commandHandlerMethod,
+                commandAfterHandlerMethod, command
+            );
+
+            _TryReleaseDistributedLock(internalDistributedCache, distributedLockAttr.Key);
+
+            return result;
+        }
+
+        if (commandHandlerMethod.GetCustomAttribute(typeof(WithPessimisticLockAttribute)) is not null)
         {
             var lockField =
                 commandHandlerType.GetField("_lock", BindingFlags.NonPublic | BindingFlags.Static);
@@ -74,7 +95,7 @@ public class Mediator : IMediator
         
         _Validation(commandHandler, commandHandlerType, commandHandlerMethod, command);
         
-        return _InvokeHandleMethod(commandHandler, commandHandlerMethod, 
+        return _InvokeHandleMethod(commandHandler, commandHandlerMethod,
             commandAfterHandlerMethod, command
         );
     }
@@ -96,7 +117,7 @@ public class Mediator : IMediator
         object commandHandler   = _serviceProvider.GetRequiredService(handlerType);
         Type commandHandlerType = commandHandler.GetType();
         
-        MethodInfo commandBeforeHandlerMethod = commandHandlerType.GetMethod("BeforeHandleAsync") 
+        MethodInfo commandBeforeHandlerMethod = commandHandlerType.GetMethod("BeforeHandleAsync")
                                                ??
                                                throw new Exception("BeforeHandleAsync function not found !");
         
@@ -104,11 +125,34 @@ public class Mediator : IMediator
                                           ??
                                           throw new Exception("HandleAsync function not found !");
         
-        MethodInfo commandAfterHandlerMethod = commandHandlerType.GetMethod("AfterHandleAsync") 
+        MethodInfo commandAfterHandlerMethod = commandHandlerType.GetMethod("AfterHandleAsync")
                                                ??
                                                throw new Exception("AfterHandleAsync function not found !");
 
-        if (commandHandlerMethod.GetCustomAttribute(typeof(WithPessimisticConcurrencyAttribute)) is not null)
+        if (commandHandlerMethod.GetCustomAttribute(typeof(WithDistributedPessimisticLockAttribute)) is WithDistributedPessimisticLockAttribute distributedLockAttr)
+        {
+            await _BeforeHandleAsync(commandHandler, commandBeforeHandlerMethod, command,
+                _serviceProvider, cancellationToken
+            );
+        
+            await _ValidationAsync(commandHandler, commandHandlerType, commandHandlerMethod, command, cancellationToken);
+        
+            var internalDistributedCache = _serviceProvider.GetRequiredService<IInternalDistributedCache>();
+
+            await _TryAcquireDistributedLockAsync(internalDistributedCache, distributedLockAttr.Key,
+                distributedLockAttr.Key, cancellationToken
+            );
+            
+            var result =  await _InvokeHandleMethodAsync(commandHandler, commandHandlerMethod, commandAfterHandlerMethod,
+                command, cancellationToken
+            );
+
+            await _TryReleaseDistributedLockAsync(internalDistributedCache, distributedLockAttr.Key, cancellationToken);
+
+            return result;
+        }
+
+        if (commandHandlerMethod.GetCustomAttribute(typeof(WithPessimisticLockAttribute)) is not null)
         {
             var asyncLockField =
                 commandHandlerType.GetField("_asyncLock", BindingFlags.NonPublic | BindingFlags.Static);
@@ -137,11 +181,9 @@ public class Mediator : IMediator
                     await _ValidationAsync(commandHandler, commandHandlerType, commandHandlerMethod, command,
                         cancellationToken);
 
-                    var result = await _InvokeHandleMethodAsync(commandHandler, commandHandlerMethod, 
+                    return await _InvokeHandleMethodAsync(commandHandler, commandHandlerMethod, 
                         commandAfterHandlerMethod, command, cancellationToken
                     );
-
-                    return result;
                 }
                 catch (Exception e)
                 {
@@ -161,12 +203,9 @@ public class Mediator : IMediator
         
         await _ValidationAsync(commandHandler, commandHandlerType, commandHandlerMethod, command, cancellationToken);
         
-        var resultWithoutTransaction =
-            await _InvokeHandleMethodAsync(commandHandler, commandHandlerMethod, commandAfterHandlerMethod,
-                command, cancellationToken
-            );
-        
-        return resultWithoutTransaction;
+        return await _InvokeHandleMethodAsync(commandHandler, commandHandlerMethod, commandAfterHandlerMethod,
+            command, cancellationToken
+        );
     }
 
     public Task DispatchAsFireAndForgetAsync(IAsyncCommand command, CancellationToken cancellationToken)
@@ -744,4 +783,64 @@ public class Mediator : IMediator
             }
         }
     }
+    
+    private bool _TryAcquireDistributedLock(IInternalDistributedCache distributedCache, 
+        string lockKey, string lockValue
+    ) => Policy.Handle<Exception>()
+               .WaitAndRetry(int.MaxValue, _ => TimeSpan.FromSeconds(3))
+               .Execute(() => {
+
+                   bool acquired = false;
+
+                   while (acquired == false)
+                   {
+                       acquired = distributedCache.SetCacheValue(
+                           new KeyValuePair<string, string>(lockKey, lockValue),
+                           TimeSpan.FromMinutes(5),
+                           CacheSetType.NotExists
+                       );
+
+                       if( acquired == false )
+                           Thread.Sleep( TimeSpan.FromSeconds(3) );
+                   }
+
+                   return acquired;
+
+               });
+    
+    private Task<bool> _TryAcquireDistributedLockAsync(IInternalDistributedCache distributedCache, 
+        string lockKey, string lockValue, CancellationToken cancellationToken
+    ) => Policy.Handle<Exception>()
+               .WaitAndRetryAsync(int.MaxValue, _ => TimeSpan.FromSeconds(3))
+               .ExecuteAsync(async () => {
+                   
+                   bool acquired = false;
+
+                   while (!cancellationToken.IsCancellationRequested && acquired == false)
+                   {
+                       acquired = await distributedCache.SetCacheValueAsync(
+                           new KeyValuePair<string, string>(lockKey, lockValue),
+                           TimeSpan.FromMinutes(5),
+                           CacheSetType.NotExists,
+                           cancellationToken
+                       );
+
+                       if( acquired == false )
+                           await Task.Delay( TimeSpan.FromSeconds(3) );
+                   }
+
+                   return acquired;
+                   
+               });
+    
+    private bool _TryReleaseDistributedLock(IInternalDistributedCache distributedCache, string lockKey) 
+        => Policy.Handle<Exception>()
+                 .WaitAndRetry(int.MaxValue, _ => TimeSpan.FromSeconds(3))
+                 .Execute(() => distributedCache.DeleteKey(lockKey));
+    
+    private Task<bool> _TryReleaseDistributedLockAsync(IInternalDistributedCache distributedCache, string lockKey,
+        CancellationToken cancellationToken
+    ) => Policy.Handle<Exception>()
+               .WaitAndRetryAsync(int.MaxValue, _ => TimeSpan.FromSeconds(3))
+               .ExecuteAsync(() => distributedCache.DeleteKeyAsync(lockKey, cancellationToken));
 }

@@ -1,4 +1,4 @@
 ﻿namespace Domic.Core.UseCase.Attributes;
 
 [AttributeUsage(AttributeTargets.Method)]
-public class WithPessimisticConcurrencyAttribute : Attribute;
+public class WithPessimisticLockAttribute : Attribute;
