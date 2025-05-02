@@ -39,6 +39,7 @@ public static class WebApplicationBuilderExtension
     /// <param name="builder"></param>
     public static void RegisterHelpers(this WebApplicationBuilder builder)
     {
+        builder.Services.AddMemoryCache();
         builder.Services.AddSingleton(typeof(IMemoryCacheReflectionAssemblyType), typeof(MemoryCacheReflectionAssemblyType));
         
         builder.Services.AddSingleton(typeof(IDateTime), typeof(DomicDateTime));
@@ -51,6 +52,7 @@ public static class WebApplicationBuilderExtension
         
         builder.Services.AddKeyedScoped(typeof(IIdentityUser), "Http1", typeof(IdentityUser));
         builder.Services.AddKeyedScoped(typeof(IIdentityUser), "Http2", typeof(Http2IdentityUser));
+
         
         builder.Services.AddScoped(typeof(ILogger), typeof(Logger));
         
