@@ -53,6 +53,13 @@ public static class WebApplicationBuilderExtension
         foreach (var jobType in jobTypes)
             builder.Services.AddHostedService(jobType);
     }
+
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="builder"></param>
+    public static void RegisterAssemblyTypesInMemory(this WebApplicationBuilder builder)
+        => builder.Services.AddHostedService<MemoryCacheReflectionTypesJob>();
     
     /// <summary>
     /// 

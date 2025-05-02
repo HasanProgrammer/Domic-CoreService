@@ -14,6 +14,7 @@ using Domic.Core.Infrastructure.Extensions;
 using Domic.Core.UseCase.Attributes;
 using Domic.Core.UseCase.Contracts.Interfaces;
 using Domic.Core.UseCase.DTOs;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -27,9 +28,16 @@ namespace Domic.Core.Infrastructure.Concretes;
 
 public class ExternalMessageBroker : IExternalMessageBroker
 {
+    #region Statics
+
     private static object _lock = new();
     private static SemaphoreSlim _asyncLock = new(1, 1);
 
+    #endregion
+
+    private readonly Type[] _domainTypes;
+    private readonly Type[] _useCaseTypes;
+    
     private readonly IConnection _connection;
     private readonly IHostEnvironment _hostEnvironment;
     private readonly IServiceScopeFactory _serviceScopeFactory;
@@ -38,7 +46,8 @@ public class ExternalMessageBroker : IExternalMessageBroker
     private readonly IConfiguration _configuration;
 
     public ExternalMessageBroker(IConfiguration configuration, IHostEnvironment hostEnvironment, 
-        IServiceScopeFactory serviceScopeFactory, IDateTime dateTime, IGlobalUniqueIdGenerator globalUniqueIdGenerator
+        IServiceScopeFactory serviceScopeFactory, IDateTime dateTime, IGlobalUniqueIdGenerator globalUniqueIdGenerator,
+        ISerializer serializer, IMemoryCache memoryCache
     )
     {
         _hostEnvironment = hostEnvironment;
@@ -57,6 +66,9 @@ public class ExternalMessageBroker : IExternalMessageBroker
         factory.DispatchConsumersAsync = configuration.GetValue<bool>("IsExternalBrokerConsumingAsync");
         
         _connection = factory.CreateConnection();
+        
+        _domainTypes  = serializer.DeSerialize<Type[]>( memoryCache.Get("DomainType")  as string );
+        _useCaseTypes = serializer.DeSerialize<Type[]>( memoryCache.Get("UseCaseType") as string );
     }
 
     public string NameOfAction  { get; set; }
@@ -288,13 +300,11 @@ public class ExternalMessageBroker : IExternalMessageBroker
         //just one worker ( Task ) in current machine ( instance ) can process outbox events => lock
         lock (_lock)
         {
-            //ScopeServices Trigger
+            //scope services trigger
             using IServiceScope serviceScope = _serviceScopeFactory.CreateScope();
 
-            var commandUnitOfWork =
-                serviceScope.ServiceProvider.GetRequiredService(_GetTypeOfCommandUnitOfWork()) as ICoreCommandUnitOfWork;
-
-            var distributedCache = serviceScope.ServiceProvider.GetRequiredService<IInternalDistributedCache>();
+            var commandUnitOfWork      = serviceScope.ServiceProvider.GetRequiredService(_GetTypeOfCommandUnitOfWork()) as ICoreCommandUnitOfWork;
+            var distributedCache       = serviceScope.ServiceProvider.GetRequiredService<IInternalDistributedCache>();
             var eventCommandRepository = serviceScope.ServiceProvider.GetRequiredService<IEventCommandRepository>();
             
             var eventLocks = new List<string>();
@@ -371,13 +381,11 @@ public class ExternalMessageBroker : IExternalMessageBroker
         //just one worker ( Task ) in current machine ( instance ) can process outbox events => lock
         await _asyncLock.WaitAsync(cancellationToken);
         
-        //ScopeServices Trigger
+        //scope services trigger
         using IServiceScope serviceScope = _serviceScopeFactory.CreateAsyncScope();
 
-        var commandUnitOfWork =
-            serviceScope.ServiceProvider.GetRequiredService(_GetTypeOfCommandUnitOfWork()) as ICoreCommandUnitOfWork;
-
-        var distributedCache = serviceScope.ServiceProvider.GetRequiredService<IInternalDistributedCache>();
+        var commandUnitOfWork      = serviceScope.ServiceProvider.GetRequiredService(_GetTypeOfCommandUnitOfWork()) as ICoreCommandUnitOfWork;
+        var distributedCache       = serviceScope.ServiceProvider.GetRequiredService<IInternalDistributedCache>();
         var eventCommandRepository = serviceScope.ServiceProvider.GetRequiredService<IEventCommandRepository>();
         
         var eventLocks = new List<string>();
@@ -462,7 +470,7 @@ public class ExternalMessageBroker : IExternalMessageBroker
 
             consumer.Received += (sender, args) => {
                 
-                //ScopeServices trigger
+                //scope services trigger
                 using IServiceScope serviceScope = _serviceScopeFactory.CreateScope();
                 
                 var @event = Encoding.UTF8.GetString(args.Body.ToArray()).DeSerialize<Event>();
@@ -504,7 +512,7 @@ public class ExternalMessageBroker : IExternalMessageBroker
 
             consumer.Received += async (sender, args) => {
                 
-                //ScopeServices trigger
+                //scopeServices trigger
                 using IServiceScope serviceScope = _serviceScopeFactory.CreateScope();
                 
                 var @event = Encoding.UTF8.GetString(args.Body.ToArray()).DeSerialize<Event>();
@@ -973,10 +981,8 @@ public class ExternalMessageBroker : IExternalMessageBroker
     private void _EventPublishHandler(IModel channel, Event @event)
     {
         var nameOfEvent = @event.Type;
-
-        var domainTypes = Assembly.Load(new AssemblyName("Domic.Domain")).GetTypes();
         
-        var typeOfEvents = domainTypes.Where(
+        var typeOfEvents = _domainTypes.Where(
             type => type.BaseType?.GetInterfaces().Any(i => i == typeof(IDomainEvent)) ?? false
         );
 
@@ -1011,9 +1017,7 @@ public class ExternalMessageBroker : IExternalMessageBroker
 
         try
         {
-            var useCaseTypes = Assembly.Load(new AssemblyName("Domic.UseCase")).GetTypes();
-
-            var targetConsumerEventBusHandlerType = useCaseTypes.FirstOrDefault(
+            var targetConsumerEventBusHandlerType = _useCaseTypes.FirstOrDefault(
                 type => type.GetInterfaces().Any(
                     i => i.IsGenericType &&
                          i.GetGenericTypeDefinition() == typeof(IConsumerEventBusHandler<>) &&
@@ -1176,9 +1180,7 @@ public class ExternalMessageBroker : IExternalMessageBroker
 
         try
         {
-            var useCaseTypes = Assembly.Load(new AssemblyName("Domic.UseCase")).GetTypes();
-
-            var targetConsumerEventBusHandlerType = useCaseTypes.FirstOrDefault(
+            var targetConsumerEventBusHandlerType = _useCaseTypes.FirstOrDefault(
                 type => type.GetInterfaces().Any(
                     i => i.IsGenericType &&
                          i.GetGenericTypeDefinition() == typeof(IConsumerEventBusHandler<>) &&
@@ -1348,7 +1350,7 @@ public class ExternalMessageBroker : IExternalMessageBroker
         try
         {
             Policy.Handle<Exception>()
-                  .WaitAndRetry(5, _ => TimeSpan.FromSeconds(3), (exception, timeSpan, context) => {})
+                  .WaitAndRetry(5, _ => TimeSpan.FromSeconds(3))
                   .Execute(() => unitOfWork?.Rollback());
         }
         catch (Exception e)
@@ -1363,7 +1365,7 @@ public class ExternalMessageBroker : IExternalMessageBroker
         {
             if (unitOfWork is not null)
                 await Policy.Handle<Exception>()
-                            .WaitAndRetryAsync(5, _ => TimeSpan.FromSeconds(3), (exception, timeSpan, context) => {})
+                            .WaitAndRetryAsync(5, _ => TimeSpan.FromSeconds(3))
                             .ExecuteAsync(() => unitOfWork.RollbackAsync(cancellationToken));
         }
         catch (Exception e)
@@ -1378,7 +1380,7 @@ public class ExternalMessageBroker : IExternalMessageBroker
         try
         {
             Policy.Handle<Exception>()
-                  .WaitAndRetry(5, _ => TimeSpan.FromSeconds(3), (exception, timeSpan, context) => {})
+                  .WaitAndRetry(5, _ => TimeSpan.FromSeconds(3))
                   .Execute(() =>
                       channel.BasicNack(args.DeliveryTag, false, false) //or _channel.BasicReject(args.DeliveryTag, false)
                   );
@@ -1400,7 +1402,7 @@ public class ExternalMessageBroker : IExternalMessageBroker
         try
         {
             await Policy.Handle<Exception>()
-                        .WaitAndRetryAsync(5, _ => TimeSpan.FromSeconds(3), (exception, timeSpan, context) => {})
+                        .WaitAndRetryAsync(5, _ => TimeSpan.FromSeconds(3))
                         .ExecuteAsync(() =>
                             Task.Run(() => channel.BasicNack(args.DeliveryTag, false, false), cancellationToken)
                         );
@@ -1421,7 +1423,7 @@ public class ExternalMessageBroker : IExternalMessageBroker
         try
         {
             Policy.Handle<Exception>()
-                  .WaitAndRetry(5, _ => TimeSpan.FromSeconds(3), (exception, timeSpan, context) => {})
+                  .WaitAndRetry(5, _ => TimeSpan.FromSeconds(3))
                   .Execute(() =>
                       channel.BasicAck(args.DeliveryTag, false) //delete this message from queue
                   );
@@ -1443,7 +1445,7 @@ public class ExternalMessageBroker : IExternalMessageBroker
         try
         {
             await Policy.Handle<Exception>()
-                        .WaitAndRetryAsync(5, _ => TimeSpan.FromSeconds(3), (exception, timeSpan, context) => {})
+                        .WaitAndRetryAsync(5, _ => TimeSpan.FromSeconds(3))
                         .ExecuteAsync(() =>
                             Task.Run(() => channel.BasicAck(args.DeliveryTag, false), cancellationToken)
                         );
@@ -1468,7 +1470,7 @@ public class ExternalMessageBroker : IExternalMessageBroker
         try
         {
             Policy.Handle<Exception>()
-                  .WaitAndRetry(5, _ => TimeSpan.FromSeconds(3), (exception, timeSpan, context) => { })
+                  .WaitAndRetry(5, _ => TimeSpan.FromSeconds(3))
                   .Execute(() => {
                       
                       result = distributedCache.SetCacheValue(
@@ -1500,7 +1502,7 @@ public class ExternalMessageBroker : IExternalMessageBroker
         try
         {
             Policy.Handle<Exception>()
-                  .WaitAndRetry(5, _ => TimeSpan.FromSeconds(3), (exception, timeSpan, context) => {})
+                  .WaitAndRetry(5, _ => TimeSpan.FromSeconds(3))
                   .Execute(() =>
                       locks.ForEach(@lock => distributedCache.DeleteKey(@lock))
                   );
@@ -1528,7 +1530,7 @@ public class ExternalMessageBroker : IExternalMessageBroker
         try
         {
             await Policy.Handle<Exception>()
-                        .WaitAndRetryAsync(5, _ => TimeSpan.FromSeconds(3), (exception, timeSpan, context) => { })
+                        .WaitAndRetryAsync(5, _ => TimeSpan.FromSeconds(3))
                         .ExecuteAsync(async () => {
                             
                             result = await distributedCache.SetCacheValueAsync(
@@ -1565,7 +1567,7 @@ public class ExternalMessageBroker : IExternalMessageBroker
         try
         {
             await Policy.Handle<Exception>()
-                        .WaitAndRetryAsync(5, _ => TimeSpan.FromSeconds(3), (exception, timeSpan, context) => {})
+                        .WaitAndRetryAsync(5, _ => TimeSpan.FromSeconds(3))
                         .ExecuteAsync(async () => {
                             
                             foreach (var @lock in locks)
@@ -1604,25 +1606,19 @@ public class ExternalMessageBroker : IExternalMessageBroker
     
     private Type _GetTypeOfUnitOfWork(TransactionType transactionType)
     {
-        var domainTypes = Assembly.Load(new AssemblyName("Domic.Domain")).GetTypes();
-
         return transactionType switch {
             TransactionType.Query => 
-                domainTypes.FirstOrDefault(type => type.GetInterfaces().Any(i => i == typeof(ICoreQueryUnitOfWork))),
+                _domainTypes.FirstOrDefault(type => type.GetInterfaces().Any(i => i == typeof(ICoreQueryUnitOfWork))),
             TransactionType.Command => 
-                domainTypes.FirstOrDefault(type => type.GetInterfaces().Any(i => i == typeof(ICoreCommandUnitOfWork))),
+                _domainTypes.FirstOrDefault(type => type.GetInterfaces().Any(i => i == typeof(ICoreCommandUnitOfWork))),
             _ => throw new ArgumentNotFoundException("Must be defined transaction type!")
         };
     }
     
-    private Type _GetTypeOfCommandUnitOfWork()
-    {
-        var domainTypes = Assembly.Load(new AssemblyName("Domic.Domain")).GetTypes();
-
-        return domainTypes.FirstOrDefault(
+    private Type _GetTypeOfCommandUnitOfWork() 
+        => _domainTypes.FirstOrDefault(
             type => type.GetInterfaces().Any(i => i == typeof(ICoreCommandUnitOfWork))
         );
-    }
     
     private void _CleanCacheMessage(MethodInfo eventBusHandlerMethod, IServiceProvider serviceProvider)
     {

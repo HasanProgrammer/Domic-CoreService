@@ -13,6 +13,7 @@ using Domic.Core.Domain.Enumerations;
 using Domic.Core.Infrastructure.Extensions;
 using Domic.Core.UseCase.Attributes;
 using Domic.Core.UseCase.Contracts.Interfaces;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -26,11 +27,15 @@ namespace Domic.Core.Infrastructure.Concretes;
 
 public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTime dateTime, 
     IGlobalUniqueIdGenerator globalUniqueIdGenerator, IServiceScopeFactory serviceScopeFactory,
-    IConfiguration configuration
+    IConfiguration configuration, IMemoryCache memoryCache, ISerializer serializer
 ) : IExternalEventStreamBroker
 {
+    #region Statics
+
     private static object _lock = new();
     private static SemaphoreSlim _asyncLock = new(1, 1);
+
+    #endregion
     
     #region Consts
 
@@ -38,8 +43,10 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
 
     #endregion
     
-    public string NameOfAction { get; set; }
+    public string NameOfAction  { get; set; }
     public string NameOfService { get; set; }
+    private Type[] DomainTypes   { get; } = serializer.DeSerialize<Type[]>( memoryCache.Get("DomainType")  as string );
+    private Type[] UseCaseTypes  { get; } = serializer.DeSerialize<Type[]>( memoryCache.Get("UseCaseType") as string );
 
     #region MessageStructure
 
@@ -58,12 +65,10 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
             kafkaHeaders.Add(header.Key, Encoding.UTF8.GetBytes(header.Value));
         
         Policy.Handle<Exception>()
-              .WaitAndRetry(5, _ => TimeSpan.FromSeconds(3), (exception, timeSpan, context) => {})
+              .WaitAndRetry(5, _ => TimeSpan.FromSeconds(3))
               .Execute(() => {
                   
                   using var scope = serviceScopeFactory.CreateScope();
-                  
-                  var serializer = scope.ServiceProvider.GetRequiredService<ISerializer>();
                   
                   using var producer = new ProducerBuilder<string, string>(config).Build();
                   
@@ -93,12 +98,10 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
             kafkaHeaders.Add(header.Key, Encoding.UTF8.GetBytes(header.Value));
 
         return Policy.Handle<Exception>()
-                     .WaitAndRetryAsync(5, _ => TimeSpan.FromSeconds(3), (exception, timeSpan, context) => {})
+                     .WaitAndRetryAsync(5, _ => TimeSpan.FromSeconds(3))
                      .ExecuteAsync(async () => {
                          
                          using var scope = serviceScopeFactory.CreateScope();
-                  
-                         var serializer = scope.ServiceProvider.GetRequiredService<ISerializer>();
                          
                          using var producer = new ProducerBuilder<string, string>(config).Build();
 
@@ -115,8 +118,6 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
     
     public void SubscribeMessage(string topic, CancellationToken cancellationToken)
     {
-        var useCaseTypes = Assembly.Load(new AssemblyName("Domic.UseCase")).GetTypes();
-
         var config = new ConsumerConfig {
             BootstrapServers = Environment.GetEnvironmentVariable("E-Kafka-Host"),
             SaslUsername = Environment.GetEnvironmentVariable("E-Kafka-Username"),
@@ -134,11 +135,12 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
         {
             try
             {
+                //scope services trigger
                 using var scope = serviceScopeFactory.CreateScope();
                 
                 var consumeResult = consumer.Consume(cancellationToken);
                 
-                _ConsumeNextMessage(useCaseTypes, topic, consumer, consumeResult, scope.ServiceProvider);
+                _ConsumeNextMessage(topic, consumer, consumeResult, scope.ServiceProvider);
             }
             catch (Exception e)
             {
@@ -153,8 +155,6 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
     
     public void SubscribeRetriableMessage(string topic, CancellationToken cancellationToken)
     {
-        var useCaseTypes = Assembly.Load(new AssemblyName("Domic.UseCase")).GetTypes();
-
         var config = new ConsumerConfig {
             BootstrapServers = Environment.GetEnvironmentVariable("E-Kafka-Host"),
             SaslUsername = Environment.GetEnvironmentVariable("E-Kafka-Username"),
@@ -172,12 +172,12 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
         {
             try
             {
-                //ScopeServices Trigger
+                //scope services trigger
                 using IServiceScope serviceScope = serviceScopeFactory.CreateAsyncScope();
                 
                 var consumeResult = consumer.Consume(cancellationToken);
 
-                _ConsumeNextRetriableMessage(useCaseTypes, topic, consumer, consumeResult, serviceScope.ServiceProvider);
+                _ConsumeNextRetriableMessage(topic, consumer, consumeResult, serviceScope.ServiceProvider);
             }
             catch (Exception e)
             {
@@ -192,8 +192,6 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
 
     public void SubscribeMessageAsynchronously(string topic, CancellationToken cancellationToken)
     {
-        var useCaseTypes = Assembly.Load(new AssemblyName("Domic.UseCase")).GetTypes();
-
         var config = new ConsumerConfig {
             BootstrapServers = Environment.GetEnvironmentVariable("E-Kafka-Host"),
             SaslUsername = Environment.GetEnvironmentVariable("E-Kafka-Username"),
@@ -239,13 +237,13 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
 
             try
             {
-                //ScopeServices Trigger
+                //scope services trigger
                 using IServiceScope serviceScope = serviceScopeFactory.CreateAsyncScope();
                 
                 var consumeResult = consumer.Consume(cancellationToken);
 
                 var consumerTask =
-                    _ConsumeNextMessageAsync(useCaseTypes, topic, consumer, consumeResult, serviceScope.ServiceProvider,
+                    _ConsumeNextMessageAsync(topic, consumer, consumeResult, serviceScope.ServiceProvider,
                         cancellationToken
                     );
                 
@@ -265,8 +263,6 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
     
     public void SubscribeRetriableMessageAsynchronously(string topic, CancellationToken cancellationToken)
     {
-        var useCaseTypes = Assembly.Load(new AssemblyName("Domic.UseCase")).GetTypes();
-
         var config = new ConsumerConfig {
             BootstrapServers = Environment.GetEnvironmentVariable("E-Kafka-Host"),
             SaslUsername = Environment.GetEnvironmentVariable("E-Kafka-Username"),
@@ -313,13 +309,13 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
             
             try
             {
-                //ScopeServices Trigger
+                //scope services trigger
                 using IServiceScope serviceScope = serviceScopeFactory.CreateAsyncScope();
                 
                 var consumeResult = consumer.Consume(cancellationToken);
 
                 var consumerTask =
-                    _ConsumeNextRetriableMessageAsync(useCaseTypes, topic, consumer, consumeResult, 
+                    _ConsumeNextRetriableMessageAsync(topic, consumer, consumeResult, 
                         serviceScope.ServiceProvider, cancellationToken
                     );
                 
@@ -346,13 +342,11 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
         //just one worker ( Task ) in current machine ( instance ) can process outbox events => lock
         lock (_lock)
         {
-            //ScopeServices Trigger
+            //scope services trigger
             using IServiceScope serviceScope = serviceScopeFactory.CreateScope();
 
-            var commandUnitOfWork =
-                serviceScope.ServiceProvider.GetRequiredService(_GetTypeOfUnitOfWork(TransactionType.Command)) as ICoreCommandUnitOfWork;
-
-            var distributedCache = serviceScope.ServiceProvider.GetRequiredService<IInternalDistributedCache>();
+            var commandUnitOfWork      = serviceScope.ServiceProvider.GetRequiredService(_GetTypeOfUnitOfWork(TransactionType.Command)) as ICoreCommandUnitOfWork;
+            var distributedCache       = serviceScope.ServiceProvider.GetRequiredService<IInternalDistributedCache>();
             var eventCommandRepository = serviceScope.ServiceProvider.GetRequiredService<IEventCommandRepository>();
 
             var eventLocks = new List<string>();
@@ -428,13 +422,11 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
         //just one worker ( Task ) in current machine ( instance ) can process outbox events => lock
         await _asyncLock.WaitAsync(cancellationToken);
         
-        //ScopeServices Trigger
+        //scope services trigger
         using IServiceScope serviceScope = serviceScopeFactory.CreateAsyncScope();
 
-        var commandUnitOfWork =
-            serviceScope.ServiceProvider.GetRequiredService(_GetTypeOfUnitOfWork(TransactionType.Command)) as ICoreCommandUnitOfWork;
-
-        var distributedCache = serviceScope.ServiceProvider.GetRequiredService<IInternalDistributedCache>();
+        var commandUnitOfWork      = serviceScope.ServiceProvider.GetRequiredService(_GetTypeOfUnitOfWork(TransactionType.Command)) as ICoreCommandUnitOfWork;
+        var distributedCache       = serviceScope.ServiceProvider.GetRequiredService<IInternalDistributedCache>();
         var eventCommandRepository = serviceScope.ServiceProvider.GetRequiredService<IEventCommandRepository>();
         
         var eventLocks = new List<string>();
@@ -509,8 +501,6 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
 
     public void Subscribe(string topic, CancellationToken cancellationToken)
     {
-        var useCaseTypes = Assembly.Load(new AssemblyName("Domic.UseCase")).GetTypes();
-
         var config = new ConsumerConfig {
             BootstrapServers = Environment.GetEnvironmentVariable("E-Kafka-Host"),
             SaslUsername = Environment.GetEnvironmentVariable("E-Kafka-Username"),
@@ -533,7 +523,7 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
                 
                 var consumeResult = consumer.Consume(cancellationToken);
                 
-                _ConsumeNextEvent(useCaseTypes, topic, consumer, consumeResult, serviceScope.ServiceProvider);
+                _ConsumeNextEvent(topic, consumer, consumeResult, serviceScope.ServiceProvider);
             }
             catch (Exception e)
             {
@@ -548,8 +538,6 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
 
     public void SubscribeRetriable(string topic, CancellationToken cancellationToken)
     {
-        var useCaseTypes = Assembly.Load(new AssemblyName("Domic.UseCase")).GetTypes();
-
         var config = new ConsumerConfig {
             BootstrapServers = Environment.GetEnvironmentVariable("E-Kafka-Host"),
             SaslUsername = Environment.GetEnvironmentVariable("E-Kafka-Username"),
@@ -572,7 +560,7 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
                 
                 var consumeResult = consumer.Consume(cancellationToken);
                 
-                _ConsumeNextRetriableEvent(useCaseTypes, topic, consumer, consumeResult, serviceScope.ServiceProvider);
+                _ConsumeNextRetriableEvent(topic, consumer, consumeResult, serviceScope.ServiceProvider);
             }
             catch (Exception e)
             {
@@ -587,8 +575,6 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
 
     public void SubscribeAsynchronously(string topic, CancellationToken cancellationToken)
     {
-        var useCaseTypes = Assembly.Load(new AssemblyName("Domic.UseCase")).GetTypes();
-
         var config = new ConsumerConfig {
             BootstrapServers = Environment.GetEnvironmentVariable("E-Kafka-Host"),
             SaslUsername = Environment.GetEnvironmentVariable("E-Kafka-Username"),
@@ -640,7 +626,7 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
                 var consumeResult = consumer.Consume(cancellationToken);
 
                 var consumerTask =
-                    _ConsumeNextEventAsync(useCaseTypes, topic, consumer, consumeResult, serviceScope.ServiceProvider,
+                    _ConsumeNextEventAsync(topic, consumer, consumeResult, serviceScope.ServiceProvider,
                         cancellationToken
                     );
                 
@@ -660,8 +646,6 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
 
     public void SubscribeRetriableAsynchronously(string topic, CancellationToken cancellationToken)
     {
-         var useCaseTypes = Assembly.Load(new AssemblyName("Domic.UseCase")).GetTypes();
-
         var config = new ConsumerConfig {
             BootstrapServers = Environment.GetEnvironmentVariable("E-Kafka-Host"),
             SaslUsername = Environment.GetEnvironmentVariable("E-Kafka-Username"),
@@ -708,13 +692,13 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
             
             try
             {
-                //ScopeServices Trigger
+                //sope services trigger
                 using IServiceScope serviceScope = serviceScopeFactory.CreateAsyncScope();
                 
                 var consumeResult = consumer.Consume(cancellationToken);
 
                 var consumerTask =
-                    _ConsumeNextRetriableEventAsync(useCaseTypes, topic, consumer, consumeResult, 
+                    _ConsumeNextRetriableEventAsync(topic, consumer, consumeResult, 
                         serviceScope.ServiceProvider, cancellationToken
                     );
                 
@@ -736,7 +720,7 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
     
     /*---------------------------------------------------------------*/
 
-    private void _ConsumeNextMessage(Type[] useCaseTypes, string topic, IConsumer<string, string> consumer,
+    private void _ConsumeNextMessage(string topic, IConsumer<string, string> consumer,
         ConsumeResult<string, string> consumeResult, IServiceProvider serviceProvider
     )
     {
@@ -746,7 +730,7 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
         
         try
         {
-            var targetConsumerMessageStreamHandlerType = useCaseTypes.FirstOrDefault(
+            var targetConsumerMessageStreamHandlerType = UseCaseTypes.FirstOrDefault(
                 type => type.GetInterfaces().Any(
                     i => i.IsGenericType &&
                          i.GetGenericTypeDefinition() == typeof(IConsumerMessageStreamHandler<>) &&
@@ -852,7 +836,7 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
         }
     }
     
-    private void _ConsumeNextRetriableMessage(Type[] useCaseTypes, string topic, IConsumer<string, string> consumer,
+    private void _ConsumeNextRetriableMessage(string topic, IConsumer<string, string> consumer,
         ConsumeResult<string, string> consumeResult, IServiceProvider serviceProvider
     )
     {
@@ -868,7 +852,7 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
         
         try
         {
-            var targetConsumerMessageStreamHandlerType = useCaseTypes.FirstOrDefault(
+            var targetConsumerMessageStreamHandlerType = UseCaseTypes.FirstOrDefault(
                 type => type.GetInterfaces().Any(
                     i => i.IsGenericType &&
                          i.GetGenericTypeDefinition() == typeof(IConsumerMessageStreamHandler<>) &&
@@ -988,7 +972,7 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
         }
     }
     
-    private async Task _ConsumeNextMessageAsync(Type[] useCaseTypes, string topic, IConsumer<string, string> consumer,
+    private async Task _ConsumeNextMessageAsync(string topic, IConsumer<string, string> consumer,
         ConsumeResult<string, string> consumeResult, IServiceProvider serviceProvider, CancellationToken cancellationToken
     )
     {
@@ -998,7 +982,7 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
         
         try
         {
-            var targetConsumerMessageStreamHandlerType = useCaseTypes.FirstOrDefault(
+            var targetConsumerMessageStreamHandlerType = UseCaseTypes.FirstOrDefault(
                 type => type.GetInterfaces().Any(
                     i => i.IsGenericType &&
                          i.GetGenericTypeDefinition() == typeof(IConsumerMessageStreamHandler<>) &&
@@ -1111,7 +1095,7 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
         }
     }
     
-    private async Task _ConsumeNextRetriableMessageAsync(Type[] useCaseTypes, string topic, IConsumer<string, string> consumer,
+    private async Task _ConsumeNextRetriableMessageAsync(string topic, IConsumer<string, string> consumer,
         ConsumeResult<string, string> consumeResult, IServiceProvider serviceProvider, CancellationToken cancellationToken
     )
     {
@@ -1127,7 +1111,7 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
         
         try
         {
-             var targetConsumerMessageStreamHandlerType = useCaseTypes.FirstOrDefault(
+             var targetConsumerMessageStreamHandlerType = UseCaseTypes.FirstOrDefault(
                  type => type.GetInterfaces().Any(
                      i => i.IsGenericType &&
                           i.GetGenericTypeDefinition() == typeof(IConsumerMessageStreamHandler<>) &&
@@ -1260,10 +1244,8 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
     private void _EventPublishHandler(Event @event)
     {
         var nameOfEvent = @event.Type;
-
-        var domainTypes = Assembly.Load(new AssemblyName("Domic.Domain")).GetTypes();
         
-        var typeOfEvents = domainTypes.Where(
+        var typeOfEvents = DomainTypes.Where(
             type => type.BaseType?.GetInterfaces().Any(i => i == typeof(IDomainEvent)) ?? false
         );
 
@@ -1290,10 +1272,8 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
     private async Task _EventPublishHandlerAsync(Event @event, CancellationToken cancellationToken)
     {
         var nameOfEvent = @event.Type;
-
-        var domainTypes = Assembly.Load(new AssemblyName("Domic.Domain")).GetTypes();
         
-        var typeOfEvents = domainTypes.Where(
+        var typeOfEvents = DomainTypes.Where(
             type => type.BaseType?.GetInterfaces().Any(i => i == typeof(IDomainEvent)) ?? false
         );
 
@@ -1318,7 +1298,7 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
         );
     }
     
-    private void _ConsumeNextEvent(Type[] useCaseTypes, string topic, IConsumer<string, string> consumer,
+    private void _ConsumeNextEvent(string topic, IConsumer<string, string> consumer,
         ConsumeResult<string, string> consumeResult, IServiceProvider serviceProvider
     )
     {
@@ -1328,7 +1308,7 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
         
         try
         {
-            var targetConsumerEventStreamHandlerType = useCaseTypes.FirstOrDefault(
+            var targetConsumerEventStreamHandlerType = UseCaseTypes.FirstOrDefault(
                 type => type.GetInterfaces().Any(
                     i => i.IsGenericType &&
                          i.GetGenericTypeDefinition() == typeof(IConsumerEventStreamHandler<>) &&
@@ -1472,7 +1452,7 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
         }
     }
     
-    private void _ConsumeNextRetriableEvent(Type[] useCaseTypes, string topic, IConsumer<string, string> consumer,
+    private void _ConsumeNextRetriableEvent(string topic, IConsumer<string, string> consumer,
         ConsumeResult<string, string> consumeResult, IServiceProvider serviceProvider
     )
     {
@@ -1488,7 +1468,7 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
         
         try
         {
-            var targetConsumerEventStreamHandlerType = useCaseTypes.FirstOrDefault(
+            var targetConsumerEventStreamHandlerType = UseCaseTypes.FirstOrDefault(
                 type => type.GetInterfaces().Any(
                     i => i.IsGenericType &&
                          i.GetGenericTypeDefinition() == typeof(IConsumerEventStreamHandler<>) &&
@@ -1645,7 +1625,7 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
         }
     }
     
-    private async Task _ConsumeNextEventAsync(Type[] useCaseTypes, string topic, IConsumer<string, string> consumer,
+    private async Task _ConsumeNextEventAsync(string topic, IConsumer<string, string> consumer,
         ConsumeResult<string, string> consumeResult, IServiceProvider serviceProvider, CancellationToken cancellationToken
     )
     {
@@ -1655,7 +1635,7 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
         
         try
         {
-            var targetConsumerEventStreamHandlerType = useCaseTypes.FirstOrDefault(
+            var targetConsumerEventStreamHandlerType = UseCaseTypes.FirstOrDefault(
                 type => type.GetInterfaces().Any(
                     i => i.IsGenericType &&
                          i.GetGenericTypeDefinition() == typeof(IConsumerEventStreamHandler<>) &&
@@ -1807,7 +1787,7 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
         }
     }
     
-    private async Task _ConsumeNextRetriableEventAsync(Type[] useCaseTypes, string topic, IConsumer<string, string> consumer,
+    private async Task _ConsumeNextRetriableEventAsync(string topic, IConsumer<string, string> consumer,
         ConsumeResult<string, string> consumeResult, IServiceProvider serviceProvider, CancellationToken cancellationToken
     )
     {
@@ -1823,7 +1803,7 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
         
         try
         {
-            var targetConsumerEventStreamHandlerType = useCaseTypes.FirstOrDefault(
+            var targetConsumerEventStreamHandlerType = UseCaseTypes.FirstOrDefault(
                 type => type.GetInterfaces().Any(
                     i => i.IsGenericType &&
                          i.GetGenericTypeDefinition() == typeof(IConsumerEventStreamHandler<>) &&
@@ -2293,13 +2273,11 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
     
     private Type _GetTypeOfUnitOfWork(TransactionType transactionType)
     {
-        var domainTypes = Assembly.Load(new AssemblyName("Domic.Domain")).GetTypes();
-
         return transactionType switch {
             TransactionType.Query => 
-                domainTypes.FirstOrDefault(type => type.GetInterfaces().Any(i => i == typeof(ICoreQueryUnitOfWork))),
+                DomainTypes.FirstOrDefault(type => type.GetInterfaces().Any(i => i == typeof(ICoreQueryUnitOfWork))),
             TransactionType.Command => 
-                domainTypes.FirstOrDefault(type => type.GetInterfaces().Any(i => i == typeof(ICoreCommandUnitOfWork))),
+                DomainTypes.FirstOrDefault(type => type.GetInterfaces().Any(i => i == typeof(ICoreCommandUnitOfWork))),
             _ => throw new ArgumentNotFoundException("Must be defined transaction type!")
         };
     }

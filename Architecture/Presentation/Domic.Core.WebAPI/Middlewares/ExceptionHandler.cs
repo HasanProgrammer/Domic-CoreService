@@ -43,12 +43,6 @@ public class ExceptionHandler
 
     public async Task Invoke(HttpContext context)
     {
-        var layerExceptionResponseDto = new {
-            Code = _configuration.GetErrorStatusCode(),
-            Message = _configuration.GetTokenExpireMessage(),
-            Body = new { }
-        };
-        
         var serviceName = _configuration.GetValue<string>("NameOfService");
         
         try
