@@ -3,23 +3,14 @@ using Domic.Core.Common.ClassConsts;
 using Domic.Core.Domain.Contracts.Interfaces;
 using Domic.Core.UseCase.Contracts.Interfaces;
 using Microsoft.Extensions.Caching.Memory;
-using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 
-namespace Domic.Core.Infrastructure.Extensions;
+namespace Domic.Core.WebAPI.Jobs;
 
-public static class IServiceProviderExtension
+public class MemoryCacheReflectionAssemblyTypeJob(IMemoryCache memoryCache, ISerializer serializer) : IHostedService
 {
-    /// <summary>
-    /// 
-    /// </summary>
-    /// <param name="serviceProvider"></param>
-    public static void RegisterAssemblyTypesInMemory(this IServiceProvider serviceProvider)
+    public Task StartAsync(CancellationToken cancellationToken)
     {
-        using var scope = serviceProvider.CreateScope();
-
-        var serializer  = scope.ServiceProvider.GetRequiredService<ISerializer>();
-        var memoryCache = scope.ServiceProvider.GetRequiredService<IMemoryCache>();
-        
         //all core layer types
 
         var domainTypes  = Assembly.Load(new AssemblyName("Domic.Domain")).GetTypes();
@@ -31,6 +22,12 @@ public static class IServiceProviderExtension
             type => type.BaseType?.GetInterfaces().Any(i => i == typeof(IDomainEvent)) ?? false
         ).ToList();
         
+        //commandBus types in useCase layer
+        
+        var commandBusTypes = useCaseTypes.Where(
+            type => type.BaseType?.GetInterfaces().Any(i => i == typeof(IAsyncCommand)) ?? false
+        ).ToList();
+        
         //unit of work types in domain layer
 
         var commandUnitOfWorkType =
@@ -39,7 +36,7 @@ public static class IServiceProviderExtension
         var queryUnitOfWorkType =
             domainTypes.FirstOrDefault(type => type.GetInterfaces().Any(i => i == typeof(ICoreQueryUnitOfWork)));
         
-        //event & message handler types in useCase layer
+        //event & message and commandBus handler types in useCase layer
         
         var eventHandlerTypes = useCaseTypes.Where(
             type => type.GetInterfaces().Any(
@@ -56,6 +53,18 @@ public static class IServiceProviderExtension
         var messageStreamHandlerTypes = useCaseTypes.Where(
             type => type.GetInterfaces().Any(
                 i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IConsumerMessageStreamHandler<>)
+            )
+        ).ToList();
+        
+        var commandBusHandlerTypes = useCaseTypes.Where(
+            type => type.GetInterfaces().Any(
+                i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IConsumerCommandBusHandler<,>)
+            )
+        ).ToList();
+        
+        var commandBusValidatorHandlerTypes = useCaseTypes.Where(
+            type => type.GetInterfaces().Any(
+                i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IAsyncValidator<>)
             )
         ).ToList();
 
@@ -79,6 +88,19 @@ public static class IServiceProviderExtension
         if(messageStreamHandlerTypes.Any())
             memoryCache.Set(Reflection.UseCaseMessageStreamHandler, serializer.Serialize(messageStreamHandlerTypes));
         
+        if(commandBusTypes.Any())
+            memoryCache.Set(Reflection.UseCaseCommandBus, serializer.Serialize(commandBusTypes));
+        
+        if(commandBusHandlerTypes.Any())
+            memoryCache.Set(Reflection.UseCaseCommandBusHandler, serializer.Serialize(commandBusHandlerTypes));
+        
+        if(commandBusValidatorHandlerTypes.Any())
+            memoryCache.Set(Reflection.UseCaseCommandBusValidatorHandler, serializer.Serialize(commandBusValidatorHandlerTypes));
+        
         #endregion
+        
+        return Task.CompletedTask;
     }
+
+    public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 }

@@ -9,5 +9,5 @@ public class Serializer : ISerializer
         => JsonConvert.SerializeObject(@object, Formatting.Indented);
     
     public T DeSerialize<T>(string source) 
-        => JsonConvert.DeserializeObject<T>(source, new JsonSerializerSettings { Formatting = Formatting.Indented});
+        => JsonConvert.DeserializeObject<T>(source, new JsonSerializerSettings { Formatting = Formatting.Indented });
 }

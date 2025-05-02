@@ -26,26 +26,29 @@ namespace Domic.Core.Infrastructure.Concretes;
 
 public class InternalMessageBroker : IInternalMessageBroker
 {
-    private readonly IConnection              _connection;
-    private readonly IConfiguration           _configuration;
-    private readonly IHostEnvironment         _hostEnvironment;
-    private readonly IExternalMessageBroker   _externalMessageBroker;
-    private readonly IServiceScopeFactory     _serviceScopeFactory;
-    private readonly IGlobalUniqueIdGenerator _globalUniqueIdGenerator;
-    private readonly IDateTime                _dateTime;
+    private readonly IConnection                        _connection;
+    private readonly IConfiguration                     _configuration;
+    private readonly IHostEnvironment                   _hostEnvironment;
+    private readonly IExternalMessageBroker             _externalMessageBroker;
+    private readonly IServiceScopeFactory               _serviceScopeFactory;
+    private readonly IGlobalUniqueIdGenerator           _globalUniqueIdGenerator;
+    private readonly IDateTime                          _dateTime;
+    private readonly IMemoryCacheReflectionAssemblyType _memoryCacheReflectionAssemblyType;
 
     public InternalMessageBroker(IDateTime dateTime, IServiceScopeFactory serviceScopeFactory,
         IHostEnvironment hostEnvironment, IConfiguration configuration, IExternalMessageBroker externalMessageBroker, 
-        IGlobalUniqueIdGenerator globalUniqueIdGenerator
+        IGlobalUniqueIdGenerator globalUniqueIdGenerator, 
+        IMemoryCacheReflectionAssemblyType memoryCacheReflectionAssemblyType
     )
     {
-        _dateTime                = dateTime;
-        _serviceScopeFactory     = serviceScopeFactory;
-        _hostEnvironment         = hostEnvironment;
-        _configuration           = configuration;
-        _externalMessageBroker   = externalMessageBroker;
-        _globalUniqueIdGenerator = globalUniqueIdGenerator;
-        
+        _dateTime                          = dateTime;
+        _serviceScopeFactory               = serviceScopeFactory;
+        _hostEnvironment                   = hostEnvironment;
+        _configuration                     = configuration;
+        _externalMessageBroker             = externalMessageBroker;
+        _globalUniqueIdGenerator           = globalUniqueIdGenerator;
+        _memoryCacheReflectionAssemblyType = memoryCacheReflectionAssemblyType;
+
         var factory = new ConnectionFactory {
             HostName = configuration.GetInternalRabbitHostName() ,
             UserName = configuration.GetInternalRabbitUsername() ,
@@ -55,7 +58,7 @@ public class InternalMessageBroker : IInternalMessageBroker
         
         factory.DispatchConsumersAsync = configuration.GetValue<bool>("IsInternalBrokerConsumingAsync");
         
-        _connection = factory.CreateConnection();
+        _connection = factory.CreateConnection();    
     }
 
     public string NameOfAction  { get; set; }
@@ -63,12 +66,11 @@ public class InternalMessageBroker : IInternalMessageBroker
 
     public void Publish<TCommand>(TCommand command) where TCommand : IAsyncCommand
     {
-        var useCaseTypes   = Assembly.Load(new AssemblyName("Domic.UseCase")).GetTypes();
-        var commandBusType = useCaseTypes.FirstOrDefault(type => type == command.GetType());
+        var commandBusType = _memoryCacheReflectionAssemblyType.GetCommandBusTypes().FirstOrDefault(type => type == command.GetType());
         var messageBroker  = commandBusType.GetCustomAttribute(typeof(QueueableAttribute)) as QueueableAttribute;
 
         Policy.Handle<Exception>()
-              .WaitAndRetry(5, _ => TimeSpan.FromSeconds(3), (exception, timeSpan, context) => {})
+              .WaitAndRetry(5, _ => TimeSpan.FromSeconds(3))
               .Execute(() => {
                   
                   using var channel = _connection.CreateModel();
@@ -87,8 +89,7 @@ public class InternalMessageBroker : IInternalMessageBroker
     public Task PublishAsync<TCommand>(TCommand command, CancellationToken cancellationToken) 
         where TCommand : IAsyncCommand
     {
-        var useCaseTypes   = Assembly.Load(new AssemblyName("Domic.UseCase")).GetTypes();
-        var commandBusType = useCaseTypes.FirstOrDefault(type => type == command.GetType());
+        var commandBusType = _memoryCacheReflectionAssemblyType.GetCommandBusTypes().FirstOrDefault(type => type == command.GetType());
         var messageBroker  = commandBusType.GetCustomAttribute(typeof(QueueableAttribute)) as QueueableAttribute;
 
         return Policy.Handle<Exception>()
@@ -170,7 +171,7 @@ public class InternalMessageBroker : IInternalMessageBroker
 
             consumer.Received += async (sender, args) => {
                 
-                //ScopeServices trigger
+                //scope services trigger
                 using IServiceScope serviceScope = _serviceScopeFactory.CreateScope();
                 
                 var message = Encoding.UTF8.GetString(args.Body.ToArray());
@@ -227,17 +228,14 @@ public class InternalMessageBroker : IInternalMessageBroker
                     args.BasicProperties.Headers?.FirstOrDefault(header => header.Key.Equals("Namespace")).Value as byte[]
                 );
             
-            var useCaseTypes = Assembly.Load(new AssemblyName("Domic.UseCase")).GetTypes();
-            
-            var targetConsumerCommandBusHandlerType = useCaseTypes.FirstOrDefault(
-                type => type.GetInterfaces().Any(
-                    i => i.IsGenericType &&
-                         i.GetGenericTypeDefinition() == typeof(IConsumerCommandBusHandler<,>) &&
-                         i.GetGenericArguments().Any(arg => 
-                             arg.Name.Equals(nameOfCommand) && arg.Namespace.Equals(nameSpaceOfCommand)
-                         )
-                )
-            );
+            var targetConsumerCommandBusHandlerType = 
+                _memoryCacheReflectionAssemblyType.GetCommandBusHandlerTypes().FirstOrDefault(
+                    type => type.GetInterfaces().Any(
+                        i => i.GetGenericArguments().Any(arg => 
+                            arg.Name.Equals(nameOfCommand) && arg.Namespace.Equals(nameSpaceOfCommand)
+                        )
+                    )
+                );
 
             if (targetConsumerCommandBusHandlerType is not null)
             {
@@ -287,15 +285,14 @@ public class InternalMessageBroker : IInternalMessageBroker
 
                     if (commandBusHandlerTypeMethod.GetCustomAttribute(typeof(WithValidationAttribute)) is not null)
                     {
-                        var validatorType = useCaseTypes.FirstOrDefault(
-                            type => type.GetInterfaces().Any(
-                                i => i.IsGenericType &&
-                                     i.GetGenericTypeDefinition() == typeof(IAsyncValidator<>) &&
-                                     i.GetGenericArguments().Any(arg => 
-                                         arg.Name.Equals(nameOfCommand) && arg.Namespace.Equals(nameSpaceOfCommand)
-                                     )
-                            )
-                        );
+                        var validatorType =
+                            _memoryCacheReflectionAssemblyType.GetCommandBusValidatorHandlerTypes().FirstOrDefault(
+                                type => type.GetInterfaces().Any(
+                                    i => i.GetGenericArguments().Any(arg => 
+                                        arg.Name.Equals(nameOfCommand) && arg.Namespace.Equals(nameSpaceOfCommand)
+                                    )
+                                )
+                            );
                         
                         var validatorArgType = validatorType?.GetInterfaces()
                                                              .Select(i => i.GetGenericArguments()[0])
@@ -348,7 +345,7 @@ public class InternalMessageBroker : IInternalMessageBroker
 
                     if (consumerEventCommand is null)
                     {
-                        unitOfWork = serviceProvider.GetRequiredService(_GetTypeOfCommandUnitOfWork()) as IUnitOfWork;
+                        unitOfWork = serviceProvider.GetRequiredService(_memoryCacheReflectionAssemblyType.GetCommandUnitOfWorkType()) as IUnitOfWork;
                         
                         unitOfWork.Transaction(transactionConfig.IsolationLevel);
                         
@@ -451,15 +448,14 @@ public class InternalMessageBroker : IInternalMessageBroker
             
             var useCaseTypes = Assembly.Load(new AssemblyName("Domic.UseCase")).GetTypes();
             
-            var targetConsumerCommandBusHandlerType = useCaseTypes.FirstOrDefault(
-                type => type.GetInterfaces().Any(
-                    i => i.IsGenericType &&
-                         i.GetGenericTypeDefinition() == typeof(IConsumerCommandBusHandler<,>) &&
-                         i.GetGenericArguments().Any(arg => 
-                             arg.Name.Equals(nameOfCommand) && arg.Namespace.Equals(nameSpaceOfCommand)
-                         )
-                )
-            );
+            var targetConsumerCommandBusHandlerType = 
+                _memoryCacheReflectionAssemblyType.GetCommandBusHandlerTypes().FirstOrDefault(
+                    type => type.GetInterfaces().Any(
+                        i => i.GetGenericArguments().Any(arg => 
+                            arg.Name.Equals(nameOfCommand) && arg.Namespace.Equals(nameSpaceOfCommand)
+                        )
+                    )
+                );
 
             if (targetConsumerCommandBusHandlerType is not null)
             {
@@ -576,7 +572,7 @@ public class InternalMessageBroker : IInternalMessageBroker
 
                     if (consumerEventCommand is null)
                     {
-                        unitOfWork = serviceProvider.GetRequiredService(_GetTypeOfCommandUnitOfWork()) as IUnitOfWork;
+                        unitOfWork = serviceProvider.GetRequiredService(_memoryCacheReflectionAssemblyType.GetCommandUnitOfWorkType()) as IUnitOfWork;
                         
                         await unitOfWork.TransactionAsync(transactionConfig.IsolationLevel, cancellationToken);
                         
@@ -812,27 +808,12 @@ public class InternalMessageBroker : IInternalMessageBroker
     }
     
     /*---------------------------------------------------------------*/
-    
-    private Type _GetTypeOfCommandUnitOfWork()
-    {
-        var domainTypes = Assembly.Load(new AssemblyName("Domic.Domain")).GetTypes();
-
-        return domainTypes.FirstOrDefault(
-            type => type.GetInterfaces().Any(i => i == typeof(ICoreCommandUnitOfWork))
-        );
-    }
 
     private void _RegisterAllAsyncCommandQueuesInMessageBroker()
     {
-        var useCaseTypes = Assembly.Load(new AssemblyName("Domic.UseCase")).GetTypes();
-        
-        var commandBusTypes = useCaseTypes.Where(useCaseType => 
-            useCaseType.BaseType?.GetInterfaces().Any(i => i == typeof(IAsyncCommand)) ?? false
-        );
-
         using var channel = _connection.CreateModel();
 
-        foreach (var commandBusType in commandBusTypes)
+        foreach (var commandBusType in _memoryCacheReflectionAssemblyType.GetCommandBusTypes())
         {
             var messageBroker = commandBusType.GetCustomAttribute(typeof(QueueableAttribute)) as QueueableAttribute;
 

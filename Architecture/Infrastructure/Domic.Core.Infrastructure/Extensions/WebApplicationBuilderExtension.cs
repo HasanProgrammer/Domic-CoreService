@@ -39,6 +39,8 @@ public static class WebApplicationBuilderExtension
     /// <param name="builder"></param>
     public static void RegisterHelpers(this WebApplicationBuilder builder)
     {
+        builder.Services.AddSingleton(typeof(IMemoryCacheReflectionAssemblyType), typeof(MemoryCacheReflectionAssemblyType));
+        
         builder.Services.AddSingleton(typeof(IDateTime), typeof(DomicDateTime));
         
         builder.Services.AddSingleton(typeof(ISerializer), typeof(Serializer));

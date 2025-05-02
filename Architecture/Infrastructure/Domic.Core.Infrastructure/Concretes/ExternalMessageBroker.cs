@@ -2,7 +2,6 @@
 
 using System.Reflection;
 using System.Text;
-using Domic.Core.Common.ClassConsts;
 using Domic.Core.Common.ClassEnums;
 using Domic.Core.Domain.Attributes;
 using Domic.Core.Domain.Contracts.Interfaces;
@@ -14,7 +13,6 @@ using Domic.Core.Infrastructure.Extensions;
 using Domic.Core.UseCase.Attributes;
 using Domic.Core.UseCase.Contracts.Interfaces;
 using Domic.Core.UseCase.DTOs;
-using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -34,32 +32,25 @@ public class ExternalMessageBroker : IExternalMessageBroker
     private static SemaphoreSlim _asyncLock = new(1, 1);
 
     #endregion
-
-    #region ReflectionInfo
-
-    private readonly Type       _domainCommandUnitOfWorkType;
-    private readonly Type       _domainQueryUnitOfWorkType;
-    private readonly List<Type> _domainEventTypes;
-    private readonly List<Type> _useCaseEventHandlerTypes;
-
-    #endregion
     
     private readonly IConnection _connection;
     private readonly IHostEnvironment _hostEnvironment;
     private readonly IServiceScopeFactory _serviceScopeFactory;
     private readonly IDateTime _dateTime;
     private readonly IGlobalUniqueIdGenerator _globalUniqueIdGenerator;
+    private readonly IMemoryCacheReflectionAssemblyType _memoryCacheReflectionAssemblyType;
     private readonly IConfiguration _configuration;
 
     public ExternalMessageBroker(IConfiguration configuration, IHostEnvironment hostEnvironment, 
         IServiceScopeFactory serviceScopeFactory, IDateTime dateTime, IGlobalUniqueIdGenerator globalUniqueIdGenerator,
-        ISerializer serializer, IMemoryCache memoryCache
+        IMemoryCacheReflectionAssemblyType memoryCacheReflectionAssemblyType
     )
     {
         _hostEnvironment = hostEnvironment;
         _serviceScopeFactory = serviceScopeFactory;
         _dateTime = dateTime;
         _globalUniqueIdGenerator = globalUniqueIdGenerator;
+        _memoryCacheReflectionAssemblyType = memoryCacheReflectionAssemblyType;
         _configuration = configuration;
 
         var factory = new ConnectionFactory {
@@ -72,11 +63,6 @@ public class ExternalMessageBroker : IExternalMessageBroker
         factory.DispatchConsumersAsync = configuration.GetValue<bool>("IsExternalBrokerConsumingAsync");
         
         _connection = factory.CreateConnection();
-        
-        _domainCommandUnitOfWorkType = serializer.DeSerialize<Type>( memoryCache.Get(Reflection.DomainCommandUnitOfWork) as string );
-        _domainQueryUnitOfWorkType   = serializer.DeSerialize<Type>( memoryCache.Get(Reflection.DomainQueryUnitOfWork) as string );
-        _domainEventTypes            = serializer.DeSerialize<List<Type>>( memoryCache.Get(Reflection.DomainEvent) as string );
-        _useCaseEventHandlerTypes    = serializer.DeSerialize<List<Type>>( memoryCache.Get(Reflection.UseCaseEventHandler) as string );
     }
 
     public string NameOfAction  { get; set; }
@@ -311,7 +297,7 @@ public class ExternalMessageBroker : IExternalMessageBroker
             //scope services trigger
             using IServiceScope serviceScope = _serviceScopeFactory.CreateScope();
 
-            var commandUnitOfWork      = serviceScope.ServiceProvider.GetRequiredService(_domainCommandUnitOfWorkType) as ICoreCommandUnitOfWork;
+            var commandUnitOfWork      = serviceScope.ServiceProvider.GetRequiredService(_memoryCacheReflectionAssemblyType.GetCommandUnitOfWorkType()) as ICoreCommandUnitOfWork;
             var distributedCache       = serviceScope.ServiceProvider.GetRequiredService<IInternalDistributedCache>();
             var eventCommandRepository = serviceScope.ServiceProvider.GetRequiredService<IEventCommandRepository>();
             
@@ -392,7 +378,7 @@ public class ExternalMessageBroker : IExternalMessageBroker
         //scope services trigger
         using IServiceScope serviceScope = _serviceScopeFactory.CreateAsyncScope();
 
-        var commandUnitOfWork      = serviceScope.ServiceProvider.GetRequiredService(_domainCommandUnitOfWorkType) as ICoreCommandUnitOfWork;
+        var commandUnitOfWork      = serviceScope.ServiceProvider.GetRequiredService(_memoryCacheReflectionAssemblyType.GetCommandUnitOfWorkType()) as ICoreCommandUnitOfWork;
         var distributedCache       = serviceScope.ServiceProvider.GetRequiredService<IInternalDistributedCache>();
         var eventCommandRepository = serviceScope.ServiceProvider.GetRequiredService<IEventCommandRepository>();
         
@@ -990,7 +976,7 @@ public class ExternalMessageBroker : IExternalMessageBroker
     {
         var nameOfEvent = @event.Type;
 
-        var typeOfEvent = _domainEventTypes.FirstOrDefault(type => type.Name.Equals(nameOfEvent));
+        var typeOfEvent = _memoryCacheReflectionAssemblyType.GetEventTypes().FirstOrDefault(type => type.Name.Equals(nameOfEvent));
 
         var messageBroker = typeOfEvent.GetCustomAttribute(typeof(EventConfigAttribute)) as EventConfigAttribute;
 
@@ -1021,9 +1007,10 @@ public class ExternalMessageBroker : IExternalMessageBroker
 
         try
         {
-            var targetConsumerEventBusHandlerType = _useCaseEventHandlerTypes.FirstOrDefault(
-                type => type.GetInterfaces().Any(i => i.GetGenericArguments().Any(arg => arg.Name.Equals(@event.Type)))
-            );
+            var targetConsumerEventBusHandlerType = 
+                _memoryCacheReflectionAssemblyType.GetEventHandlerTypes().FirstOrDefault(
+                    type => type.GetInterfaces().Any(i => i.GetGenericArguments().Any(arg => arg.Name.Equals(@event.Type)))
+                );
 
             if (targetConsumerEventBusHandlerType is not null)
             {
@@ -1180,9 +1167,10 @@ public class ExternalMessageBroker : IExternalMessageBroker
 
         try
         {
-            var targetConsumerEventBusHandlerType = _useCaseEventHandlerTypes.FirstOrDefault(
-                type => type.GetInterfaces().Any(i => i.GetGenericArguments().Any(arg => arg.Name.Equals(@event.Type)))
-            );
+            var targetConsumerEventBusHandlerType = 
+                _memoryCacheReflectionAssemblyType.GetEventHandlerTypes().FirstOrDefault(
+                    type => type.GetInterfaces().Any(i => i.GetGenericArguments().Any(arg => arg.Name.Equals(@event.Type)))
+                );
 
             if (targetConsumerEventBusHandlerType is not null)
             {
@@ -1603,8 +1591,8 @@ public class ExternalMessageBroker : IExternalMessageBroker
     private Type _GetTypeOfUnitOfWork(TransactionType transactionType)
     {
         return transactionType switch {
-            TransactionType.Query   => _domainQueryUnitOfWorkType,
-            TransactionType.Command => _domainCommandUnitOfWorkType,
+            TransactionType.Query   => _memoryCacheReflectionAssemblyType.GetQueryUnitOfWorkType(),
+            TransactionType.Command => _memoryCacheReflectionAssemblyType.GetCommandUnitOfWorkType(),
             _ => throw new ArgumentNotFoundException("Must be defined transaction type!")
         };
     }
