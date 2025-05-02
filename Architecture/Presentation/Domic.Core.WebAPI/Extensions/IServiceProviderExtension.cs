@@ -4,15 +4,18 @@ using Domic.Core.Domain.Contracts.Interfaces;
 using Domic.Core.UseCase.Contracts.Interfaces;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
 
-namespace Domic.Core.WebAPI.Jobs;
+namespace Domic.Core.Infrastructure.Extensions;
 
-public class MemoryCacheReflectionTypesJob(IServiceScopeFactory serviceScopeFactory) : IHostedService
+public static class IServiceProviderExtension
 {
-    public Task StartAsync(CancellationToken cancellationToken)
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="serviceProvider"></param>
+    public static void RegisterAssemblyTypesInMemory(this IServiceProvider serviceProvider)
     {
-        using var scope = serviceScopeFactory.CreateScope();
+        using var scope = serviceProvider.CreateScope();
 
         var serializer  = scope.ServiceProvider.GetRequiredService<ISerializer>();
         var memoryCache = scope.ServiceProvider.GetRequiredService<IMemoryCache>();
@@ -77,9 +80,5 @@ public class MemoryCacheReflectionTypesJob(IServiceScopeFactory serviceScopeFact
             memoryCache.Set(Reflection.UseCaseMessageStreamHandler, serializer.Serialize(messageStreamHandlerTypes));
         
         #endregion
-
-        return Task.CompletedTask;
     }
-
-    public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 }
