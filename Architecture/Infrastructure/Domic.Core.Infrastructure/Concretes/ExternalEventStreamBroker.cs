@@ -36,6 +36,16 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
     private static SemaphoreSlim _asyncLock = new(1, 1);
 
     #endregion
+
+    #region ReflectionInfo
+
+    private readonly Type _domainCommandUnitOfWorkType      = serializer.DeSerialize<Type>( memoryCache.Get(Reflection.DomainCommandUnitOfWork) as string );
+    private readonly Type _domainQueryUnitOfWorkType        = serializer.DeSerialize<Type>( memoryCache.Get(Reflection.DomainQueryUnitOfWork) as string );
+    private readonly List<Type> _domainEventTypes           = serializer.DeSerialize<List<Type>>( memoryCache.Get(Reflection.DomainEvent) as string );
+    private readonly List<Type> _useCaseEventHandlerTypes   = serializer.DeSerialize<List<Type>>( memoryCache.Get(Reflection.UseCaseEventStreamHandler) as string );
+    private readonly List<Type> _useCaseMessageHandlerTypes = serializer.DeSerialize<List<Type>>( memoryCache.Get(Reflection.UseCaseMessageStreamHandler) as string );
+
+    #endregion
     
     #region Consts
 
@@ -45,8 +55,6 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
     
     public string NameOfAction  { get; set; }
     public string NameOfService { get; set; }
-    private Type[] DomainTypes   { get; } = serializer.DeSerialize<Type[]>( memoryCache.Get("DomainType")  as string );
-    private Type[] UseCaseTypes  { get; } = serializer.DeSerialize<Type[]>( memoryCache.Get("UseCaseType") as string );
 
     #region MessageStructure
 
@@ -345,7 +353,7 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
             //scope services trigger
             using IServiceScope serviceScope = serviceScopeFactory.CreateScope();
 
-            var commandUnitOfWork      = serviceScope.ServiceProvider.GetRequiredService(_GetTypeOfUnitOfWork(TransactionType.Command)) as ICoreCommandUnitOfWork;
+            var commandUnitOfWork      = serviceScope.ServiceProvider.GetRequiredService(_domainCommandUnitOfWorkType) as ICoreCommandUnitOfWork;
             var distributedCache       = serviceScope.ServiceProvider.GetRequiredService<IInternalDistributedCache>();
             var eventCommandRepository = serviceScope.ServiceProvider.GetRequiredService<IEventCommandRepository>();
 
@@ -425,7 +433,7 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
         //scope services trigger
         using IServiceScope serviceScope = serviceScopeFactory.CreateAsyncScope();
 
-        var commandUnitOfWork      = serviceScope.ServiceProvider.GetRequiredService(_GetTypeOfUnitOfWork(TransactionType.Command)) as ICoreCommandUnitOfWork;
+        var commandUnitOfWork      = serviceScope.ServiceProvider.GetRequiredService(_domainCommandUnitOfWorkType) as ICoreCommandUnitOfWork;
         var distributedCache       = serviceScope.ServiceProvider.GetRequiredService<IInternalDistributedCache>();
         var eventCommandRepository = serviceScope.ServiceProvider.GetRequiredService<IEventCommandRepository>();
         
@@ -730,11 +738,9 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
         
         try
         {
-            var targetConsumerMessageStreamHandlerType = UseCaseTypes.FirstOrDefault(
+            var targetConsumerMessageStreamHandlerType = _useCaseMessageHandlerTypes.FirstOrDefault(
                 type => type.GetInterfaces().Any(
-                    i => i.IsGenericType &&
-                         i.GetGenericTypeDefinition() == typeof(IConsumerMessageStreamHandler<>) &&
-                         i.GetGenericArguments().Any(arg => arg.Name.Equals(consumeResult.Message.Key))
+                    i => i.GetGenericArguments().Any(arg => arg.Name.Equals(consumeResult.Message.Key))
                 )
             );
 
@@ -852,11 +858,9 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
         
         try
         {
-            var targetConsumerMessageStreamHandlerType = UseCaseTypes.FirstOrDefault(
+            var targetConsumerMessageStreamHandlerType = _useCaseMessageHandlerTypes.FirstOrDefault(
                 type => type.GetInterfaces().Any(
-                    i => i.IsGenericType &&
-                         i.GetGenericTypeDefinition() == typeof(IConsumerMessageStreamHandler<>) &&
-                         i.GetGenericArguments().Any(arg => arg.Name.Equals(consumeResult.Message.Key))
+                    i => i.GetGenericArguments().Any(arg => arg.Name.Equals(consumeResult.Message.Key))
                 )
             );
 
@@ -982,11 +986,9 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
         
         try
         {
-            var targetConsumerMessageStreamHandlerType = UseCaseTypes.FirstOrDefault(
+            var targetConsumerMessageStreamHandlerType = _useCaseMessageHandlerTypes.FirstOrDefault(
                 type => type.GetInterfaces().Any(
-                    i => i.IsGenericType &&
-                         i.GetGenericTypeDefinition() == typeof(IConsumerMessageStreamHandler<>) &&
-                         i.GetGenericArguments().Any(arg => arg.Name.Equals(consumeResult.Message.Key))
+                    i => i.GetGenericArguments().Any(arg => arg.Name.Equals(consumeResult.Message.Key))
                 )
             );
 
@@ -1111,11 +1113,9 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
         
         try
         {
-             var targetConsumerMessageStreamHandlerType = UseCaseTypes.FirstOrDefault(
+             var targetConsumerMessageStreamHandlerType = _useCaseMessageHandlerTypes.FirstOrDefault(
                  type => type.GetInterfaces().Any(
-                     i => i.IsGenericType &&
-                          i.GetGenericTypeDefinition() == typeof(IConsumerMessageStreamHandler<>) &&
-                          i.GetGenericArguments().Any(arg => arg.Name.Equals(consumeResult.Message.Key))
+                     i => i.GetGenericArguments().Any(arg => arg.Name.Equals(consumeResult.Message.Key))
                  )
              );
 
@@ -1244,12 +1244,8 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
     private void _EventPublishHandler(Event @event)
     {
         var nameOfEvent = @event.Type;
-        
-        var typeOfEvents = DomainTypes.Where(
-            type => type.BaseType?.GetInterfaces().Any(i => i == typeof(IDomainEvent)) ?? false
-        );
 
-        var typeOfEvent = typeOfEvents.FirstOrDefault(type => type.Name.Equals(nameOfEvent));
+        var typeOfEvent = _domainEventTypes.FirstOrDefault(type => type.Name.Equals(nameOfEvent));
 
         var broker = typeOfEvent.GetCustomAttribute(typeof(EventConfigAttribute)) as EventConfigAttribute;
         
@@ -1272,12 +1268,8 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
     private async Task _EventPublishHandlerAsync(Event @event, CancellationToken cancellationToken)
     {
         var nameOfEvent = @event.Type;
-        
-        var typeOfEvents = DomainTypes.Where(
-            type => type.BaseType?.GetInterfaces().Any(i => i == typeof(IDomainEvent)) ?? false
-        );
 
-        var typeOfEvent = typeOfEvents.FirstOrDefault(type => type.Name.Equals(nameOfEvent));
+        var typeOfEvent = _domainEventTypes.FirstOrDefault(type => type.Name.Equals(nameOfEvent));
 
         var broker = typeOfEvent.GetCustomAttribute(typeof(EventConfigAttribute)) as EventConfigAttribute;
         
@@ -1308,11 +1300,9 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
         
         try
         {
-            var targetConsumerEventStreamHandlerType = UseCaseTypes.FirstOrDefault(
+            var targetConsumerEventStreamHandlerType = _useCaseEventHandlerTypes.FirstOrDefault(
                 type => type.GetInterfaces().Any(
-                    i => i.IsGenericType &&
-                         i.GetGenericTypeDefinition() == typeof(IConsumerEventStreamHandler<>) &&
-                         i.GetGenericArguments().Any(arg => arg.Name.Equals(consumeResult.Message.Key))
+                    i => i.GetGenericArguments().Any(arg => arg.Name.Equals(consumeResult.Message.Key))
                 )
             );
 
@@ -1468,11 +1458,9 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
         
         try
         {
-            var targetConsumerEventStreamHandlerType = UseCaseTypes.FirstOrDefault(
+            var targetConsumerEventStreamHandlerType = _useCaseEventHandlerTypes.FirstOrDefault(
                 type => type.GetInterfaces().Any(
-                    i => i.IsGenericType &&
-                         i.GetGenericTypeDefinition() == typeof(IConsumerEventStreamHandler<>) &&
-                         i.GetGenericArguments().Any(arg => arg.Name.Equals(consumeResult.Message.Key))
+                    i => i.GetGenericArguments().Any(arg => arg.Name.Equals(consumeResult.Message.Key))
                 )
             );
 
@@ -1635,11 +1623,9 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
         
         try
         {
-            var targetConsumerEventStreamHandlerType = UseCaseTypes.FirstOrDefault(
+            var targetConsumerEventStreamHandlerType = _useCaseEventHandlerTypes.FirstOrDefault(
                 type => type.GetInterfaces().Any(
-                    i => i.IsGenericType &&
-                         i.GetGenericTypeDefinition() == typeof(IConsumerEventStreamHandler<>) &&
-                         i.GetGenericArguments().Any(arg => arg.Name.Equals(consumeResult.Message.Key))
+                    i => i.GetGenericArguments().Any(arg => arg.Name.Equals(consumeResult.Message.Key))
                 )
             );
 
@@ -1803,11 +1789,9 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
         
         try
         {
-            var targetConsumerEventStreamHandlerType = UseCaseTypes.FirstOrDefault(
+            var targetConsumerEventStreamHandlerType = _useCaseEventHandlerTypes.FirstOrDefault(
                 type => type.GetInterfaces().Any(
-                    i => i.IsGenericType &&
-                         i.GetGenericTypeDefinition() == typeof(IConsumerEventStreamHandler<>) &&
-                         i.GetGenericArguments().Any(arg => arg.Name.Equals(consumeResult.Message.Key))
+                    i => i.GetGenericArguments().Any(arg => arg.Name.Equals(consumeResult.Message.Key))
                 )
             );
 
@@ -2274,10 +2258,8 @@ public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTi
     private Type _GetTypeOfUnitOfWork(TransactionType transactionType)
     {
         return transactionType switch {
-            TransactionType.Query => 
-                DomainTypes.FirstOrDefault(type => type.GetInterfaces().Any(i => i == typeof(ICoreQueryUnitOfWork))),
-            TransactionType.Command => 
-                DomainTypes.FirstOrDefault(type => type.GetInterfaces().Any(i => i == typeof(ICoreCommandUnitOfWork))),
+            TransactionType.Query   => _domainQueryUnitOfWorkType,
+            TransactionType.Command => _domainCommandUnitOfWorkType,
             _ => throw new ArgumentNotFoundException("Must be defined transaction type!")
         };
     }

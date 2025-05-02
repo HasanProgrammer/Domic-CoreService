@@ -1,5 +1,5 @@
 ﻿using System.Data;
-using Domic.Core.Common.ClassConsts;
+using Domic.Core.Common.ClassEnums;
 
 namespace Domic.Core.UseCase.Attributes;
 

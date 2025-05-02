@@ -1,4 +1,4 @@
-﻿namespace Domic.Core.Common.ClassConsts;
+﻿namespace Domic.Core.Common.ClassEnums;
 
 public enum TransactionType : byte
 {

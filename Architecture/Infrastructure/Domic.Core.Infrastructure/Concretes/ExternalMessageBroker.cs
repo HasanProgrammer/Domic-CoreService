@@ -35,8 +35,14 @@ public class ExternalMessageBroker : IExternalMessageBroker
 
     #endregion
 
-    private readonly Type[] _domainTypes;
-    private readonly Type[] _useCaseTypes;
+    #region ReflectionInfo
+
+    private readonly Type       _domainCommandUnitOfWorkType;
+    private readonly Type       _domainQueryUnitOfWorkType;
+    private readonly List<Type> _domainEventTypes;
+    private readonly List<Type> _useCaseEventHandlerTypes;
+
+    #endregion
     
     private readonly IConnection _connection;
     private readonly IHostEnvironment _hostEnvironment;
@@ -67,8 +73,10 @@ public class ExternalMessageBroker : IExternalMessageBroker
         
         _connection = factory.CreateConnection();
         
-        _domainTypes  = serializer.DeSerialize<Type[]>( memoryCache.Get("DomainType")  as string );
-        _useCaseTypes = serializer.DeSerialize<Type[]>( memoryCache.Get("UseCaseType") as string );
+        _domainCommandUnitOfWorkType = serializer.DeSerialize<Type>( memoryCache.Get(Reflection.DomainCommandUnitOfWork) as string );
+        _domainQueryUnitOfWorkType   = serializer.DeSerialize<Type>( memoryCache.Get(Reflection.DomainQueryUnitOfWork) as string );
+        _domainEventTypes            = serializer.DeSerialize<List<Type>>( memoryCache.Get(Reflection.DomainEvent) as string );
+        _useCaseEventHandlerTypes    = serializer.DeSerialize<List<Type>>( memoryCache.Get(Reflection.UseCaseEventHandler) as string );
     }
 
     public string NameOfAction  { get; set; }
@@ -303,7 +311,7 @@ public class ExternalMessageBroker : IExternalMessageBroker
             //scope services trigger
             using IServiceScope serviceScope = _serviceScopeFactory.CreateScope();
 
-            var commandUnitOfWork      = serviceScope.ServiceProvider.GetRequiredService(_GetTypeOfCommandUnitOfWork()) as ICoreCommandUnitOfWork;
+            var commandUnitOfWork      = serviceScope.ServiceProvider.GetRequiredService(_domainCommandUnitOfWorkType) as ICoreCommandUnitOfWork;
             var distributedCache       = serviceScope.ServiceProvider.GetRequiredService<IInternalDistributedCache>();
             var eventCommandRepository = serviceScope.ServiceProvider.GetRequiredService<IEventCommandRepository>();
             
@@ -384,7 +392,7 @@ public class ExternalMessageBroker : IExternalMessageBroker
         //scope services trigger
         using IServiceScope serviceScope = _serviceScopeFactory.CreateAsyncScope();
 
-        var commandUnitOfWork      = serviceScope.ServiceProvider.GetRequiredService(_GetTypeOfCommandUnitOfWork()) as ICoreCommandUnitOfWork;
+        var commandUnitOfWork      = serviceScope.ServiceProvider.GetRequiredService(_domainCommandUnitOfWorkType) as ICoreCommandUnitOfWork;
         var distributedCache       = serviceScope.ServiceProvider.GetRequiredService<IInternalDistributedCache>();
         var eventCommandRepository = serviceScope.ServiceProvider.GetRequiredService<IEventCommandRepository>();
         
@@ -981,12 +989,8 @@ public class ExternalMessageBroker : IExternalMessageBroker
     private void _EventPublishHandler(IModel channel, Event @event)
     {
         var nameOfEvent = @event.Type;
-        
-        var typeOfEvents = _domainTypes.Where(
-            type => type.BaseType?.GetInterfaces().Any(i => i == typeof(IDomainEvent)) ?? false
-        );
 
-        var typeOfEvent = typeOfEvents.FirstOrDefault(type => type.Name.Equals(nameOfEvent));
+        var typeOfEvent = _domainEventTypes.FirstOrDefault(type => type.Name.Equals(nameOfEvent));
 
         var messageBroker = typeOfEvent.GetCustomAttribute(typeof(EventConfigAttribute)) as EventConfigAttribute;
 
@@ -1017,12 +1021,8 @@ public class ExternalMessageBroker : IExternalMessageBroker
 
         try
         {
-            var targetConsumerEventBusHandlerType = _useCaseTypes.FirstOrDefault(
-                type => type.GetInterfaces().Any(
-                    i => i.IsGenericType &&
-                         i.GetGenericTypeDefinition() == typeof(IConsumerEventBusHandler<>) &&
-                         i.GetGenericArguments().Any(arg => arg.Name.Equals(@event.Type))
-                )
+            var targetConsumerEventBusHandlerType = _useCaseEventHandlerTypes.FirstOrDefault(
+                type => type.GetInterfaces().Any(i => i.GetGenericArguments().Any(arg => arg.Name.Equals(@event.Type)))
             );
 
             if (targetConsumerEventBusHandlerType is not null)
@@ -1180,12 +1180,8 @@ public class ExternalMessageBroker : IExternalMessageBroker
 
         try
         {
-            var targetConsumerEventBusHandlerType = _useCaseTypes.FirstOrDefault(
-                type => type.GetInterfaces().Any(
-                    i => i.IsGenericType &&
-                         i.GetGenericTypeDefinition() == typeof(IConsumerEventBusHandler<>) &&
-                         i.GetGenericArguments().Any(arg => arg.Name.Equals(@event.Type))
-                )
+            var targetConsumerEventBusHandlerType = _useCaseEventHandlerTypes.FirstOrDefault(
+                type => type.GetInterfaces().Any(i => i.GetGenericArguments().Any(arg => arg.Name.Equals(@event.Type)))
             );
 
             if (targetConsumerEventBusHandlerType is not null)
@@ -1607,18 +1603,11 @@ public class ExternalMessageBroker : IExternalMessageBroker
     private Type _GetTypeOfUnitOfWork(TransactionType transactionType)
     {
         return transactionType switch {
-            TransactionType.Query => 
-                _domainTypes.FirstOrDefault(type => type.GetInterfaces().Any(i => i == typeof(ICoreQueryUnitOfWork))),
-            TransactionType.Command => 
-                _domainTypes.FirstOrDefault(type => type.GetInterfaces().Any(i => i == typeof(ICoreCommandUnitOfWork))),
+            TransactionType.Query   => _domainQueryUnitOfWorkType,
+            TransactionType.Command => _domainCommandUnitOfWorkType,
             _ => throw new ArgumentNotFoundException("Must be defined transaction type!")
         };
     }
-    
-    private Type _GetTypeOfCommandUnitOfWork() 
-        => _domainTypes.FirstOrDefault(
-            type => type.GetInterfaces().Any(i => i == typeof(ICoreCommandUnitOfWork))
-        );
     
     private void _CleanCacheMessage(MethodInfo eventBusHandlerMethod, IServiceProvider serviceProvider)
     {
