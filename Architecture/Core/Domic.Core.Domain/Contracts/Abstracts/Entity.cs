@@ -40,4 +40,16 @@ public abstract partial class Entity<TIdentity>
     /// 
     /// </summary>
     public void ClearEvents() => _events.Clear();
+
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="event"></param>
+    public void Apply(IDomainEvent @event){}
+
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="events"></param>
+    public void ApplyAll(IEnumerable<IDomainEvent> events){}
 }

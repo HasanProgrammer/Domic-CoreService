@@ -5,7 +5,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>disable</Nullable>
     <PackageId>Domic.Core.Package</PackageId>
-    <PackageVersion>5.0.1</PackageVersion>
+    <PackageVersion>5.0.2</PackageVersion>
     <Authors>Karami.Domic</Authors>
   </PropertyGroup>
 
@@ -16,6 +16,7 @@
     <PackageReference Include="Microsoft.Extensions.Configuration.Ini" Version="8.0.0" />
     
     <PackageReference Include="EntityFrameworkProfiler.Appender" Version="6.0.6040" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="8.0.0" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="6.0.0" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer.Design" Version="1.1.6" />
     <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="6.0.0" />

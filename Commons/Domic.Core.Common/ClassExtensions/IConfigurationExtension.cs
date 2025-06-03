@@ -74,6 +74,9 @@ public static partial class IConfigurationExtension
 //Database
 public static partial class IConfigurationExtension
 {
+    public static string GetEventStoreConnectionString(this IConfiguration configuration)
+        => Environment.GetEnvironmentVariable("EventStoreConnectionString");
+    
     /// <summary>
     /// 
     /// </summary>

@@ -10,6 +10,7 @@ using Hangfire.SqlServer;
 using Domic.Core.Common.ClassConsts;
 using Domic.Core.Common.ClassExceptions;
 using Domic.Core.Common.ClassExtensions;
+using Domic.Core.Persistence.Contexts;
 using Domic.Core.Persistence.Interceptors;
 using Domic.Core.Service.Grpc;
 using Domic.Core.UseCase.Contracts.Interfaces;
@@ -159,6 +160,19 @@ public static class WebApplicationBuilderExtension
             new MongoClient(
                 builder.Configuration.GetMongoConnectionString()
             )
+        );
+    }
+    
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="builder"></param>
+    public static void RegisterEventSourcing(this WebApplicationBuilder builder)
+    {
+        builder.Services.AddScoped<IEventStoreRepository, EventStoreRepository>();
+        
+        builder.Services.AddDbContext<EventStoreContext>((provider, config) => 
+            config.UseNpgsql(builder.Configuration.GetEventStoreConnectionString())
         );
     }
     
