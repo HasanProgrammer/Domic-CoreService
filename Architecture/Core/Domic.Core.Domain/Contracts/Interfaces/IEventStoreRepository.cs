@@ -1,9 +1,43 @@
 ﻿using Domic.Core.Domain.Contracts.Abstracts;
+using Domic.Core.Domain.Entities;
 
 namespace Domic.Core.Domain.Contracts.Interfaces;
 
 public interface IEventStoreRepository
 {
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <returns></returns>
+    /// <exception cref="NotImplementedException"></exception>
+    public List<Event> FindAll() => throw new NotImplementedException();
+
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="cancellationToken"></param>
+    /// <returns></returns>
+    /// <exception cref="NotImplementedException"></exception>
+    public Task<List<Event>> FindAllAsync(CancellationToken cancellationToken)
+        => throw new NotImplementedException();
+
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="event"></param>
+    /// <exception cref="NotImplementedException"></exception>
+    public void Change(Event @event) => throw new NotImplementedException();
+    
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="event"></param>
+    /// <param name="cancellationToken"></param>
+    /// <returns></returns>
+    /// <exception cref="NotImplementedException"></exception>
+    public Task ChangeAsync(Event @event, CancellationToken cancellationToken) 
+        => throw new NotImplementedException();
+    
     /// <summary>
     /// 
     /// </summary>

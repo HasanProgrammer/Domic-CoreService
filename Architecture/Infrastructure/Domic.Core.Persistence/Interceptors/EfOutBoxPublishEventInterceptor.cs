@@ -45,7 +45,6 @@ public class EfOutBoxPublishEventInterceptor<TIdentity> : SaveChangesInterceptor
                         Service = _configuration.GetValue<string>("NameOfService"),
                         Table   = $"{domainEntity.GetType().Name}Table",
                         Payload = _serializer.Serialize( @event ),
-                        User    = domainEntity.UpdatedBy?.ToString() ?? domainEntity.CreatedBy.ToString(),
                         Action  = entry.State switch {
                             EntityState.Added    => Action.Create ,
                             EntityState.Modified => Action.Update ,
@@ -87,7 +86,6 @@ public class EfOutBoxPublishEventInterceptor<TIdentity> : SaveChangesInterceptor
                         Service = _configuration.GetValue<string>("NameOfService"),
                         Table   = $"{domainEntity.GetType().Name}Table",
                         Payload = _serializer.Serialize( @event ),
-                        User    = domainEntity.UpdatedBy?.ToString() ?? domainEntity.CreatedBy.ToString(),
                         Action  = entry.State switch {
                             EntityState.Added    => Action.Create ,
                             EntityState.Modified => Action.Update ,

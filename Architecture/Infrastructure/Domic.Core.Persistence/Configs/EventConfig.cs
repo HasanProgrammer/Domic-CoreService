@@ -18,6 +18,7 @@ public class EventConfig : IEntityTypeConfiguration<Event>
         
         //Configs
 
+        builder.Ignore(entity => entity.AggregateId);
         builder.Ignore(entity => entity.CreatedBy);
         builder.Ignore(entity => entity.CreatedRole);
         builder.Ignore(entity => entity.UpdatedBy);

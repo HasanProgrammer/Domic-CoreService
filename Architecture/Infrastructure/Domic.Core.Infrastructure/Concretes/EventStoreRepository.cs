@@ -1,6 +1,7 @@
 ﻿using Domic.Core.Domain.Contracts.Abstracts;
 using Domic.Core.Domain.Contracts.Interfaces;
 using Domic.Core.Domain.Entities;
+using Domic.Core.Domain.Enumerations;
 using Domic.Core.Infrastructure.Extensions;
 using Domic.Core.Persistence.Contexts;
 using Domic.Core.UseCase.Contracts.Interfaces;
@@ -11,30 +12,51 @@ using Action = Domic.Core.Common.ClassConsts.Action;
 
 namespace Domic.Core.Infrastructure.Concretes;
 
-public class EventStoreRepository(EventStoreContext context, IConfiguration configuration,
+public class EventStoreRepository(
+    EventStoreContext context, IConfiguration configuration,
     IGlobalUniqueIdGenerator globalUniqueIdGenerator, 
     IMemoryCacheReflectionAssemblyType memoryCacheReflectionAssemblyType
 ) : IEventStoreRepository
 {
+    public List<Event> FindAll()
+        => context.EventStores.AsNoTracking()
+                              .Where(es => es.IsActive == IsActive.Active)
+                              .OrderBy(es => es.CreatedAt_EnglishDate)
+                              .ToList(); 
+
+    public Task<List<Event>> FindAllAsync(CancellationToken cancellationToken)
+        => context.EventStores.AsNoTracking()
+                              .Where(es => es.IsActive == IsActive.Active)
+                              .OrderBy(es => es.CreatedAt_EnglishDate)
+                              .ToListAsync(cancellationToken);
+
+    public void Change(Event @event) => context.EventStores.Update(@event);
+
+    public Task ChangeAsync(Event @event, CancellationToken cancellationToken)
+    {
+        context.EventStores.Update(@event);
+        
+        return Task.CompletedTask;
+    }
+
     public void Append(IEnumerable<IDomainEvent> events)
     {
-        List<EventStore<string>> eventModels = [];
+        List<Event> eventModels = [];
         
         foreach (var @event in events)
         {
             var createDomainEvent = @event as CreateDomainEvent<string>;
             var updateDomainEvent = @event as UpdateDomainEvent<string>;
         
-            var newModel = new EventStore<string> {
+            var newModel = new Event {
                 Id = globalUniqueIdGenerator.GetRandom(6),
                 AggregateId = createDomainEvent?.Id ?? updateDomainEvent?.Id, //EventId = EntityId
-                NameOfService = configuration.GetValue<string>("NameOfService"),
-                NameOfEvent = @event.GetType().Name,
+                Service = configuration.GetValue<string>("NameOfService"),
                 Action = createDomainEvent is not null ? Action.Create : Action.Update,
+                Type = @event.GetType().Name,
                 Payload = @event.Serialize(),
-                CreatedAt = createDomainEvent?.CreatedAt_EnglishDate ?? updateDomainEvent.UpdatedAt_EnglishDate,
-                CreatedBy = createDomainEvent?.CreatedBy ?? updateDomainEvent?.UpdatedBy,
-                CreatedRole = createDomainEvent?.CreatedRole ?? updateDomainEvent?.UpdatedRole
+                CreatedAt_EnglishDate = createDomainEvent?.CreatedAt_EnglishDate ?? updateDomainEvent.UpdatedAt_EnglishDate,
+                CreatedAt_PersianDate = createDomainEvent?.CreatedAt_PersianDate ?? updateDomainEvent.UpdatedAt_PersianDate,
             };
             
             eventModels.Add(newModel);
@@ -45,23 +67,22 @@ public class EventStoreRepository(EventStoreContext context, IConfiguration conf
 
     public async Task AppendAsync(IEnumerable<IDomainEvent> events, CancellationToken cancellationToken)
     {
-        List<EventStore<string>> eventModels = [];
+        List<Event> eventModels = [];
         
         foreach (var @event in events)
         {
             var createDomainEvent = @event as CreateDomainEvent<string>;
             var updateDomainEvent = @event as UpdateDomainEvent<string>;
         
-            var newModel = new EventStore<string> {
+            var newModel = new Event {
                 Id = globalUniqueIdGenerator.GetRandom(6),
                 AggregateId = createDomainEvent?.Id ?? updateDomainEvent?.Id, //EventId = EntityId
-                NameOfService = configuration.GetValue<string>("NameOfService"),
-                NameOfEvent = @event.GetType().Name,
+                Service = configuration.GetValue<string>("NameOfService"),
                 Action = createDomainEvent is not null ? Action.Create : Action.Update,
+                Type = @event.GetType().Name,
                 Payload = @event.Serialize(),
-                CreatedAt = createDomainEvent?.CreatedAt_EnglishDate ?? updateDomainEvent.UpdatedAt_EnglishDate,
-                CreatedBy = createDomainEvent?.CreatedBy ?? updateDomainEvent?.UpdatedBy,
-                CreatedRole = createDomainEvent?.CreatedRole ?? updateDomainEvent?.UpdatedRole
+                CreatedAt_EnglishDate = createDomainEvent?.CreatedAt_EnglishDate ?? updateDomainEvent.UpdatedAt_EnglishDate,
+                CreatedAt_PersianDate = createDomainEvent?.CreatedAt_PersianDate ?? updateDomainEvent.UpdatedAt_PersianDate,
             };
             
             eventModels.Add(newModel);
@@ -76,8 +97,8 @@ public class EventStoreRepository(EventStoreContext context, IConfiguration conf
         
         var serializedEvents = context.EventStores.AsNoTracking()
                                                   .Where(@event => @event.AggregateId == identity as string)
-                                                  .OrderBy(@event => @event.CreatedAt)
-                                                  .Select(@event => new { Type = @event.NameOfEvent, @event.Payload })
+                                                  .OrderBy(@event => @event.CreatedAt_EnglishDate)
+                                                  .Select(@event => new { @event.Type, @event.Payload })
                                                   .ToList();
 
         return serializedEvents.Select(@event =>
@@ -94,8 +115,8 @@ public class EventStoreRepository(EventStoreContext context, IConfiguration conf
         var serializedEvents =
             await context.EventStores.AsNoTracking()
                                      .Where(@event => @event.AggregateId == identity as string)
-                                     .OrderBy(@event => @event.CreatedAt)
-                                     .Select(@event => new { Type = @event.NameOfEvent, @event.Payload })
+                                     .OrderBy(@event => @event.CreatedAt_EnglishDate)
+                                     .Select(@event => new { @event.Type, @event.Payload })
                                      .ToListAsync(cancellationToken);
 
         return serializedEvents.Select(@event =>

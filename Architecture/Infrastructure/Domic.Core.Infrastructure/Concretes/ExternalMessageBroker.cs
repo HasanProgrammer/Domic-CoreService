@@ -454,6 +454,153 @@ public class ExternalMessageBroker : IExternalMessageBroker
         }
     }
 
+    public void PublishAsEventSourcing()
+    {
+        //just one worker ( Task ) in current machine ( instance ) can process outbox events => lock
+        lock (_lock)
+        {
+            //scope services trigger
+            using IServiceScope serviceScope = _serviceScopeFactory.CreateScope();
+
+            var commandUnitOfWork    = serviceScope.ServiceProvider.GetRequiredService(_memoryCacheReflectionAssemblyType.GetCommandUnitOfWorkType()) as ICoreCommandUnitOfWork;
+            var distributedCache     = serviceScope.ServiceProvider.GetRequiredService<IInternalDistributedCache>();
+            var eventStoreRepository = serviceScope.ServiceProvider.GetRequiredService<IEventStoreRepository>();
+            
+            var eventLocks = new List<string>();
+
+            try
+            {
+                using var channel = _connection.CreateModel();
+
+                commandUnitOfWork.Transaction();
+
+                var events = eventStoreRepository.FindAll();
+
+                foreach (Event targetEvent in events)
+                {
+                    #region DistributedLock
+
+                    var lockEventKey = $"LockEventId-{targetEvent.Id}";
+
+                    var lockEventSuccessfully =
+                        _TryAcquireDistributedLock(distributedCache, lockEventKey, targetEvent.Id);
+
+                    #endregion
+
+                    if (lockEventSuccessfully)
+                    {
+                        eventLocks.Add(lockEventKey);
+
+                        if (targetEvent.IsActive == IsActive.Active)
+                        {
+                            _EventPublishHandler(channel, targetEvent);
+
+                            targetEvent.IsActive = IsActive.InActive;
+
+                            eventStoreRepository.Change(targetEvent);
+                        }
+                    }
+                }
+
+                commandUnitOfWork.Commit();
+            }
+            catch (Exception e)
+            {
+                e.FileLogger(_hostEnvironment, _dateTime);
+
+                e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime,
+                    NameOfService, NameOfAction
+                );
+
+                e.CentralExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, this, _dateTime, NameOfService,
+                    NameOfAction
+                );
+
+                _TryRollback(commandUnitOfWork);
+            }
+            finally
+            {
+                _TryReleaseDistributedLocks(distributedCache, eventLocks);
+            }
+        }
+    }
+
+    public async Task PublishAsEventSourcingAsync(CancellationToken cancellationToken)
+    {
+        //just one worker ( Task ) in current machine ( instance ) can process outbox events => lock
+        await _asyncLock.WaitAsync(cancellationToken);
+        
+        //scope services trigger
+        using IServiceScope serviceScope = _serviceScopeFactory.CreateAsyncScope();
+
+        var commandUnitOfWork    = serviceScope.ServiceProvider.GetRequiredService(_memoryCacheReflectionAssemblyType.GetCommandUnitOfWorkType()) as ICoreCommandUnitOfWork;
+        var distributedCache     = serviceScope.ServiceProvider.GetRequiredService<IInternalDistributedCache>();
+        var eventStoreRepository = serviceScope.ServiceProvider.GetRequiredService<IEventStoreRepository>();
+        
+        var eventLocks = new List<string>();
+        
+        try
+        {
+            using var channel = _connection.CreateModel();
+            
+            await commandUnitOfWork.TransactionAsync(cancellationToken: cancellationToken);
+
+            var events = await eventStoreRepository.FindAllAsync(cancellationToken);
+            
+            foreach (Event targetEvent in events)
+            {
+                #region DistributedLock
+
+                var lockEventKey = $"LockEventId-{targetEvent.Id}";
+                
+                var lockEventSuccessfully =
+                    await _TryAcquireDistributedLockAsync(distributedCache, lockEventKey, targetEvent.Id,
+                        cancellationToken
+                    );
+
+                #endregion
+
+                if (lockEventSuccessfully)
+                {
+                    eventLocks.Add(lockEventKey);
+                    
+                    if (targetEvent.IsActive == IsActive.Active)
+                    {
+                        _EventPublishHandler(channel, targetEvent);
+
+                        targetEvent.IsActive = IsActive.InActive;
+
+                        eventStoreRepository.Change(targetEvent);
+                    }
+                }
+            }
+
+            await commandUnitOfWork.CommitAsync(cancellationToken);
+        }
+        catch (Exception e)
+        {
+            //fire&forget
+            e.FileLoggerAsync(_hostEnvironment, _dateTime, cancellationToken: cancellationToken);
+            
+            e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, 
+                NameOfService, NameOfAction
+            );
+            
+            //fire&forget
+            e.CentralExceptionLoggerAsync(_hostEnvironment, _globalUniqueIdGenerator, this, _dateTime, NameOfService, 
+                NameOfAction, cancellationToken
+            );
+
+            await _TryRollbackAsync(commandUnitOfWork, cancellationToken);
+        }
+        finally
+        {
+            await _TryReleaseDistributedLocksAsync(distributedCache, eventLocks, cancellationToken);
+            
+            _asyncLock.Release();
+        }
+    }
+
     public void Subscribe(string queue)
     {
         try

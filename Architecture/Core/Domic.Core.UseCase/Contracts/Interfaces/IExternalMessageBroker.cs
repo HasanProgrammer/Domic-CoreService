@@ -82,6 +82,20 @@ public interface IExternalMessageBroker : IDisposable, IAsyncDisposable
     /// <returns></returns>
     /// <exception cref="NotImplementedException"></exception>
     public Task PublishAsync(CancellationToken cancellationToken) => throw new NotImplementedException();
+    
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <exception cref="NotImplementedException"></exception>
+    public void PublishAsEventSourcing() => throw new NotImplementedException();
+    
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="cancellationToken"></param>
+    /// <returns></returns>
+    /// <exception cref="NotImplementedException"></exception>
+    public Task PublishAsEventSourcingAsync(CancellationToken cancellationToken) => throw new NotImplementedException();
 
     /// <summary>
     /// 

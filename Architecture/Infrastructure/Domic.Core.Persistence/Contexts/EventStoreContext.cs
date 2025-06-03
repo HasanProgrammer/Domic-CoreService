@@ -10,7 +10,7 @@ public partial class EventStoreContext(DbContextOptions<EventStoreContext> optio
 /*Entity*/
 public partial class EventStoreContext
 {
-    public DbSet<EventStore<string>> EventStores { get; set; }
+    public DbSet<Event> EventStores { get; set; }
 }
 
 /*Config*/
