@@ -4,12 +4,13 @@ using Domic.Core.Domain.Contracts.Interfaces;
 using Domic.Core.Infrastructure.Extensions;
 using Domic.Core.UseCase.Contracts.Interfaces;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 
 namespace Domic.Core.WebAPI.Jobs;
 
 public class RefreshSecretKeyJob(
-    IExternalDistributedCache distributedCache, IHostEnvironment hostEnvironment, IDateTime dateTime, 
+    IServiceScopeFactory serviceScopeFactory, IHostEnvironment hostEnvironment, IDateTime dateTime, 
     IGlobalUniqueIdGenerator globalUniqueIdGenerator, IConfiguration configuration, IExternalMessageBroker messageBroker
 ) : IHostedService, IDisposable
 {
@@ -20,9 +21,13 @@ public class RefreshSecretKeyJob(
         _timer =
             new Timer(state => {
 
+                    using var scope = serviceScopeFactory.CreateScope();
+
+                    var externalDistributedCache = scope.ServiceProvider.GetRequiredService<IExternalDistributedCache>();
+                    
                     try
                     {
-                        distributedCache.SetCacheValue(
+                        externalDistributedCache.SetCacheValue(
                             new KeyValuePair<string, string>("SecretKey", Guid.NewGuid().ToString())
                         );
                     }
