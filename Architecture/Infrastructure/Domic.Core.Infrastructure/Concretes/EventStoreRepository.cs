@@ -20,13 +20,21 @@ public class EventStoreRepository(
 {
     public List<Event> FindAll()
         => context.EventStores.AsNoTracking()
-                              .Where(es => es.IsActive == IsActive.Active)
+                              .Where(es => 
+                                  es.IsActive == IsActive.Active && 
+                                  es.CreatedAt_EnglishDate <= DateTime.Now &&
+                                  es.CreatedAt_EnglishDate >= DateTime.Now.AddDays(-1)
+                              )
                               .OrderBy(es => es.CreatedAt_EnglishDate)
-                              .ToList(); 
+                              .ToList();
 
     public Task<List<Event>> FindAllAsync(CancellationToken cancellationToken)
         => context.EventStores.AsNoTracking()
-                              .Where(es => es.IsActive == IsActive.Active)
+                              .Where(es =>
+                                  es.IsActive == IsActive.Active && 
+                                  es.CreatedAt_EnglishDate <= DateTime.Now &&
+                                  es.CreatedAt_EnglishDate >= DateTime.Now.AddDays(-1)
+                              )
                               .OrderBy(es => es.CreatedAt_EnglishDate)
                               .ToListAsync(cancellationToken);
 
