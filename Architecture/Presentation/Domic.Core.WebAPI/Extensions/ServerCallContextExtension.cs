@@ -11,6 +11,7 @@ using Domic.Core.Infrastructure.Extensions;
 using Domic.Core.UseCase.Contracts.Interfaces;
 using Domic.Core.UseCase.DTOs;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 
 namespace Domic.Core.WebAPI.Extensions;
@@ -25,9 +26,12 @@ public static class ServerCallContextExtension
     /// <exception cref="PresentationException"></exception>
     public static void CheckLicense(this ServerCallContext context, IConfiguration configuration)
     {
-        var headers = context.GetHttpContext().Request.Headers;
+        var httpContext = context.GetHttpContext();
+
+        var externalDistributedCache = httpContext.RequestServices.GetRequiredService<IExternalDistributedCache>();
+        var headers = httpContext.Request.Headers;
         
-        if(!headers.Licence().Equals( configuration.GetValue<string>("SecretKey") )) 
+        if(!headers.Licence().Equals( externalDistributedCache.GetCacheValue("SecretKey") )) 
             throw new PresentationException("شما مجوز لازم برای دسترسی به این منبع را دارا نمی باشید !");
     }
 
