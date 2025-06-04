@@ -89,7 +89,7 @@ public class ExceptionHandlerInterceptor : Interceptor
                 );
             }
             
-            context.CheckLicense();
+            await context.CheckLicenseAsync(context.CancellationToken);
             
             return await continuation(request, context);
         }

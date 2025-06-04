@@ -102,7 +102,7 @@ public class FullExceptionHandlerInterceptor : Interceptor
                 );
             }
             
-            context.CheckLicense();
+            await context.CheckLicenseAsync(context.CancellationToken);
             
             #region IdempotentReceiverPattern
 

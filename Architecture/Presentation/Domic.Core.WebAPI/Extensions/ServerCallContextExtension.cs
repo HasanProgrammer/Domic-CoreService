@@ -23,14 +23,14 @@ public static class ServerCallContextExtension
     /// <param name="context"></param>
     /// <param name="configuration"></param>
     /// <exception cref="PresentationException"></exception>
-    public static void CheckLicense(this ServerCallContext context)
+    public static async Task CheckLicenseAsync(this ServerCallContext context, CancellationToken cancellationToken)
     {
         var httpContext = context.GetHttpContext();
 
         var externalDistributedCache = httpContext.RequestServices.GetRequiredService<IExternalDistributedCache>();
         var headers = httpContext.Request.Headers;
         
-        if(!headers.Licence().Equals( externalDistributedCache.GetCacheValue("SecretKey") )) 
+        if(!headers.Licence().Equals( await externalDistributedCache.GetCacheValueAsync("SecretKey", cancellationToken) )) 
             throw new PresentationException("شما مجوز لازم برای دسترسی به این منبع را دارا نمی باشید !");
     }
 
