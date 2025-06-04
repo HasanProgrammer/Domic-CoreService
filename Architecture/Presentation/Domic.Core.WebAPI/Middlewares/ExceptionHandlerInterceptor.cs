@@ -63,13 +63,16 @@ public class ExceptionHandlerInterceptor : Interceptor
         
         try
         {
-            _dateTime                = context.GetHttpContext().RequestServices.GetRequiredService<IDateTime>();
-            _globalUniqueIdGenerator = context.GetHttpContext().RequestServices.GetRequiredService<IGlobalUniqueIdGenerator>();
+            var httpContext = context.GetHttpContext();
+            
+            var services = httpContext.RequestServices;
+            
+            _dateTime                = httpContext.RequestServices.GetRequiredService<IDateTime>();
+            _globalUniqueIdGenerator = httpContext.RequestServices.GetRequiredService<IGlobalUniqueIdGenerator>();
 
             if (_loggerType.Messaging)
             {
-                _externalMessageBroker =
-                    context.GetHttpContext().RequestServices.GetRequiredService<IExternalMessageBroker>();
+                _externalMessageBroker = services.GetRequiredService<IExternalMessageBroker>();
                 
                 //fire&forget
                 context.CentralRequestLoggerAsync(_hostEnvironment, _globalUniqueIdGenerator, _externalMessageBroker, 
@@ -78,8 +81,7 @@ public class ExceptionHandlerInterceptor : Interceptor
             }
             else
             {
-                _externalEventStreamBroker =
-                    context.GetHttpContext().RequestServices.GetRequiredService<IExternalEventStreamBroker>();
+                _externalEventStreamBroker = services.GetRequiredService<IExternalEventStreamBroker>();
                 
                 //fire&forget
                 context.CentralRequestLoggerAsStreamAsync(_hostEnvironment, _globalUniqueIdGenerator, 
@@ -87,7 +89,7 @@ public class ExceptionHandlerInterceptor : Interceptor
                 );
             }
             
-            context.CheckLicense(_configuration);
+            context.CheckLicense();
             
             return await continuation(request, context);
         }

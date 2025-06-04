@@ -69,24 +69,23 @@ public class FullExceptionHandlerInterceptor : Interceptor
         
         try
         {
-            var identityUser =
-                context.GetHttpContext().RequestServices.GetRequiredKeyedService<IIdentityUser>("Http2") as Http2IdentityUser;
+            var httpContext = context.GetHttpContext();
             
-            identityUser.SetAuthToken(context.GetHttpContext().GetTokenOfGrpcHeader());
+            var services = httpContext.RequestServices;
+            
+            var identityUser = services.GetRequiredKeyedService<IIdentityUser>("Http2") as Http2IdentityUser;
+            
+            identityUser.SetAuthToken(httpContext.GetTokenOfGrpcHeader());
             
             if(_iCommandUnitOfWorkType is not null)
-                _coreCommandUnitOfWork =
-                    context.GetHttpContext()
-                           .RequestServices
-                           .GetRequiredService(_iCommandUnitOfWorkType) as ICoreCommandUnitOfWork;
+                _coreCommandUnitOfWork = services.GetRequiredService(_iCommandUnitOfWorkType) as ICoreCommandUnitOfWork;
             
-            _dateTime                = context.GetHttpContext().RequestServices.GetRequiredService<IDateTime>();
-            _globalUniqueIdGenerator = context.GetHttpContext().RequestServices.GetRequiredService<IGlobalUniqueIdGenerator>();
+            _dateTime                = services.GetRequiredService<IDateTime>();
+            _globalUniqueIdGenerator = services.GetRequiredService<IGlobalUniqueIdGenerator>();
 
             if (_loggerType.Messaging)
             {
-                _externalMessageBroker = 
-                    context.GetHttpContext().RequestServices.GetRequiredService<IExternalMessageBroker>();
+                _externalMessageBroker = services.GetRequiredService<IExternalMessageBroker>();
                 
                 //fire&forget
                 context.CentralRequestLoggerAsync(_hostEnvironment, _globalUniqueIdGenerator, _externalMessageBroker,
@@ -95,8 +94,7 @@ public class FullExceptionHandlerInterceptor : Interceptor
             }
             else
             {
-                _externalEventStreamBroker = 
-                    context.GetHttpContext().RequestServices.GetRequiredService<IExternalEventStreamBroker>();
+                _externalEventStreamBroker = services.GetRequiredService<IExternalEventStreamBroker>();
                 
                 //fire&forget
                 context.CentralRequestLoggerAsStreamAsync(_hostEnvironment, _globalUniqueIdGenerator, 
@@ -104,16 +102,16 @@ public class FullExceptionHandlerInterceptor : Interceptor
                 );
             }
             
-            context.CheckLicense(_configuration);
+            context.CheckLicense();
             
             #region IdempotentReceiverPattern
 
-            var idempotentKey = context.GetHttpContext().Request.Headers.IdempotentKey();
+            var idempotentKey = httpContext.Request.Headers.IdempotentKey();
 
             if (!string.IsNullOrEmpty(idempotentKey))
             {
-                var redisCache = context.GetHttpContext().RequestServices.GetRequiredService<IInternalDistributedCache>();
-                var serializer = context.GetHttpContext().RequestServices.GetRequiredService<ISerializer>();
+                var redisCache = services.GetRequiredService<IInternalDistributedCache>();
+                var serializer = services.GetRequiredService<ISerializer>();
                 
                 var idempotentResponse =
                     await redisCache.GetCacheValueAsync($"RequestId-{idempotentKey}", context.CancellationToken);

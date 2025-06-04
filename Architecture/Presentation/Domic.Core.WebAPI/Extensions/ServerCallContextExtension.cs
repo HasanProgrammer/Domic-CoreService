@@ -10,7 +10,6 @@ using Grpc.Core;
 using Domic.Core.Infrastructure.Extensions;
 using Domic.Core.UseCase.Contracts.Interfaces;
 using Domic.Core.UseCase.DTOs;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 
@@ -24,7 +23,7 @@ public static class ServerCallContextExtension
     /// <param name="context"></param>
     /// <param name="configuration"></param>
     /// <exception cref="PresentationException"></exception>
-    public static void CheckLicense(this ServerCallContext context, IConfiguration configuration)
+    public static void CheckLicense(this ServerCallContext context)
     {
         var httpContext = context.GetHttpContext();
 
