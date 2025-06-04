@@ -9,12 +9,12 @@ namespace Domic.Core.Infrastructure.Concretes;
 
 public class Logger : ILogger
 {
-    private readonly IExternalMessageBroker           _externalMessageBroker;
+    private readonly IExternalMessageBroker   _externalMessageBroker;
     private readonly IGlobalUniqueIdGenerator _globalUniqueIdGenerator;
 
     public Logger(IExternalMessageBroker externalMessageBroker, IGlobalUniqueIdGenerator globalUniqueIdGenerator)
     {
-        _externalMessageBroker           = externalMessageBroker;
+        _externalMessageBroker   = externalMessageBroker;
         _globalUniqueIdGenerator = globalUniqueIdGenerator;
     }
 
