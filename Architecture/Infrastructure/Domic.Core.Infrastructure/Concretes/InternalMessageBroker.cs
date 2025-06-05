@@ -32,7 +32,7 @@ public sealed class InternalChannelObjectPoolPolicy([FromKeyedServices("Internal
 
     public bool Return(IModel obj)
     {
-        if (obj.IsOpen) return true;
+        if (obj != null && obj.IsOpen) return true;
         
         obj.Dispose();
         
