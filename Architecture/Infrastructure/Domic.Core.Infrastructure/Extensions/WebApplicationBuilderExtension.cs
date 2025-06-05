@@ -20,9 +20,11 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.ObjectPool;
 using Microsoft.IdentityModel.Tokens;
 using MongoDB.Driver;
 using Nest;
+using RabbitMQ.Client;
 using Serilog;
 using Serilog.Sinks.Elasticsearch;
 using StackExchange.Redis;
@@ -425,9 +427,38 @@ public static class WebApplicationBuilderExtension
     /// 
     /// </summary>
     /// <param name="builder"></param>
-    /// <typeparam name="TICommandUnitOfWork"></typeparam>
-    public static void RegisterCommandQueryUseCases(this WebApplicationBuilder builder)
+    /// <param name="PoolChannelCapacity"></param>
+    public static void RegisterCommandQueryUseCases(this WebApplicationBuilder builder, int PoolChannelCapacity = 500)
     {
+        builder.Services.AddKeyedSingleton<IConnection>("Internal", (provider, _) => {
+            
+            var configuration = provider.GetService<IConfiguration>();
+            
+            var factory = new ConnectionFactory {
+                HostName = configuration.GetExternalRabbitHostName(),
+                UserName = configuration.GetExternalRabbitUsername(),
+                Password = configuration.GetExternalRabbitPassword(),
+                Port     = configuration.GetExternalRabbitPort() 
+            };
+
+            factory.DispatchConsumersAsync = configuration.GetValue<bool>("IsInternalBrokerConsumingAsync");
+        
+            return factory.CreateConnection();
+            
+        });
+        
+        builder.Services.AddKeyedSingleton<IPooledObjectPolicy<IModel>, InternalChannelObjectPoolPolicy>("Internal");
+
+        builder.Services.AddKeyedSingleton<ObjectPool<IModel>>("Internal", (provider, _) => {
+
+            var objectPoolProvider = new DefaultObjectPoolProvider { MaximumRetained = PoolChannelCapacity };
+            
+            var policy = provider.GetRequiredKeyedService<IPooledObjectPolicy<IModel>>("Internal");
+            
+            return objectPoolProvider.Create(policy);
+            
+        });
+        
         builder.Services.AddTransient(typeof(IMediator), typeof(Mediator));
         builder.Services.AddSingleton(typeof(IInternalMessageBroker), typeof(InternalMessageBroker));
         
@@ -444,8 +475,38 @@ public static class WebApplicationBuilderExtension
     /// 
     /// </summary>
     /// <param name="builder"></param>
-    public static void RegisterMessageBroker(this WebApplicationBuilder builder)
+    /// <param name="PoolChannelCapacity"></param>
+    public static void RegisterMessageBroker(this WebApplicationBuilder builder, int PoolChannelCapacity = 500)
     {
+        builder.Services.AddKeyedSingleton<IConnection>("External", (provider, _) => {
+            
+            var configuration = provider.GetService<IConfiguration>();
+            
+            var factory = new ConnectionFactory {
+                HostName = configuration.GetExternalRabbitHostName(),
+                UserName = configuration.GetExternalRabbitUsername(),
+                Password = configuration.GetExternalRabbitPassword(),
+                Port     = configuration.GetExternalRabbitPort() 
+            };
+
+            factory.DispatchConsumersAsync = configuration.GetValue<bool>("IsExternalBrokerConsumingAsync");
+        
+            return factory.CreateConnection();
+            
+        });
+        
+        builder.Services.AddKeyedSingleton<IPooledObjectPolicy<IModel>, ExternalChannelObjectPoolPolicy>("External");
+
+        builder.Services.AddKeyedSingleton<ObjectPool<IModel>>("External", (provider, _) => {
+
+            var objectPoolProvider = new DefaultObjectPoolProvider { MaximumRetained = PoolChannelCapacity };
+            
+            var policy = provider.GetRequiredKeyedService<IPooledObjectPolicy<IModel>>("External");
+            
+            return objectPoolProvider.Create(policy);
+            
+        });
+        
         builder.Services.AddSingleton(typeof(IExternalMessageBroker), typeof(ExternalMessageBroker));
 
         Type[] useCaseAssemblyTypes = Assembly.Load(new AssemblyName("Domic.UseCase")).GetTypes();

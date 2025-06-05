@@ -17,12 +17,28 @@ using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.ObjectPool;
 using Newtonsoft.Json;
 using Polly;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 
 namespace Domic.Core.Infrastructure.Concretes;
+
+public sealed class InternalChannelObjectPoolPolicy([FromKeyedServices("Internal")] IConnection connection) 
+    : IPooledObjectPolicy<IModel>
+{
+    public IModel Create() => connection.CreateModel();
+
+    public bool Return(IModel obj)
+    {
+        if (obj.IsOpen) return true;
+        
+        obj.Dispose();
+        
+        return false;
+    }
+}
 
 public sealed class InternalMessageBroker : IInternalMessageBroker
 {
@@ -34,11 +50,14 @@ public sealed class InternalMessageBroker : IInternalMessageBroker
     private readonly IGlobalUniqueIdGenerator           _globalUniqueIdGenerator;
     private readonly IDateTime                          _dateTime;
     private readonly IMemoryCacheReflectionAssemblyType _memoryCacheReflectionAssemblyType;
+    private readonly ObjectPool<IModel>                 _channelPool;
 
     public InternalMessageBroker(IDateTime dateTime, IServiceScopeFactory serviceScopeFactory,
         IHostEnvironment hostEnvironment, IConfiguration configuration, IExternalMessageBroker externalMessageBroker, 
         IGlobalUniqueIdGenerator globalUniqueIdGenerator, 
-        IMemoryCacheReflectionAssemblyType memoryCacheReflectionAssemblyType
+        IMemoryCacheReflectionAssemblyType memoryCacheReflectionAssemblyType, 
+        [FromKeyedServices("Internal")] IConnection connection,
+        [FromKeyedServices("Internal")] ObjectPool<IModel> channel
     )
     {
         _dateTime                          = dateTime;
@@ -48,17 +67,8 @@ public sealed class InternalMessageBroker : IInternalMessageBroker
         _externalMessageBroker             = externalMessageBroker;
         _globalUniqueIdGenerator           = globalUniqueIdGenerator;
         _memoryCacheReflectionAssemblyType = memoryCacheReflectionAssemblyType;
-
-        var factory = new ConnectionFactory {
-            HostName = configuration.GetInternalRabbitHostName() ,
-            UserName = configuration.GetInternalRabbitUsername() ,
-            Password = configuration.GetInternalRabbitPassword() ,
-            Port     = configuration.GetInternalRabbitPort() 
-        };
-        
-        factory.DispatchConsumersAsync = configuration.GetValue<bool>("IsInternalBrokerConsumingAsync");
-        
-        _connection = factory.CreateConnection();    
+        _connection                        = connection;
+        _channelPool                       = channel;
     }
 
     public string NameOfAction  { get; set; }
@@ -73,15 +83,22 @@ public sealed class InternalMessageBroker : IInternalMessageBroker
               .WaitAndRetry(5, _ => TimeSpan.FromSeconds(3))
               .Execute(() => {
                   
-                  using var channel = _connection.CreateModel();
-  
-                  channel.PublishMessageToDirectExchange(
-                      command.Serialize(), messageBroker.Exchange, messageBroker.Route,
-                      new Dictionary<string, object> {
-                          { "Command", commandBusType.Name },
-                          { "Namespace", commandBusType.Namespace }
-                      }
-                  );
+                  var channel = _channelPool.Get();
+
+                  try
+                  {
+                      channel.PublishMessageToDirectExchange(
+                          command.Serialize(), messageBroker.Exchange, messageBroker.Route,
+                          new Dictionary<string, object> {
+                              { "Command", commandBusType.Name },
+                              { "Namespace", commandBusType.Namespace }
+                          }
+                      );
+                  }
+                  finally
+                  {
+                      _channelPool.Return(channel);
+                  }
                   
               });
     }
@@ -97,15 +114,22 @@ public sealed class InternalMessageBroker : IInternalMessageBroker
                      .ExecuteAsync(() => 
                          Task.Run(() => {
                              
-                             using var channel = _connection.CreateModel();
-  
-                             channel.PublishMessageToDirectExchange(
-                                 command.Serialize(), messageBroker.Exchange, messageBroker.Route,
-                                 new Dictionary<string, object> {
-                                     { "Command", commandBusType.Name },
-                                     { "Namespace", commandBusType.Namespace }
-                                 }
-                             );
+                             var channel = _channelPool.Get();
+
+                             try
+                             {
+                                 channel.PublishMessageToDirectExchange(
+                                     command.Serialize(), messageBroker.Exchange, messageBroker.Route,
+                                     new Dictionary<string, object> {
+                                         { "Command", commandBusType.Name },
+                                         { "Namespace", commandBusType.Namespace }
+                                     }
+                                 );
+                             }
+                             finally
+                             {
+                                 _channelPool.Return(channel);
+                             }
                              
                          }, cancellationToken)
                      );

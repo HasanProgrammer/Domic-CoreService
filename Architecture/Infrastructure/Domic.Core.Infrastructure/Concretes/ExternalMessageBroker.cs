@@ -7,7 +7,6 @@ using Domic.Core.Domain.Attributes;
 using Domic.Core.Domain.Contracts.Interfaces;
 using Domic.Core.Domain.Entities;
 using Domic.Core.Domain.Enumerations;
-using Domic.Core.Common.ClassExtensions;
 using Domic.Core.Common.ClassModels;
 using Domic.Core.Infrastructure.Extensions;
 using Domic.Core.UseCase.Attributes;
@@ -16,6 +15,7 @@ using Domic.Core.UseCase.DTOs;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.ObjectPool;
 using Newtonsoft.Json;
 using NSubstitute.Exceptions;
 using Polly;
@@ -23,6 +23,21 @@ using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 
 namespace Domic.Core.Infrastructure.Concretes;
+
+public sealed class ExternalChannelObjectPoolPolicy([FromKeyedServices("External")] IConnection connection) 
+    : IPooledObjectPolicy<IModel>
+{
+    public IModel Create() => connection.CreateModel();
+
+    public bool Return(IModel obj)
+    {
+        if (obj.IsOpen) return true;
+        
+        obj.Dispose();
+        
+        return false;
+    }
+}
 
 public sealed class ExternalMessageBroker : IExternalMessageBroker
 {
@@ -40,10 +55,13 @@ public sealed class ExternalMessageBroker : IExternalMessageBroker
     private readonly IGlobalUniqueIdGenerator _globalUniqueIdGenerator;
     private readonly IMemoryCacheReflectionAssemblyType _memoryCacheReflectionAssemblyType;
     private readonly IConfiguration _configuration;
+    private readonly ObjectPool<IModel> _channelPool;
 
     public ExternalMessageBroker(IConfiguration configuration, IHostEnvironment hostEnvironment, 
         IServiceScopeFactory serviceScopeFactory, IDateTime dateTime, IGlobalUniqueIdGenerator globalUniqueIdGenerator,
-        IMemoryCacheReflectionAssemblyType memoryCacheReflectionAssemblyType
+        IMemoryCacheReflectionAssemblyType memoryCacheReflectionAssemblyType, 
+        [FromKeyedServices("External")] IConnection connection, 
+        [FromKeyedServices("External")] ObjectPool<IModel> channelPool
     )
     {
         _hostEnvironment = hostEnvironment;
@@ -52,17 +70,8 @@ public sealed class ExternalMessageBroker : IExternalMessageBroker
         _globalUniqueIdGenerator = globalUniqueIdGenerator;
         _memoryCacheReflectionAssemblyType = memoryCacheReflectionAssemblyType;
         _configuration = configuration;
-
-        var factory = new ConnectionFactory {
-            HostName = configuration.GetExternalRabbitHostName(),
-            UserName = configuration.GetExternalRabbitUsername(),
-            Password = configuration.GetExternalRabbitPassword(),
-            Port     = configuration.GetExternalRabbitPort() 
-        };
-
-        factory.DispatchConsumersAsync = configuration.GetValue<bool>("IsExternalBrokerConsumingAsync");
-        
-        _connection = factory.CreateConnection();
+        _connection = connection;
+        _channelPool = channelPool;
     }
 
     public string NameOfAction  { get; set; }
@@ -75,32 +84,39 @@ public sealed class ExternalMessageBroker : IExternalMessageBroker
         Policy.Handle<Exception>()
               .WaitAndRetry(5, _ => TimeSpan.FromSeconds(3), (exception, timeSpan, context) => {})
               .Execute(() => {
+                  
+                  var channel = _channelPool.Get();
 
-                using var channel = _connection.CreateModel();
+                  try
+                  {
+                      switch (messageBroker.ExchangeType)
+                      {
+                          case Exchange.Direct:
+                              channel.PublishMessageToDirectExchange(
+                                  messageBroker.Message.Serialize(), messageBroker.Exchange, messageBroker.Route,
+                                  messageBroker.Headers
+                              );
+                          break;
 
-                switch (messageBroker.ExchangeType)
-                {
-                    case Exchange.Direct :
-                        channel.PublishMessageToDirectExchange(
-                            messageBroker.Message.Serialize(), messageBroker.Exchange, messageBroker.Route, 
-                            messageBroker.Headers
-                        );
-                    break;
+                          case Exchange.FanOut:
+                              channel.PublishMessageToFanOutExchange(
+                                  messageBroker.Message.Serialize(), messageBroker.Exchange
+                              );
+                          break;
 
-                    case Exchange.FanOut :
-                        channel.PublishMessageToFanOutExchange(
-                            messageBroker.Message.Serialize(), messageBroker.Exchange
-                        );
-                    break;
+                          case Exchange.Unknown:
+                              channel.PublishMessage(messageBroker.Message.Serialize(), messageBroker.Queue);
+                          break;
 
-                    case Exchange.Unknown :
-                        channel.PublishMessage(messageBroker.Message.Serialize(), messageBroker.Queue);
-                    break;
-
-                    default: throw new ArgumentOutOfRangeException();
-                }
-
-            });
+                          default: throw new ArgumentOutOfRangeException();
+                      }
+                  }
+                  finally
+                  {
+                      _channelPool.Return(channel);
+                  }
+                
+              });
     }
 
     public Task PublishAsync<TMessage>(MessageBrokerDto<TMessage> messageBroker, CancellationToken cancellationToken) 
@@ -110,28 +126,35 @@ public sealed class ExternalMessageBroker : IExternalMessageBroker
                  .ExecuteAsync(() => 
                      Task.Run(() => {
                          
-                         using var channel = _connection.CreateModel();
-                         
-                         switch (messageBroker.ExchangeType)
+                         var channel = _channelPool.Get();
+
+                         try
                          {
-                             case Exchange.Direct :
-                                 channel.PublishMessageToDirectExchange(
-                                     messageBroker.Message.Serialize(), messageBroker.Exchange, messageBroker.Route, 
-                                     messageBroker.Headers
-                                 );
-                            break;
-     
-                             case Exchange.FanOut :
-                                 channel.PublishMessageToFanOutExchange(
-                                     messageBroker.Message.Serialize(), messageBroker.Exchange
-                                 );
-                             break;
-     
-                             case Exchange.Unknown :
-                                 channel.PublishMessage(messageBroker.Message.Serialize(), messageBroker.Queue);
-                             break;
-     
-                             default: throw new ArgumentOutOfRangeException();
+                             switch (messageBroker.ExchangeType)
+                             {
+                                 case Exchange.Direct:
+                                     channel.PublishMessageToDirectExchange(
+                                         messageBroker.Message.Serialize(), messageBroker.Exchange, messageBroker.Route,
+                                         messageBroker.Headers
+                                     );
+                                 break;
+
+                                 case Exchange.FanOut:
+                                     channel.PublishMessageToFanOutExchange(
+                                         messageBroker.Message.Serialize(), messageBroker.Exchange
+                                     );
+                                 break;
+
+                                 case Exchange.Unknown:
+                                     channel.PublishMessage(messageBroker.Message.Serialize(), messageBroker.Queue);
+                                 break;
+
+                                 default: throw new ArgumentOutOfRangeException();
+                             }
+                         }
+                         finally
+                         {
+                             _channelPool.Return(channel);
                          }
                          
                      }, cancellationToken)
@@ -305,8 +328,6 @@ public sealed class ExternalMessageBroker : IExternalMessageBroker
 
             try
             {
-                using var channel = _connection.CreateModel();
-
                 commandUnitOfWork.Transaction();
 
                 var events =
@@ -331,7 +352,7 @@ public sealed class ExternalMessageBroker : IExternalMessageBroker
 
                         if (targetEvent.IsActive == IsActive.Active)
                         {
-                            _EventPublishHandler(channel, targetEvent);
+                            _EventPublishHandler(targetEvent);
 
                             var nowDateTime = DateTime.Now;
                             var nowPersianDateTime = _dateTime.ToPersianShortDate(nowDateTime);
@@ -386,8 +407,6 @@ public sealed class ExternalMessageBroker : IExternalMessageBroker
         
         try
         {
-            using var channel = _connection.CreateModel();
-            
             await commandUnitOfWork.TransactionAsync(cancellationToken: cancellationToken);
 
             var events =
@@ -412,7 +431,7 @@ public sealed class ExternalMessageBroker : IExternalMessageBroker
                     
                     if (targetEvent.IsActive == IsActive.Active)
                     {
-                        _EventPublishHandler(channel, targetEvent);
+                        _EventPublishHandler(targetEvent);
 
                         var nowDateTime        = DateTime.Now;
                         var nowPersianDateTime = _dateTime.ToPersianShortDate(nowDateTime);
@@ -470,8 +489,6 @@ public sealed class ExternalMessageBroker : IExternalMessageBroker
 
             try
             {
-                using var channel = _connection.CreateModel();
-
                 commandUnitOfWork.Transaction();
 
                 var events = eventStoreRepository.FindAll();
@@ -493,7 +510,7 @@ public sealed class ExternalMessageBroker : IExternalMessageBroker
 
                         if (targetEvent.IsActive == IsActive.Active)
                         {
-                            _EventPublishHandler(channel, targetEvent);
+                            _EventPublishHandler(targetEvent);
 
                             targetEvent.IsActive = IsActive.InActive;
 
@@ -541,8 +558,6 @@ public sealed class ExternalMessageBroker : IExternalMessageBroker
         
         try
         {
-            using var channel = _connection.CreateModel();
-            
             await commandUnitOfWork.TransactionAsync(cancellationToken: cancellationToken);
 
             var events = await eventStoreRepository.FindAllAsync(cancellationToken);
@@ -566,7 +581,7 @@ public sealed class ExternalMessageBroker : IExternalMessageBroker
                     
                     if (targetEvent.IsActive == IsActive.Active)
                     {
-                        _EventPublishHandler(channel, targetEvent);
+                        _EventPublishHandler(targetEvent);
 
                         targetEvent.IsActive = IsActive.InActive;
 
@@ -1119,7 +1134,7 @@ public sealed class ExternalMessageBroker : IExternalMessageBroker
     
     /*---------------------------------------------------------------*/
     
-    private void _EventPublishHandler(IModel channel, Event @event)
+    private void _EventPublishHandler(Event @event)
     {
         var nameOfEvent = @event.Type;
 
@@ -1127,21 +1142,30 @@ public sealed class ExternalMessageBroker : IExternalMessageBroker
 
         var messageBroker = typeOfEvent.GetCustomAttribute(typeof(EventConfigAttribute)) as EventConfigAttribute;
 
-        switch (messageBroker.ExchangeType)
+        var channel = _channelPool.Get();
+        
+        try
         {
-            case Exchange.Direct :
-                channel.PublishMessageToDirectExchange(
-                    @event.Serialize(), messageBroker.Exchange, messageBroker.Route
-                );
-                break;
-            
-            case Exchange.FanOut :
-                channel.PublishMessageToFanOutExchange(
-                    @event.Serialize(), messageBroker.Exchange
-                );
+            switch (messageBroker.ExchangeType)
+            {
+                case Exchange.Direct:
+                    channel.PublishMessageToDirectExchange(
+                        @event.Serialize(), messageBroker.Exchange, messageBroker.Route
+                    );
                 break;
 
-            default : throw new ArgumentOutOfRangeException();
+                case Exchange.FanOut:
+                    channel.PublishMessageToFanOutExchange(
+                        @event.Serialize(), messageBroker.Exchange
+                    );
+                break;
+
+                default: throw new ArgumentOutOfRangeException();
+            }
+        }
+        finally
+        {
+            _channelPool.Return(channel);
         }
     }
     
