@@ -5,7 +5,7 @@ using StackExchange.Redis;
 
 namespace Domic.Core.Infrastructure.Concretes;
 
-public class InternalDistributedCache : IInternalDistributedCache
+public sealed class InternalDistributedCache : IInternalDistributedCache
 {
     private readonly IDatabase _redisContext;
         

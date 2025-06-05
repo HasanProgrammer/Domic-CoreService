@@ -24,7 +24,7 @@ using Environment = System.Environment;
 
 namespace Domic.Core.Infrastructure.Concretes;
 
-public class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTime dateTime, 
+public sealed class ExternalEventStreamBroker(IHostEnvironment hostEnvironment, IDateTime dateTime, 
     IGlobalUniqueIdGenerator globalUniqueIdGenerator, IServiceScopeFactory serviceScopeFactory,
     IConfiguration configuration, ISerializer serializer,
     IMemoryCacheReflectionAssemblyType memoryCacheReflectionAssemblyType

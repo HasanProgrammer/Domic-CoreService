@@ -3,7 +3,7 @@ using Domic.Core.UseCase.Contracts.Interfaces;
 
 namespace Domic.Core.Infrastructure.Concretes;
 
-public class Http2IdentityUser(IJsonWebToken jsonWebToken) : IIdentityUser
+public sealed class Http2IdentityUser(IJsonWebToken jsonWebToken) : IIdentityUser
 {
     private string _authToken;
 

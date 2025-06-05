@@ -3,7 +3,7 @@ using NanoidDotNet;
 
 namespace Domic.Core.Infrastructure.Concretes;
 
-public class GlobalUniqueIdGenerator : IGlobalUniqueIdGenerator
+public sealed class GlobalUniqueIdGenerator : IGlobalUniqueIdGenerator
 {
     public string GetRandom() => Nanoid.Generate();
 

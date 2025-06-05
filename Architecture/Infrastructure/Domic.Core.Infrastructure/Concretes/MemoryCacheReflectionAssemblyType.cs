@@ -7,7 +7,7 @@ using Serilog;
 
 namespace Domic.Core.Infrastructure.Concretes;
 
-public class MemoryCacheReflectionAssemblyType : IMemoryCacheReflectionAssemblyType
+public sealed class MemoryCacheReflectionAssemblyType : IMemoryCacheReflectionAssemblyType
 {
     private readonly IMemoryCache _memoryCache;
     private readonly ISerializer  _serializer;

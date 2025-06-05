@@ -7,7 +7,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Domic.Core.Infrastructure.Concretes;
 
-public class InternalDistributedCacheMediator : IInternalDistributedCacheMediator
+public sealed class InternalDistributedCacheMediator : IInternalDistributedCacheMediator
 {
     private readonly IServiceProvider _serviceProvider;
 

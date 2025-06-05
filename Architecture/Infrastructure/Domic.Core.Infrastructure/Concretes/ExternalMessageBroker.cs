@@ -24,7 +24,7 @@ using RabbitMQ.Client.Events;
 
 namespace Domic.Core.Infrastructure.Concretes;
 
-public class ExternalMessageBroker : IExternalMessageBroker
+public sealed class ExternalMessageBroker : IExternalMessageBroker
 {
     #region Statics
 

@@ -2,7 +2,6 @@
 
 using System.Reflection;
 using System.Text;
-using Domic.Core.Common.ClassConsts;
 using Domic.Core.Common.ClassEnums;
 using Domic.Core.Common.ClassModels;
 using Domic.Core.Domain.Contracts.Interfaces;
@@ -16,7 +15,7 @@ using Polly;
 
 namespace Domic.Core.Infrastructure.Concretes;
 
-public class Mediator : IMediator
+public sealed class Mediator : IMediator
 {
     private readonly IServiceProvider _serviceProvider;
 

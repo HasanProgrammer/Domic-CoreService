@@ -4,7 +4,7 @@ using Domic.Core.UseCase.Contracts.Interfaces;
 
 namespace Domic.Core.Infrastructure.Concretes;
 
-public class StreamLogger : IStreamLogger
+public sealed class StreamLogger : IStreamLogger
 {
     private const string StateTrackerTopic = "StateTracker";
     

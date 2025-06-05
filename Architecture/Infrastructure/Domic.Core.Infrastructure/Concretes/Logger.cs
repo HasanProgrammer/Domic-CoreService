@@ -7,7 +7,7 @@ using Domic.Core.UseCase.DTOs;
 
 namespace Domic.Core.Infrastructure.Concretes;
 
-public class Logger : ILogger
+public sealed class Logger : ILogger
 {
     private readonly IExternalMessageBroker   _externalMessageBroker;
     private readonly IGlobalUniqueIdGenerator _globalUniqueIdGenerator;

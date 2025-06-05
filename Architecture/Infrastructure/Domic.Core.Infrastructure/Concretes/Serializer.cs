@@ -3,7 +3,7 @@ using Newtonsoft.Json;
 
 namespace Domic.Core.Infrastructure.Concretes;
 
-public class Serializer : ISerializer
+public sealed class Serializer : ISerializer
 {
     public string Serialize<T>(T @object) 
         => JsonConvert.SerializeObject(@object, Formatting.Indented);

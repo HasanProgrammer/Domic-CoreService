@@ -5,7 +5,7 @@ using Microsoft.AspNetCore.Http;
 
 namespace Domic.Core.Infrastructure.Concretes;
 
-public class IdentityUser : IIdentityUser
+public sealed class IdentityUser : IIdentityUser
 {
     private readonly IJsonWebToken _jsonWebToken;
     private readonly string _authToken;

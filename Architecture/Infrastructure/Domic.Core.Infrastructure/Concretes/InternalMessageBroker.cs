@@ -24,7 +24,7 @@ using RabbitMQ.Client.Events;
 
 namespace Domic.Core.Infrastructure.Concretes;
 
-public class InternalMessageBroker : IInternalMessageBroker
+public sealed class InternalMessageBroker : IInternalMessageBroker
 {
     private readonly IConnection                        _connection;
     private readonly IConfiguration                     _configuration;

@@ -12,7 +12,7 @@ using Action = Domic.Core.Common.ClassConsts.Action;
 
 namespace Domic.Core.Infrastructure.Concretes;
 
-public class EventStoreRepository(
+public sealed class EventStoreRepository(
     EventStoreContext context, IConfiguration configuration,
     IGlobalUniqueIdGenerator globalUniqueIdGenerator, 
     IMemoryCacheReflectionAssemblyType memoryCacheReflectionAssemblyType

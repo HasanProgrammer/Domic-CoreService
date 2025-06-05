@@ -1,25 +1,41 @@
+#pragma warning disable CS4014 // Because this call is not awaited, execution of the current method continues before the call is completed
+
 using Domic.Core.Common.ClassModels;
+using Domic.Core.Domain.Contracts.Interfaces;
+using Domic.Core.Infrastructure.Extensions;
 using Domic.Core.Service.Grpc;
 using Domic.Core.UseCase.Contracts.Interfaces;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-
+using Polly;
 using String = Domic.Core.Service.Grpc.String;
 
 namespace Domic.Core.Infrastructure.Concretes;
 
-public class ServiceDiscovery : IServiceDiscovery
+public sealed class ServiceDiscovery : IServiceDiscovery
 {
     private readonly IHostEnvironment                        _hostEnvironment;
     private readonly IExternalDistributedCacheMediator       _externalDistributedCacheMediator;
+    private readonly IDateTime                               _dateTime;
+    private readonly IGlobalUniqueIdGenerator                _globalUniqueIdGenerator;
+    private readonly IConfiguration                          _configuration;
+    private readonly IServiceProvider                        _serviceProvider;
     private readonly DiscoveryService.DiscoveryServiceClient _discoveryServiceClient;
 
     public ServiceDiscovery(DiscoveryService.DiscoveryServiceClient discoveryServiceClient, 
-        IHostEnvironment hostEnvironment, IExternalDistributedCacheMediator externalDistributedCacheMediator
+        IHostEnvironment hostEnvironment, IExternalDistributedCacheMediator externalDistributedCacheMediator,
+        IDateTime dateTime, IGlobalUniqueIdGenerator globalUniqueIdGenerator, IConfiguration configuration,
+        IServiceProvider serviceProvider
     )
     {
         _hostEnvironment                  = hostEnvironment;
         _discoveryServiceClient           = discoveryServiceClient;
         _externalDistributedCacheMediator = externalDistributedCacheMediator;
+        _dateTime                         = dateTime;
+        _globalUniqueIdGenerator          = globalUniqueIdGenerator;
+        _configuration                    = configuration;
+        _serviceProvider                  = serviceProvider;
     }
 
     public async Task<List<ServiceStatus>> FetchAllServicesInfoAsync(CancellationToken cancellationToken)
@@ -57,9 +73,7 @@ public class ServiceDiscovery : IServiceDiscovery
 
         if (targetInstance is null)
         {
-            var random = new Random(); //ToDo : ( Tech Debt ) -> Should be used thread safty way for [Random]
-
-            var targetInstanceOfServiceIndex = random.Next(currentServiceInstancesInfo.Count);
+            var targetInstanceOfServiceIndex = Random.Shared.Next(currentServiceInstancesInfo.Count);
 
             targetInstance = currentServiceInstancesInfo[targetInstanceOfServiceIndex];
         }
@@ -120,13 +134,40 @@ public class ServiceDiscovery : IServiceDiscovery
     {
         try
         {
-            var servicesInfo = await _externalDistributedCacheMediator.GetAsync<List<ServiceStatus>>(cancellationToken);
-
-            return servicesInfo;
+            return await Policy.Handle<Exception>()
+                               .WaitAndRetry(5, _ => TimeSpan.FromSeconds(3))
+                               .Execute(() =>
+                                   _externalDistributedCacheMediator.GetAsync<List<ServiceStatus>>(cancellationToken)
+                               );
         }
         catch (Exception e)
         {
-            //ToDo : ( Tech Debt ) => Should be used log in here!
+            //fire&forget
+            e.FileLoggerAsync(_hostEnvironment, _dateTime, cancellationToken);
+            
+            e.ElasticStackExceptionLogger(_hostEnvironment, _globalUniqueIdGenerator, _dateTime, 
+                _configuration.GetValue<string>("NameOfService"), "LoadServicesInfoAsync"
+            );
+
+            if (_configuration.GetSection("LoggerType").Get<LoggerType>().Messaging)
+            {
+                var messageBroker = _serviceProvider.GetRequiredService<IExternalMessageBroker>();
+
+                //fire&forget
+                e.CentralExceptionLoggerAsync(_hostEnvironment, _globalUniqueIdGenerator, messageBroker, _dateTime,
+                    _configuration.GetValue<string>("NameOfService"), "LoadServicesInfoAsync", cancellationToken
+                );
+            }
+            else
+            {
+                var streamBroker = _serviceProvider.GetRequiredService<IExternalEventStreamBroker>();
+
+                //fire&forget
+                e.CentralExceptionLoggerAsStreamAsync(_hostEnvironment, _globalUniqueIdGenerator, streamBroker,
+                    _dateTime, _configuration.GetValue<string>("NameOfService"), "LoadServicesInfoAsync", 
+                    cancellationToken
+                );
+            }
         }
 
         return await FetchAllServicesInfoAsync(cancellationToken);

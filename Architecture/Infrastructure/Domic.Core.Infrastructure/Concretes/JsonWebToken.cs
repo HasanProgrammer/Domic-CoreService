@@ -7,7 +7,7 @@ using Microsoft.IdentityModel.Tokens;
 
 namespace Domic.Core.Infrastructure.Concretes;
 
-public class JsonWebToken : IJsonWebToken
+public sealed class JsonWebToken : IJsonWebToken
 {
     public string Generate(TokenParameterDto tokenParameter, params KeyValuePair<string, string>[] claims)
     {

@@ -189,6 +189,7 @@ public static class WebApplicationBuilderExtension
             (_p, _o) => ConnectionMultiplexer.Connect(Environment.GetEnvironmentVariable("I-RedisConnectionString"))
         );
         
+        //Third party ( Redis )
         builder.Services.AddKeyedScoped<IConnectionMultiplexer>("ExternalRedis",
             (_p, _o) => ConnectionMultiplexer.Connect(Environment.GetEnvironmentVariable("E-RedisConnectionString"))
         );
