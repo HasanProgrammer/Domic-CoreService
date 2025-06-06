@@ -337,7 +337,7 @@ public static class WebApplicationBuilderExtension
     {
         Type[] coreUseCaseAssemblyTypes = Assembly.Load(new AssemblyName("Domic.Core.UseCase")).GetTypes();
         
-        RegisterAllInternalDistributedCachesHandler(builder.Services, coreUseCaseAssemblyTypes);
+        RegisterAllExternalDistributedCachesHandler(builder.Services, coreUseCaseAssemblyTypes);
         
         builder.Services.AddScoped(typeof(IServiceDiscovery), typeof(ServiceDiscovery));
 
@@ -348,7 +348,9 @@ public static class WebApplicationBuilderExtension
         })
         .AddCallCredentials((context, metadata, serviceProvider) => {
             
-            metadata.Add(Header.License, builder.Configuration.GetValue<string>("SecretKey"));
+            metadata.Add(Header.License, 
+                serviceProvider.GetRequiredService<IExternalDistributedCache>().GetCacheValue("SecretKey")
+            );
 
             return Task.CompletedTask;
 
