@@ -475,11 +475,11 @@ public sealed class Mediator : IMediator
         var resultWithoutTransaction =
             await (Task<TResult>)commandHandlerMethod.Invoke(commandHandler, new object[]{ command , cancellationToken });
         
-        await _CleanCacheAsync(commandHandlerMethod, _serviceProvider, cancellationToken);
-        
         await _AfterHandleAsync<TResult>(commandHandler, commandAfterHandlerMethod, command,
             _serviceProvider, cancellationToken
         );
+        
+        await _CleanCacheAsync(commandHandlerMethod, _serviceProvider, cancellationToken);
         
         return resultWithoutTransaction;
     }
