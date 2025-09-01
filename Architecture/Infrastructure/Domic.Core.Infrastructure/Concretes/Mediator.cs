@@ -76,13 +76,13 @@ public sealed class Mediator : IMediator
                 
                 if (!conditions)
                     throw new Exception("The [ _lock ] field must be private and static & return an object with value");
+                
+                _BeforeHandle(commandHandler, commandBeforeHandlerMethod, command, _serviceProvider);
                     
+                _Validation(commandHandler, commandHandlerType, commandHandlerMethod, command);
+                
                 lock (lockField.GetValue(commandHandler))
                 {
-                    _BeforeHandle(commandHandler, commandBeforeHandlerMethod, command, _serviceProvider);
-                    
-                    _Validation(commandHandler, commandHandlerType, commandHandlerMethod, command);
-                
                     return _InvokeHandleMethod(commandHandler, commandHandlerMethod, 
                         commandAfterHandlerMethod, command
                     );
