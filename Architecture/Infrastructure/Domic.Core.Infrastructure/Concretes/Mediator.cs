@@ -167,19 +167,19 @@ public sealed class Mediator : IMediator
                 if (!conditions)
                     throw new Exception("The [ _asyncLock ] field must be private and static & return an [ SemaphoreSlim ] with value");
 
+                await _BeforeHandleAsync(commandHandler, commandBeforeHandlerMethod, command,
+                    _serviceProvider, cancellationToken
+                );
+                    
+                await _ValidationAsync(commandHandler, commandHandlerType, commandHandlerMethod, command,
+                    cancellationToken);
+                
                 var asyncLockValue = asyncLockField.GetValue(commandHandler) as SemaphoreSlim;
                 
                 await asyncLockValue.WaitAsync(cancellationToken);
 
                 try
                 {
-                    await _BeforeHandleAsync(commandHandler, commandBeforeHandlerMethod, command,
-                        _serviceProvider, cancellationToken
-                    );
-                    
-                    await _ValidationAsync(commandHandler, commandHandlerType, commandHandlerMethod, command,
-                        cancellationToken);
-
                     return await _InvokeHandleMethodAsync(commandHandler, commandHandlerMethod, 
                         commandAfterHandlerMethod, command, cancellationToken
                     );
