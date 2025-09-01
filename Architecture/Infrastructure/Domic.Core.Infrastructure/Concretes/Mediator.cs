@@ -405,12 +405,12 @@ public sealed class Mediator : IMediator
         
         var resultWithoutTransaction =
             (TResult)commandHandlerMethod.Invoke(commandHandler, new object[]{ command });
-            
-        _CleanCache(commandHandlerMethod, _serviceProvider);
         
         _AfterHandle<TResult>(commandHandler, commandAfterHandlerMethod, command,
             _serviceProvider
         );
+        
+        _CleanCache(commandHandlerMethod, _serviceProvider);
         
         return resultWithoutTransaction;
     }
