@@ -265,6 +265,7 @@ public sealed class Mediator : IMediator
             var redisCache = _serviceProvider.GetRequiredService<IInternalDistributedCache>();
             
             var cachedData = redisCache.GetCacheValue(cacheAttribute.Key);
+            
             if (cachedData is null)
             {
                 var result = (TResult)queryHandlerMethod.Invoke(queryHandler, new object[]{ query });
