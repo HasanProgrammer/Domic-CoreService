@@ -369,13 +369,11 @@ public sealed class Mediator : IMediator
     
     private Type _GetTypeOfUnitOfWork(TransactionType transactionType)
     {
-        var domainTypes = Assembly.Load(new AssemblyName("Domic.Domain")).GetTypes();
+        var memoryCache = _serviceProvider.GetRequiredService<IMemoryCacheReflectionAssemblyType>();
 
-        return domainTypes.FirstOrDefault(
-            type => transactionType == TransactionType.Command
-                ? type.GetInterfaces().Any(i => i == typeof(ICoreCommandUnitOfWork))
-                : type.GetInterfaces().Any(i => i == typeof(ICoreQueryUnitOfWork))
-        );
+        return transactionType == TransactionType.Command
+            ? memoryCache.GetCommandUnitOfWorkType()
+            : memoryCache.GetQueryUnitOfWorkType();
     }
     
     private TResult _InvokeHandleMethod<TResult>(object commandHandler, MethodInfo commandHandlerMethod,
