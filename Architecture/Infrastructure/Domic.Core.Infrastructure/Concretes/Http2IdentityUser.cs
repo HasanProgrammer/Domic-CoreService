@@ -13,9 +13,9 @@ public sealed class Http2IdentityUser(IJsonWebToken jsonWebToken) : IIdentityUse
             _authToken = token;
     }
 
-    public string GetIdentity() => jsonWebToken.GetUserIdentity(_authToken);
+    public string GetIdentity() => !string.IsNullOrEmpty(_authToken) ? jsonWebToken.GetUserIdentity(_authToken) : "System";
 
-    public string GetUsername() => jsonWebToken.GetUsername(_authToken);
+    public string GetUsername() => !string.IsNullOrEmpty(_authToken) ? jsonWebToken.GetUsername(_authToken) : "System";
 
-    public List<string> GetRoles() => jsonWebToken.GetRoles(_authToken);
+    public List<string> GetRoles() => !string.IsNullOrEmpty(_authToken) ? jsonWebToken.GetRoles(_authToken) : [];
 }
