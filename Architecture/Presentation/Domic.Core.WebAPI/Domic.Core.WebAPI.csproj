@@ -1,5 +1,4 @@
 <Project Sdk="Microsoft.NET.Sdk">
-
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
@@ -8,15 +7,12 @@
     <PackageVersion>10.0.3</PackageVersion>
     <Authors>Karami.Domic</Authors>
   </PropertyGroup>
-
   <ItemGroup>
     <ProjectReference Include="..\..\Infrastructure\Domic.Core.Infrastructure\Domic.Core.Infrastructure.csproj" />
   </ItemGroup>
-
   <!--SDK Packages-->
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
   <!--SDK Packages-->
-  
 </Project>
