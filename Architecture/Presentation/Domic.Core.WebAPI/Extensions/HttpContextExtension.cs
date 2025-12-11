@@ -133,9 +133,11 @@ public static class HttpContextExtension
         try
         {
             var httpRequest = context.Request;
+
+            if (httpRequest.ContentType != null && httpRequest.ContentType.StartsWith("multipart/", StringComparison.OrdinalIgnoreCase))
+                return;
             
-            if(!httpRequest.Body.CanSeek)
-                httpRequest.EnableBuffering();
+            httpRequest.EnableBuffering();
 
             httpRequest.Body.Position = 0;
 
