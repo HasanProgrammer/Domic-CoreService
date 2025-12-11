@@ -80,12 +80,11 @@ public static class HttpContextExtension
     {
         var httpRequest = context.Request;
             
-        if(!httpRequest.Body.CanSeek)
-            httpRequest.EnableBuffering();
+        httpRequest.EnableBuffering(bufferLimit: int.MaxValue);
 
         httpRequest.Body.Position = 0;
 
-        StreamReader streamReader = new(httpRequest.Body);
+        StreamReader streamReader = new(httpRequest.Body, leaveOpen: true);
 
         var payload = streamReader.ReadToEndAsync().Result;
             
@@ -134,11 +133,11 @@ public static class HttpContextExtension
         {
             var httpRequest = context.Request;
             
-            httpRequest.EnableBuffering();
+            httpRequest.EnableBuffering(bufferLimit: int.MaxValue);
 
             httpRequest.Body.Position = 0;
 
-            StreamReader streamReader = new(httpRequest.Body);
+            StreamReader streamReader = new(httpRequest.Body, leaveOpen: true);
 
             var payload = await streamReader.ReadToEndAsync(cancellationToken);
             
@@ -193,12 +192,11 @@ public static class HttpContextExtension
     {
         var httpRequest = context.Request;
             
-        if(!httpRequest.Body.CanSeek)
-            httpRequest.EnableBuffering();
+        httpRequest.EnableBuffering(bufferLimit: int.MaxValue);
 
         httpRequest.Body.Position = 0;
 
-        StreamReader streamReader = new(httpRequest.Body);
+        StreamReader streamReader = new(httpRequest.Body, leaveOpen: true);
 
         var payload = streamReader.ReadToEndAsync().GetAwaiter().GetResult();
             
@@ -241,12 +239,11 @@ public static class HttpContextExtension
         {
             var httpRequest = context.Request;
             
-            if(!httpRequest.Body.CanSeek)
-                httpRequest.EnableBuffering();
+            httpRequest.EnableBuffering(bufferLimit: int.MaxValue);
 
             httpRequest.Body.Position = 0;
 
-            StreamReader streamReader = new(httpRequest.Body);
+            StreamReader streamReader = new(httpRequest.Body, leaveOpen: true);
 
             var payload = await streamReader.ReadToEndAsync(cancellationToken);
             
