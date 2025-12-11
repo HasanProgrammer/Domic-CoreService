@@ -57,16 +57,16 @@ public class ExceptionHandler
                 _externalMessageBroker = context.RequestServices.GetRequiredService<IExternalMessageBroker>();
                 
                 //fire&forget
-                // context.CentralRequestLoggerAsync(_hostEnvironment, _globalUniqueIdGenerator, _externalMessageBroker, 
-                //     _dateTime, serviceName, context.RequestAborted
-                // );
+                await context.CentralRequestLoggerAsync(_hostEnvironment, _globalUniqueIdGenerator, _externalMessageBroker, 
+                    _dateTime, serviceName, context.RequestAborted
+                );
             }
             else
             {
                 _externalEventStreamBroker = context.RequestServices.GetRequiredService<IExternalEventStreamBroker>();
                 
                 //fire&forget
-                context.CentralRequestLoggerAsStreamAsync(_hostEnvironment, _globalUniqueIdGenerator, 
+                await context.CentralRequestLoggerAsStreamAsync(_hostEnvironment, _globalUniqueIdGenerator, 
                     _externalEventStreamBroker, _dateTime, serviceName, context.RequestAborted
                 );
             }
