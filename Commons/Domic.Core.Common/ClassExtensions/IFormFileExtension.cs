@@ -61,13 +61,15 @@ public static class IFormFileExtension
             return false;
 
         //Check Readable file & Security
+        var stream = file.OpenReadStream();
         try
         {
-            if (!file.OpenReadStream().CanRead)
+            
+            if (!stream.CanRead)
                 return false;
 
             byte[] buffer = new byte[(int) file.Length];
-            file.OpenReadStream().Read(buffer, 0, (int) file.Length);
+            stream.Read(buffer, 0, (int) file.Length);
             string content = Encoding.UTF8.GetString(buffer);
             if (Regex.IsMatch(content, @"<script|<html|<head|<title|<body|<pre|<table|<a\s+href|<img|<plaintext|<cross\-domain\-policy", RegexOptions.IgnoreCase))
                 return false;
@@ -78,7 +80,7 @@ public static class IFormFileExtension
         }
         finally
         {
-            file.OpenReadStream().Close();
+            stream.Close();
         }
 
         return true;
@@ -108,13 +110,14 @@ public static class IFormFileExtension
             return false;
 
         //Check Readable file & Security
+        var stream = file.OpenReadStream();
         try
         {
-            if (!file.OpenReadStream().CanRead)
+            if (!stream.CanRead)
                 return false;
 
             byte[] buffer = new byte[(int) file.Length];
-            file.OpenReadStream().Read(buffer, 0, (int) file.Length);
+            stream.Read(buffer, 0, (int) file.Length);
             string content = Encoding.UTF8.GetString(buffer);
             if (Regex.IsMatch(content, @"<script|<html|<head|<title|<body|<pre|<table|<a\s+href|<img|<plaintext|<cross\-domain\-policy", RegexOptions.IgnoreCase))
                 return false;
@@ -125,7 +128,7 @@ public static class IFormFileExtension
         }
         finally
         {
-            file.OpenReadStream().Close();
+            stream.Close();
         }
 
         return true;

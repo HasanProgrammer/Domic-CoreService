@@ -57,9 +57,9 @@ public class ExceptionHandler
                 _externalMessageBroker = context.RequestServices.GetRequiredService<IExternalMessageBroker>();
                 
                 //fire&forget
-                context.CentralRequestLoggerAsync(_hostEnvironment, _globalUniqueIdGenerator, _externalMessageBroker, 
-                    _dateTime, serviceName, context.RequestAborted
-                );
+                // context.CentralRequestLoggerAsync(_hostEnvironment, _globalUniqueIdGenerator, _externalMessageBroker, 
+                //     _dateTime, serviceName, context.RequestAborted
+                // );
             }
             else
             {
