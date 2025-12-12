@@ -56,7 +56,6 @@ public class ExceptionHandler
             {
                 _externalMessageBroker = context.RequestServices.GetRequiredService<IExternalMessageBroker>();
                 
-                //fire&forget
                 await context.CentralRequestLoggerAsync(_hostEnvironment, _globalUniqueIdGenerator, _externalMessageBroker, 
                     _dateTime, serviceName, context.RequestAborted
                 );
@@ -65,7 +64,6 @@ public class ExceptionHandler
             {
                 _externalEventStreamBroker = context.RequestServices.GetRequiredService<IExternalEventStreamBroker>();
                 
-                //fire&forget
                 await context.CentralRequestLoggerAsStreamAsync(_hostEnvironment, _globalUniqueIdGenerator, 
                     _externalEventStreamBroker, _dateTime, serviceName, context.RequestAborted
                 );

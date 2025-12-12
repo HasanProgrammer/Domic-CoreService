@@ -19,14 +19,16 @@ public static class IFormFileExtension
         IWebHostEnvironment webHostEnvironment, bool renameFile = true, CancellationToken cancellationToken = default
     )
     {
-        string uploadPath = default;
         var fileExtension = Path.GetExtension(file.FileName);
-        var fileName      = renameFile ? Guid.NewGuid().ToString().Replace("-", "") + fileExtension : file.FileName;
+        var fileName = renameFile ? Guid.NewGuid().ToString().Replace("-", "") + fileExtension : file.FileName;
 
+        string uploadPath;
         if (file.IsImage())
-            uploadPath = Path.Combine($"{webHostEnvironment.WebRootPath}", "Storages", "Images", fileName);
+            uploadPath = Path.Combine($"{webHostEnvironment.ContentRootPath}", "Storages", "Images", fileName);
         else if (file.IsVideo())
-            uploadPath = Path.Combine($"{webHostEnvironment.WebRootPath}", "Storages", "Videos", fileName);
+            uploadPath = Path.Combine($"{webHostEnvironment.ContentRootPath}", "Storages", "Videos", fileName);
+        else 
+            throw new Exception("فرمت فایل ارسالی صحیح نمی باشد");
         
         await using var fileStream = new FileStream(uploadPath , FileMode.Create);
         
