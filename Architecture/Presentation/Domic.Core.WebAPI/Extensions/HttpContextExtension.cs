@@ -79,6 +79,9 @@ public static class HttpContextExtension
     )
     {
         var httpRequest = context.Request;
+        
+        if (httpRequest.Path.Value.Contains("/storages/upload"))
+            return;
             
         httpRequest.EnableBuffering(bufferLimit: int.MaxValue);
 
@@ -132,6 +135,9 @@ public static class HttpContextExtension
         try
         {
             var httpRequest = context.Request;
+
+            if (httpRequest.Path.Value.Contains("/storages/upload"))
+                return;
             
             httpRequest.EnableBuffering(bufferLimit: int.MaxValue);
 
@@ -191,6 +197,9 @@ public static class HttpContextExtension
     )
     {
         var httpRequest = context.Request;
+        
+        if (httpRequest.Path.Value.Contains("/storages/upload"))
+            return;
             
         httpRequest.EnableBuffering(bufferLimit: int.MaxValue);
 
@@ -238,6 +247,9 @@ public static class HttpContextExtension
         try
         {
             var httpRequest = context.Request;
+            
+            if (httpRequest.Path.Value.Contains("/storages/upload"))
+                return;
             
             httpRequest.EnableBuffering(bufferLimit: int.MaxValue);
 
