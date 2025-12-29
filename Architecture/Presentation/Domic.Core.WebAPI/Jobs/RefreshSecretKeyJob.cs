@@ -28,7 +28,8 @@ public class RefreshSecretKeyJob(
                     try
                     {
                         externalDistributedCache.SetCacheValue(
-                            new KeyValuePair<string, string>("SecretKey", Guid.NewGuid().ToString())
+                            new KeyValuePair<string, string>("SecretKey", Guid.NewGuid().ToString()),
+                            TimeSpan.FromMinutes(60)
                         );
                     }
                     catch (Exception e)
