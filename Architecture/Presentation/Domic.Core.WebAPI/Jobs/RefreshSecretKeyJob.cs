@@ -12,57 +12,83 @@ namespace Domic.Core.WebAPI.Jobs;
 public class RefreshSecretKeyJob(
     IServiceScopeFactory serviceScopeFactory, IHostEnvironment hostEnvironment, IDateTime dateTime, 
     IGlobalUniqueIdGenerator globalUniqueIdGenerator, IConfiguration configuration, IExternalMessageBroker messageBroker
-) : IHostedService, IDisposable
+) : IHostedService
 {
-    private Timer _timer;
+    //private Timer _timer;
 
     public Task StartAsync(CancellationToken cancellationToken)
     {
-        _timer =
-            new Timer(state => {
-
-                    using var scope = serviceScopeFactory.CreateScope();
-
-                    var externalDistributedCache = scope.ServiceProvider.GetRequiredService<IExternalDistributedCache>();
-                    
-                    try
-                    {
-                        externalDistributedCache.SetCacheValue(
-                            new KeyValuePair<string, string>("SecretKey", Guid.NewGuid().ToString()),
-                            TimeSpan.FromMinutes(60)
-                        );
-                    }
-                    catch (Exception e)
-                    {
-                        //fire&forget
-                        e.FileLoggerAsync(hostEnvironment, dateTime, cancellationToken: cancellationToken);
-
-                        e.ElasticStackExceptionLogger(hostEnvironment, globalUniqueIdGenerator, dateTime,
-                            configuration.GetValue<string>("NameOfService"), nameof(RefreshSecretKeyJob)
-                        );
-
-                        //fire&forget
-                        e.CentralExceptionLoggerAsync(hostEnvironment, globalUniqueIdGenerator, messageBroker, dateTime,
-                            configuration.GetValue<string>("NameOfService"), nameof(RefreshSecretKeyJob),
-                            cancellationToken: cancellationToken
-                        );
-                    }
-                    
-                },
-                null,
-                TimeSpan.Zero, 
-                TimeSpan.FromMinutes(30)
+        // _timer =
+        //     new Timer(state => {
+        //
+        //             using var scope = serviceScopeFactory.CreateScope();
+        //
+        //             var externalDistributedCache = scope.ServiceProvider.GetRequiredService<IExternalDistributedCache>();
+        //             
+        //             try
+        //             {
+        //                 externalDistributedCache.SetCacheValue(
+        //                     new KeyValuePair<string, string>("SecretKey", Guid.NewGuid().ToString()),
+        //                     TimeSpan.FromMinutes(60)
+        //                 );
+        //             }
+        //             catch (Exception e)
+        //             {
+        //                 //fire&forget
+        //                 e.FileLoggerAsync(hostEnvironment, dateTime, cancellationToken: cancellationToken);
+        //
+        //                 e.ElasticStackExceptionLogger(hostEnvironment, globalUniqueIdGenerator, dateTime,
+        //                     configuration.GetValue<string>("NameOfService"), nameof(RefreshSecretKeyJob)
+        //                 );
+        //
+        //                 //fire&forget
+        //                 e.CentralExceptionLoggerAsync(hostEnvironment, globalUniqueIdGenerator, messageBroker, dateTime,
+        //                     configuration.GetValue<string>("NameOfService"), nameof(RefreshSecretKeyJob),
+        //                     cancellationToken: cancellationToken
+        //                 );
+        //             }
+        //             
+        //         },
+        //         null,
+        //         TimeSpan.Zero, 
+        //         TimeSpan.FromMinutes(30)
+        //     );
+        
+        try
+        {
+            using var scope = serviceScopeFactory.CreateScope();
+            
+            var externalDistributedCache = scope.ServiceProvider.GetRequiredService<IExternalDistributedCache>();
+            
+            externalDistributedCache.SetCacheValue(
+                new KeyValuePair<string, string>("SecretKey", Guid.NewGuid().ToString())
             );
+        }
+        catch (Exception e)
+        {
+            //fire&forget
+            e.FileLoggerAsync(hostEnvironment, dateTime, cancellationToken: cancellationToken);
+
+            e.ElasticStackExceptionLogger(hostEnvironment, globalUniqueIdGenerator, dateTime,
+                configuration.GetValue<string>("NameOfService"), nameof(RefreshSecretKeyJob)
+            );
+
+            //fire&forget
+            e.CentralExceptionLoggerAsync(hostEnvironment, globalUniqueIdGenerator, messageBroker, dateTime,
+                configuration.GetValue<string>("NameOfService"), nameof(RefreshSecretKeyJob),
+                cancellationToken: cancellationToken
+            );
+        }
 
         return Task.CompletedTask;
     }
 
     public Task StopAsync(CancellationToken cancellationToken)
     {
-        _timer?.Change(Timeout.Infinite, 0); //Reset
+        //_timer?.Change(Timeout.Infinite, 0); //Reset
 
         return Task.CompletedTask;
     }
 
-    public void Dispose() => _timer?.Dispose();
+    //public void Dispose() => _timer?.Dispose();
 }
