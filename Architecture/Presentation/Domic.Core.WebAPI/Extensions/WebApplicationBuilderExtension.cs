@@ -109,6 +109,13 @@ public static class WebApplicationBuilderExtension
     /// <param name="builder"></param>
     public static void RegisterEventsStreamPublisher(this WebApplicationBuilder builder)
         => builder.Services.AddHostedService<ProducerEventStreamJob>();
+    
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="builder"></param>
+    public static void RegisterObservibility(this WebApplicationBuilder builder)
+        => builder.Services.AddHostedService<ObservibilityJob>();
 
     /// <summary>
     /// 

@@ -21,35 +21,14 @@ public static class IApplicationBuilderExtension
     /// <param name="builder"></param>
     public static void UseObservibility(this IApplicationBuilder builder)
     {
-        var requestsCounter = Metrics.CreateCounter("http_requests_total", "Total HTTP requests");
-        var memoryGauge = Metrics.CreateGauge("app_memory_bytes", "Current memory usage in bytes");
-        var cpuGauge = Metrics.CreateGauge("app_cpu_percent", "Current CPU usage percentage");
-        var gcGauge = Metrics.CreateGauge("gc_total_memory_bytes", "GC total memory");
-
-        PerformanceCounter cpuCounter = null;
-        if (OperatingSystem.IsWindows())
-            cpuCounter = new PerformanceCounter("Processor", "% Processor Time", "_Total");
-
         builder.UseMetricServer();
         builder.UseHttpMetrics();
+        
+        var requestsCounter = Metrics.CreateCounter("http_requests_total", "total http requests");
 
         builder.Use(async (context, next) => {
             
             requestsCounter.Inc();
-
-            memoryGauge.Set(GC.GetTotalMemory(forceFullCollection: false));
-
-            if (cpuCounter != null)
-            {
-                cpuGauge.Set(cpuCounter.NextValue());
-            }
-            else
-            {
-                var process = Process.GetCurrentProcess();
-                cpuGauge.Set(process.TotalProcessorTime.TotalMilliseconds / Environment.ProcessorCount);
-            }
-
-            gcGauge.Set(GC.GetTotalMemory(forceFullCollection: false));
 
             await next();
             
